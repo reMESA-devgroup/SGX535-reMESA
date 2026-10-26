@@ -6,6 +6,17 @@
 #include "pipe/p_state.h"
 #include "remesa_fixed_state.h"
 
+bool remesa_viewport_swizzle_is_identity(const struct pipe_viewport_state *v)
+{
+   if (!v) return false;
+   bool legacy = !v->swizzle_x && !v->swizzle_y && !v->swizzle_z && !v->swizzle_w;
+   bool canonical = v->swizzle_x == PIPE_VIEWPORT_SWIZZLE_POSITIVE_X &&
+                    v->swizzle_y == PIPE_VIEWPORT_SWIZZLE_POSITIVE_Y &&
+                    v->swizzle_z == PIPE_VIEWPORT_SWIZZLE_POSITIVE_Z &&
+                    v->swizzle_w == PIPE_VIEWPORT_SWIZZLE_POSITIVE_W;
+   return legacy || canonical;
+}
+
 int
 remesa_validate_blend(const struct pipe_blend_state *s)
 {
@@ -63,6 +74,69 @@ remesa_validate_rasterizer(const struct pipe_rasterizer_state *s)
    return 0;
 }
 
+int remesa_validate_lab_rasterizer(const struct pipe_rasterizer_state *s,
+                                  enum remesa_lab_raster_profile profile)
+{
+   if (!s) return EINVAL;
+   if (profile != REMESA_LAB_RASTER_QUARTER_FBO ||
+       !s->half_pixel_center || s->bottom_edge_rule) return ENOTSUP;
+   /* Only the finite verified quarter-window case may use this seam. Every
+    * other raster restriction is delegated unchanged to the global validator.
+    * Geometry, framebuffer, NIR sources and actual issue remain separate. */
+   struct pipe_rasterizer_state ordinary = *s;
+   ordinary.half_pixel_center = 0;
+   /* This finite carrier requires a POSITION-only VS and immutable constant
+    * green FS. Vertex COLOR outputs do not exist, so vertex-color clamp has
+    * no semantic target. Do not generalize to varying/color-output shaders. */
+   ordinary.clamp_vertex_color = 0;
+   return remesa_validate_rasterizer(&ordinary);
+}
+
+int remesa_validate_recording_window_rasterizer(const struct pipe_rasterizer_state *s)
+{
+   if (!s) return EINVAL;
+   if (!s->half_pixel_center || !s->bottom_edge_rule) return ENOTSUP;
+   struct pipe_rasterizer_state ordinary = *s;
+   ordinary.half_pixel_center = ordinary.bottom_edge_rule = 0;
+   /* The draw path admits only POSITION and constant fragment output. There
+    * is no vertex COLOR output for this clamp to act on. */
+   ordinary.clamp_vertex_color = 0;
+   return remesa_validate_rasterizer(&ordinary);
+}
+
+int remesa_prove_half_pixel_edge_independence(const float p[3][4],uint32_t width,uint32_t height)
+{
+   int64_t xy[3][2];
+   if (!p || !width || !height) return EINVAL;
+   if (width > 32 || height > 32) return ENOTSUP;
+   for (unsigned v=0;v<3;v++) {
+      for (unsigned c=0;c<4;c++) if (!isfinite(p[v][c])) return EINVAL;
+      if (p[v][3]!=1 || p[v][2]<0 || p[v][2]>1) return EINVAL;
+      for (unsigned axis=0;axis<2;axis++) {
+         if (p[v][axis]<0 || p[v][axis]>(axis?height:width)) return ENOTSUP;
+         double quarter=(double)p[v][axis]*4;
+         /* Bounds above constrain this conversion to[0,128]; no overflow or
+          * libm rounding dependency on the i386 target. */
+         int64_t integer=(int64_t)quarter;
+         if (quarter!=(double)integer) return ERANGE;
+         xy[v][axis]=integer;
+      }
+   }
+   int64_t area=(xy[1][0]-xy[0][0])*(xy[2][1]-xy[0][1])-
+                (xy[1][1]-xy[0][1])*(xy[2][0]-xy[0][0]);
+   if (!area) return ENOTSUP;
+   for (uint32_t y=0;y<height;y++) for (uint32_t x=0;x<width;x++)
+      for (unsigned edge=0;edge<3;edge++) {
+         unsigned next=(edge+1)%3;
+         int64_t dx=xy[next][0]-xy[edge][0],dy=xy[next][1]-xy[edge][1];
+         int64_t sx=4*(int64_t)x+2-xy[edge][0],sy=4*(int64_t)y+2-xy[edge][1];
+         /* Reject collinearity even outside the finite edge: conservative,
+          * and sufficient to establish that all actual edge ties are absent. */
+         if (dx*sy-dy*sx==0) return ENOTSUP;
+      }
+   return 0;
+}
+
 static double clip_distance(const double p[4], unsigned plane)
 {
    /* OpenGL canonical homogeneous volume: -w <= x,y,z <= w. */
@@ -88,8 +162,7 @@ int remesa_prepare_constant_triangle(const float position[3][4],
    unsigned current = 0, count = 3;
    if (!position || !viewport || !out || !width || !height)
       return EINVAL;
-   if (viewport->swizzle_x || viewport->swizzle_y || viewport->swizzle_z ||
-       viewport->swizzle_w)
+   if (!remesa_viewport_swizzle_is_identity(viewport))
       return ENOTSUP;
    for (unsigned axis = 0; axis < 3; ++axis)
       if (!isfinite(viewport->scale[axis]) ||
@@ -250,4 +323,23 @@ int remesa_prepare_color_clear(unsigned format, uint32_t attachment_width,
    }
    *out = result;
    return 0;
+}
+
+int remesa_validate_gears_dsa(const struct pipe_depth_stencil_alpha_state *state)
+{
+ if(!state)return EINVAL;
+ if(state->depth_bounds_test||state->stencil[0].enabled||state->stencil[1].enabled||state->alpha_enabled)return ENOTSUP;
+ if(state->depth_enabled&&(state->depth_func!=PIPE_FUNC_LESS||!state->depth_writemask))return ENOTSUP;
+ return 0;
+}
+int remesa_validate_gears_rasterizer(const struct pipe_rasterizer_state *state)
+{
+ if(!state)return EINVAL;
+ if(!state->half_pixel_center||
+    (state->flatshade&&state->flatshade_first)||
+    (state->cull_face!=PIPE_FACE_NONE&&state->cull_face!=PIPE_FACE_BACK))return ENOTSUP;
+ struct pipe_rasterizer_state ordinary=*state;
+ ordinary.flatshade=0;ordinary.cull_face=PIPE_FACE_NONE;ordinary.clamp_vertex_color=0;
+ ordinary.half_pixel_center=ordinary.bottom_edge_rule=0;
+ return remesa_validate_rasterizer(&ordinary);
 }

@@ -1,0 +1,10 @@
+{
+  "status": "COMPILED_ELF_PROFILE_BYTE_EXACT_PASS",
+  "module_sha256": "09d8b00ea38ea89c7be3533426bca4e662ce60e3f408596ea982afc48743d762",
+  "symbol": "gears_stream_profile_asset",
+  "symbol_bytes": 5844,
+  "profile_sha256": "e2edc3cad2e32af279d7089a25a532d31014b0dcc4dede210b8e8df4a3012252",
+  "expected_compiled_profile_sha256": "9725bb4ecd7a47f96ab95988125a7e7f27cf03fa970db2b0ad533d9693efbfe0",
+  "actual_compiled_profile_sha256": "9725bb4ecd7a47f96ab95988125a7e7f27cf03fa970db2b0ad533d9693efbfe0",
+  "GPU_submissions": 0
+}

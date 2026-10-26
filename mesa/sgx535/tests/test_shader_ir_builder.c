@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT; actual licensed Mesa NIR builder API. */
 #include "remesa_shader_program.h"
+#include "remesa_fragment_body.h"
 #include "nir_builder.h"
 #include "util/ralloc.h"
 #include <assert.h>
@@ -38,7 +39,17 @@ int main(void)
   struct remesa_shader_ir p,original;memset(&p,0xa5,sizeof(p));original=p;
   int error=remesa_shader_ir_lower(b.shader,&p);
   if(mode<2||(mode>=10&&mode<12)){assert(!error&&!remesa_shader_ir_validate(&p));assert(p.stage==(stage?REMESA_IR_FRAGMENT:REMESA_IR_VERTEX));
-   unsigned char bytes[8]={0};size_t written=999;assert(remesa_shader_ir_encode_sgx535(&p,bytes,sizeof(bytes),&written)==ENOTSUP&&written==999);
+   unsigned char bytes[8]={0},encoded[8];size_t written=999;
+   int encoded_error=remesa_shader_ir_encode_sgx535(&p,bytes,sizeof(bytes),&written);
+   if(stage) {
+    struct remesa_fragment_constant constant;
+    assert(!encoded_error&&written==8);
+    assert(!remesa_fragment_constant_decode(bytes,written,&constant)&&constant.argb==UINT32_C(0xffff00ff));
+    memcpy(encoded,bytes,sizeof(encoded));
+   } else {
+    const unsigned char untouched[8]={0};
+    assert(encoded_error==ENOTSUP&&written==999&&!memcmp(bytes,untouched,sizeof(bytes)));
+   }
    struct remesa_shader_program program={0};struct remesa_shader_pds_preview preview={0};
    const struct remesa_pds_candidate_request request={.policy=REMESA_PDS_CANDIDATE_ANALYSIS_ONLY,
     .source={1,24},.selector={0,1,2,3}};
@@ -46,7 +57,13 @@ int main(void)
    assert(!remesa_shader_program_preview_pds(&program,&request,&preview));
    assert(preview.stage==p.stage&&preview.candidate.pair[2].index==48&&preview.candidate.pair[3].index==49);
    assert(!preview.candidate.output_arity_known&&!preview.candidate.fetch_verified&&!preview.candidate.semantics_verified);
-   assert(remesa_shader_program_encode(&program,bytes,sizeof(bytes),&written)==ENOTSUP&&written==999);
+   memset(bytes,0,sizeof(bytes));written=999;
+   encoded_error=remesa_shader_program_encode(&program,bytes,sizeof(bytes),&written);
+   if(stage)assert(!encoded_error&&written==8&&!memcmp(bytes,encoded,sizeof(bytes)));
+   else {
+    const unsigned char untouched[8]={0};
+    assert(encoded_error==ENOTSUP&&written==999&&!memcmp(bytes,untouched,sizeof(bytes)));
+   }
    remesa_shader_program_finish(&program);
   }else assert(error&&!memcmp(&p,&original,sizeof(p)));
   cases++;ralloc_free(b.shader);

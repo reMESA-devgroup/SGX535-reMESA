@@ -1,0 +1,59 @@
+{
+  "GPU_operations": 0,
+  "remote_calls": 0,
+  "scope": "Actual execute/seal functions, stub provider/visible/source calls; validates hash branch selection, not GPU execution or real visibility",
+  "tests": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=gnu99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_nohash_output_paths.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-nohash-output-native"
+      ],
+      "result": "PASS actual execute/seal: NOHASH zero SHA/B3, six ZERO arrays, proof47/111; visible failure retained; LAB/FAST7 hashes retained; fake lifecycle/GPU0"
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=gnu99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_nohash_output_paths.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-nohash-output-ubsan"
+      ],
+      "result": "PASS actual execute/seal: NOHASH zero SHA/B3, six ZERO arrays, proof47/111; visible failure retained; LAB/FAST7 hashes retained; fake lifecycle/GPU0"
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=gnu99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_nohash_output_paths.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-nohash-output-i386"
+      ],
+      "result": "PASS actual execute/seal: NOHASH zero SHA/B3, six ZERO arrays, proof47/111; visible failure retained; LAB/FAST7 hashes retained; fake lifecycle/GPU0"
+    }
+  ]
+}

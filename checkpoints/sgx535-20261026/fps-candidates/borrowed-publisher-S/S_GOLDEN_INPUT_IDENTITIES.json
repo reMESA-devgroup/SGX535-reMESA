@@ -1,0 +1,86 @@
+{
+  "scope": "Read-only identity of physically qualified S evidence; full Z SHA preserves artifact identity, future output comparison must use Z24 and treat highX8 asVOID",
+  "no_new_GPU_proof": true,
+  "frames": [
+    {
+      "frame": 1,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000001-color.bin",
+        "bytes": 4096000,
+        "sha256": "807b5466e2fc57363030e91b99820c8b6c33845420271be0ddc5102f13abd311"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000001-z.bin",
+        "bytes": 4096000,
+        "sha256": "c9fc1aaf34c5c9ad24771097e031c276ed4c645559cde1c73865b16ed7c37e39"
+      }
+    },
+    {
+      "frame": 2,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000002-color.bin",
+        "bytes": 4096000,
+        "sha256": "c1081574a0c671f4968dabb5e701e9861f0327382dee3137c3680f4afa7a1290"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000002-z.bin",
+        "bytes": 4096000,
+        "sha256": "d2468b64eeb681b985883e6e2e79642bd8c492e6242eab93767158750466b585"
+      }
+    },
+    {
+      "frame": 3,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000003-color.bin",
+        "bytes": 4096000,
+        "sha256": "73e270b2436bee226f775e4f7a6cc89d557c437d5f9c741ec27c03d908114770"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000003-z.bin",
+        "bytes": 4096000,
+        "sha256": "889d0d331edb15c51f9adc9662c3844843c4b6ef824afda2382e66a8ff5932a0"
+      }
+    },
+    {
+      "frame": 4,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000004-color.bin",
+        "bytes": 4096000,
+        "sha256": "807b5466e2fc57363030e91b99820c8b6c33845420271be0ddc5102f13abd311"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000004-z.bin",
+        "bytes": 4096000,
+        "sha256": "c9fc1aaf34c5c9ad24771097e031c276ed4c645559cde1c73865b16ed7c37e39"
+      }
+    },
+    {
+      "frame": 5,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000005-color.bin",
+        "bytes": 4096000,
+        "sha256": "c1081574a0c671f4968dabb5e701e9861f0327382dee3137c3680f4afa7a1290"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000005-z.bin",
+        "bytes": 4096000,
+        "sha256": "d2468b64eeb681b985883e6e2e79642bd8c492e6242eab93767158750466b585"
+      }
+    },
+    {
+      "frame": 6,
+      "color": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000006-color.bin",
+        "bytes": 4096000,
+        "sha256": "73e270b2436bee226f775e4f7a6cc89d557c437d5f9c741ec27c03d908114770"
+      },
+      "z": {
+        "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/replay-ended6/capture/frame-000006-z.bin",
+        "bytes": 4096000,
+        "sha256": "889d0d331edb15c51f9adc9662c3844843c4b6ef824afda2382e66a8ff5932a0"
+      }
+    }
+  ],
+  "physical_qualification": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/PHYSICAL_SINGLE_CLEAR_RESULTS.json",
+  "old_failed_footprint_gate_not_reclassified": true
+}

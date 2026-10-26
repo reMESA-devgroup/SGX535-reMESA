@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT; recording backend only, no GPU pixels.
  * Validate explicit preserve/replace admission, not hardware load semantics. */
+int existing_driver_tests(void);
 #define main existing_driver_tests
 #include "test_driver.c"
 #undef main
@@ -22,9 +23,34 @@ static void issue(struct pipe_context *ctx)
 {
  struct pipe_draw_info i={0};struct pipe_draw_start_count_bias d={0};i.mode=MESA_PRIM_TRIANGLES;i.instance_count=1;d.count=3;ctx->draw_vbo(ctx,&i,0,NULL,&d,1);
 }
+static unsigned surface_samples(void)
+{
+ struct recorder rec={0};struct remesa_device dev={.ops=&counted_ops,.priv=&rec,.offline_test_backend=true};
+ struct pipe_screen *screen=remesa_screen_create(&dev);assert(screen);
+ struct pipe_context *ctx=screen->context_create(screen,NULL,0);assert(ctx);
+ struct pipe_resource tmpl={0};tmpl.target=PIPE_TEXTURE_2D;tmpl.format=PIPE_FORMAT_B8G8R8A8_UNORM;
+ tmpl.width0=tmpl.height0=32;tmpl.depth0=tmpl.array_size=1;tmpl.bind=PIPE_BIND_RENDER_TARGET;
+ struct pipe_resource *target=screen->resource_create(screen,&tmpl);assert(target);
+ struct pipe_framebuffer_state fb={.width=32,.height=32,.nr_cbufs=1};
+ fb.cbufs[0].texture=target;fb.cbufs[0].format=target->format;
+ unsigned cases=0;
+ /* Mesa embeds surface state in framebuffer_state: create_surface need not
+  * have validated it. Reject view multisampling even over single-sample BOs. */
+ const unsigned samples[]={0,1,2,4,65535};
+ for(unsigned i=0;i<sizeof(samples)/sizeof(samples[0]);i++) {
+  fb.cbufs[0].nr_samples=samples[i];ctx->set_framebuffer_state(ctx,&fb);
+  assert(remesa_context_error(ctx)==(samples[i]>1?ENOTSUP:0));
+  assert(target->reference.count==(samples[i]>1?1:2));++cases;
+ }
+ fb.cbufs[0].nr_samples=1;ctx->set_framebuffer_state(ctx,&fb);
+ assert(!remesa_context_error(ctx)&&target->reference.count==2);++cases;
+ assert(!rec.draws&&!rec.maps);
+ ctx->destroy(ctx);resource_drop(target);assert(rec.allocs==rec.frees);screen->destroy(screen);
+ return cases;
+}
 int main(void)
 {
- unsigned cases=0;
+ unsigned cases=surface_samples();
  struct remesa_device invalid={.ops=&counted_ops,.offline_test_backend=true,.framebuffer_mode=(enum remesa_framebuffer_mode)99};
  assert(!remesa_screen_create(&invalid));++cases;
  invalid.framebuffer_mode=REMESA_FRAMEBUFFER_PRESERVE;invalid.offline_test_backend=false;invalid.qualified_hardware_backend=true;

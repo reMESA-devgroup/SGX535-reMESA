@@ -29,9 +29,15 @@ int main(void)
     * defend: one 32x32 BGRA render target and triangle primitives. */
    assert(screen->caps.graphics);
    assert(!screen->caps.accelerated);
+   assert(screen->caps.invalidate_buffer);
+   assert(screen->caps.clear_scissored); /* bounded CPU clear callback */
    assert(screen->caps.max_render_targets == 1);
    assert(screen->caps.max_texture_2d_size == 32);
-   assert(screen->caps.max_vertex_buffers == 1);
+   /* Two owned raw input bindings; complete gears captures are CPU snapshots.
+    * Legacy GPU draws still reject a second buffer or element. */
+   assert(screen->caps.max_vertex_buffers == 2);
+   assert(screen->caps.max_vertex_attrib_stride == 2048);
+   assert(screen->caps.gl_begin_end_buffer_size == 512*1024);
    assert(screen->caps.supported_prim_modes & (1u << MESA_PRIM_TRIANGLES));
    assert(!screen->caps.npot_textures);
    assert(!screen->caps.texture_multisample);

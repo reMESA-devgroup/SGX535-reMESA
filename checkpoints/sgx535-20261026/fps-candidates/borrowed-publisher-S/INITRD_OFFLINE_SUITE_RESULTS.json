@@ -1,0 +1,15 @@
+{
+  "status": "PASS_OFFLINE_ONLY_NOT_STAGED",
+  "GPU_operations": 0,
+  "remote_calls": 0,
+  "tests": [
+    {
+      "script": "BUILD_INITRD.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_INIT_IDENTITY.py",
+      "exit": 0
+    }
+  ]
+}

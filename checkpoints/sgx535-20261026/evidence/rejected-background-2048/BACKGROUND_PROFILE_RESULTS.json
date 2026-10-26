@@ -1,0 +1,110 @@
+{
+  "status": "BACKGROUND_REFERENCE_PLANE_CANDIDATE_OFFLINE_ONLY",
+  "GPU_operations": 0,
+  "parent": "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z",
+  "encoders": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed_background_plane.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-native"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-native",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-native-verified2.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed_background_plane.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-ubsan"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-ubsan",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-ubsan-verified2.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed_background_plane.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-i386"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/typed-background-i386-verified2.bin"
+      ],
+      "GPU_operations": 0
+    }
+  ],
+  "changed_BG_bytes": [
+    55,
+    61
+  ],
+  "profile_sha256": "47016c37ed8d9ee1df89f23aea4cec9851f64143a9e8c699729e988623bcde82",
+  "asset_sha256": [
+    "f7bc727da40785c9fc0bee29ed092a77c644ad2b0f3335e996167947acfc2983",
+    "61a6d4bc83f820c8f344b8144d94bb08f6dd4688fb5c8dc10cbba87f6d3d5144",
+    "8cdc7ebaf212cf9eced5e723b67a5ac0766680e9cfbb718b1aed2476f33361e0",
+    "76ad0eaf880bca8266e6ab5b478338384994a9d4528b36602a6f24affce6c635",
+    "727e4543140fa02c395c5cd1194406bc795561db01f5ce25af2d11329d00fa65"
+  ],
+  "target_and_viewport": [
+    1280,
+    800
+  ],
+  "background_reference_plane": [
+    2048,
+    2048
+  ],
+  "hypothesis": "Move background reference hypotenuse away from visible gears; physical pixel qualifier must still pass",
+  "unchanged": "All GEN ISP LESS, vertices/index, shaders, PDS, TA/raster commands, allocation sizes, cache/PTE/fence/retirement source",
+  "old_oracles_preserved_not_reclassified": true
+}

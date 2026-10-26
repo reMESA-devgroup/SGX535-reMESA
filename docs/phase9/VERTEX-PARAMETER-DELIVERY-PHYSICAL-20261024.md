@@ -1,0 +1,11 @@
+# Selected ADD parameter delivery: physical LAB result
+
+The independently generated ADD VS16 ran in two fresh boots on the SGX535. Each experiment used one bounded submission with observer-authenticated completion, retirement and full1280×800 readback. Only coefficient PARAM0.x changed:0 to2.125. CODE, geometry, other parameters, addresses, task controls and initial framebuffer were identical. Exact rational sample-center oracles, without edge ties, match both snapshots byte for byte. The136 green pixels moved exactly two columns;1,023,864 opaque black pixels remained. No software rendering supplied the image.
+
+CONFIRMED_PHYSICAL: selected owned coefficient source influences vertex positions according to this independent ADD profile. Zero snapshot SHA2569562f8cfae4446c552f790b655fe0cb1427c28c3ff5390186b6ff94cfbf52fca; shifted snapshot SHA25635713c25a5299fa52d90e02a8f6cfd29510898b226ca843dfd0e12b3b9b04404. Completion ledger7, retired phase9, BIF fault observations0 in both cases. Final memory objects0. Runtime controls N/N; stock boot settings restored before submissions. Admission and28 protected gates unchanged.
+
+UNKNOWN: internal DS/SA bank names and preload mechanism; physical MUL, all other coefficient bindings/components, complete matrix/normalization/material/light lowering and general uniform support. Other LAB auxiliaries retain historical dependencies. This is a small triangle in a1280×800 target, not a full-screen workload or a glxgears frame. The goal of continuous hardware glxgears remains unmet.
+
+Reproduce capture validation with native1280-parameter-add-pair-20261024T014000Z/VERIFY_PHYSICAL_PAIR.py. Generation and test commands are preserved in that checkpoint and the CPU encoder checkpoints. Native, UBSan, i386/QEMU and actual Mesa archive construction agreed before submission. No unrestricted execution gate was enabled.
+
+Next implementation dependency: compile the real gears MVP and normalization/material/light NIR using independently encoded arithmetic and live constants; support FLAT color/rasterizer state correctly. Source-class13 selected by original matrix programs reaches ELF24c557/Ghidra25c557, which composes fields through common operand helpers and record+54. That packed selector still needs a semantic producer map before a complete independent optimized matrix encoder can be claimed.

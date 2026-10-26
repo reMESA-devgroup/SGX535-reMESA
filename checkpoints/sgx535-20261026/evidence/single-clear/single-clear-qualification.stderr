@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/VERIFY_LESS_OUTPUTS.py", line 71, in <module>
+    row.update(compare_less_outputs(color,expected_color,depth,expected_depth,(ref/'CPU-DIAGNOSTIC-rgb.bin').read_bytes(),(ref/'CPU-DIAGNOSTIC-ndc-depth-f32.bin').read_bytes(),(ref/'CPU-DIAGNOSTIC-stable-interior-mask.bin').read_bytes()))
+               ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/less_depth_contract.py", line 12, in compare_less_outputs
+    assert (actual==0xffffff)==(old==0xffffff),('Geometry coverage changed',i)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ('Geometry coverage changed', 460224)

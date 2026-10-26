@@ -1,0 +1,124 @@
+{
+  "status": "SINGLE_CLEAR_TRIANGLE_OFFLINE_ONLY_PHYSICAL_PENDING",
+  "GPU_operations": 0,
+  "parent": "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z",
+  "encoders": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed_single_clear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_zclear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_index.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-native"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-native",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-native-verified.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed_single_clear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_zclear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_index.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-ubsan"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-ubsan",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-ubsan-verified.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed_single_clear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_zclear.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_ta_index.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-i386"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed-single-clear-i386-verified.bin"
+      ],
+      "GPU_operations": 0
+    }
+  ],
+  "changed_PDS_bytes": [
+    17110,
+    17111,
+    17130
+  ],
+  "changed_GEN_bytes": [
+    776
+  ],
+  "profile_sha256": "e2edc3cad2e32af279d7089a25a532d31014b0dcc4dede210b8e8df4a3012252",
+  "asset_sha256": [
+    "cd0ccee4a29015b7189ce9b65c13ba948f757803a640b6e7501069f38ec3461c",
+    "61a6d4bc83f820c8f344b8144d94bb08f6dd4688fb5c8dc10cbba87f6d3d5144",
+    "cdd783d09bd573a9ecef68d470e414b4796a70d587e2f20647f0ad415032bf0b",
+    "d0d2892baa65bd543d9b7f923cd5364390e989e3b9c1d04881311392f617c539",
+    "727e4543140fa02c395c5cd1194406bc795561db01f5ce25af2d11329d00fa65"
+  ],
+  "COLOR_Z_viewport": [
+    1280,
+    800
+  ],
+  "coverage_proof_all_pixel_centres": 1024000,
+  "clear_vertex_capacity_bytes": 64,
+  "indexed_vertex_consumption_bytes": 48,
+  "index_capacity_bytes": 12,
+  "index_consumption_bytes": 6,
+  "clear_index_count": [
+    6,
+    3
+  ],
+  "background_original_1280x800_unchanged": true,
+  "unchanged": "All gear vertices,12ISP LESS states, shaders CODE336, PDSprograms, TA/raster command sizes, BO addresses/sizes, cache/PTE/fence/retirement source",
+  "hypothesis": "Eliminate internal shared edge of Z clear by exact single covering triangle; physical qualifier unchanged required",
+  "old_oracles_and_failed_BG_candidate_preserved": true,
+  "consumption_scope": "Logical indexed geometry payload only:3float4 vertices and3uint16 indices. Hardware bus prefetch/DMA fetch granularity is not measured. PDS descriptor data12DWORDs/object64B unchanged, separate from geometry array capacity64B."
+}

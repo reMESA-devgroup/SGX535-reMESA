@@ -1,0 +1,233 @@
+{
+  "status": "TYPED_LESS_CORRECTION_OFFLINE_ONLY_PHYSICAL_PENDING",
+  "GPU_operations": 0,
+  "parent_K": "/home/gama/sgx535-offline/gears-cache-pte-batch-20261026T020000Z",
+  "encoders": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed_depth_prefix.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-native"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-native",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-less-native-verified.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "gcc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed_depth_prefix.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-ubsan"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-ubsan",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-less-ubsan-verified.bin"
+      ],
+      "GPU_operations": 0
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-ffunction-sections",
+        "-fdata-sections",
+        "-Wl,--gc-sections",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535",
+        "-I/home/gama/sgx535-worktrees/driver-resume-20261018/include",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed_depth_prefix.c",
+        "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_render_target.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-i386"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-depth-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/typed-less-i386-verified.bin"
+      ],
+      "GPU_operations": 0
+    }
+  ],
+  "changed_GEN_bytes": [
+    166,
+    167,
+    2054,
+    2055,
+    2118,
+    2119,
+    2182,
+    2183,
+    2246,
+    2247,
+    2310,
+    2311,
+    2374,
+    2375,
+    2438,
+    2439,
+    2502,
+    2503,
+    2566,
+    2567,
+    2630,
+    2631,
+    2694,
+    2695
+  ],
+  "state_changes": [
+    {
+      "draw": 0,
+      "state_offset": 160,
+      "word_offset": 164,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 1,
+      "state_offset": 2048,
+      "word_offset": 2052,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 2,
+      "state_offset": 2112,
+      "word_offset": 2116,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 3,
+      "state_offset": 2176,
+      "word_offset": 2180,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 4,
+      "state_offset": 2240,
+      "word_offset": 2244,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 5,
+      "state_offset": 2304,
+      "word_offset": 2308,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 6,
+      "state_offset": 2368,
+      "word_offset": 2372,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 7,
+      "state_offset": 2432,
+      "word_offset": 2436,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 8,
+      "state_offset": 2496,
+      "word_offset": 2500,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 9,
+      "state_offset": 2560,
+      "word_offset": 2564,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 10,
+      "state_offset": 2624,
+      "word_offset": 2628,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    },
+    {
+      "draw": 11,
+      "state_offset": 2688,
+      "word_offset": 2692,
+      "old_ISP_word0": "0x1c00000",
+      "old_depth_compare": 7,
+      "new_ISP_word0": "0x400000",
+      "new_depth_compare": 1
+    }
+  ],
+  "profile_sha256": "92f5e7731b8f98136e5e8dde4a7a220523fda73d53e7b256e397fe15f2da72c2",
+  "asset_sha256": [
+    "f7bc727da40785c9fc0bee29ed092a77c644ad2b0f3335e996167947acfc2983",
+    "61a6d4bc83f820c8f344b8144d94bb08f6dd4688fb5c8dc10cbba87f6d3d5144",
+    "8cdc7ebaf212cf9eced5e723b67a5ac0766680e9cfbb718b1aed2476f33361e0",
+    "d0d2892baa65bd543d9b7f923cd5364390e989e3b9c1d04881311392f617c539",
+    "727e4543140fa02c395c5cd1194406bc795561db01f5ce25af2d11329d00fa65"
+  ],
+  "unchanged": "All vertex/index bytes, shaders CODE336, PDS sources/DMA, TA/raster commands, allocation sizes, cache/PTE/fence/retirement paths",
+  "old_oracles_preserved_not_reclassified": true
+}

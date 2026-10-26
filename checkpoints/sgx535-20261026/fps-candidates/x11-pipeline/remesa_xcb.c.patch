@@ -1,0 +1,103 @@
+--- /home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/remesa_xcb.c
++++ /home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/remesa_xcb.c
+@@ -49,7 +49,7 @@
+  const unsigned char *pixels,struct remesa_xcb_receipt *receipt)
+ {
+  xcb_void_cookie_t cookies[REMESA_XCB_BATCH_MAX_COOKIES];unsigned used=0;
+- int queue_error=0,last_error=0,first_error=0;uint8_t last_x_error=0,first_x_error=0;
++ int queue_error=0,first_error=0;uint8_t first_x_error=0;
+  if(!height||!tile_rows||(height-1)/tile_rows+1>REMESA_XCB_BATCH_MAX_COOKIES)return E2BIG;
+  for(unsigned y=0;y<height;){
+   unsigned rows=height-y;if(rows>tile_rows)rows=tile_rows;
+@@ -60,20 +60,21 @@
+   y+=rows;
+   if(xcb_connection_has_error(connection)){queue_error=EPIPE;break;}
+  }
+- /* libxcb request_check may sync past its cookie. Check the final queued
+-  * request first, then consume EVERY earlier checked cookie, even on errors.
+-  * No event ownership change, unchecked request, resend or discarded error. */
+- if(used){
+-  receipt->x_error=0;last_error=checked(connection,cookies[used-1],receipt);last_x_error=receipt->x_error;
+-  for(unsigned i=0;i+1<used;i++){
+-   int error;receipt->x_error=0;error=checked(connection,cookies[i],receipt);
+-   if(error&&!first_error){first_error=error;first_x_error=receipt->x_error;}
+-  }
+- }
+- /* Preserve the earliest request error in wire order; all other errors have
+-  * still been retrieved/freed. Connection failure is never success. */
+- receipt->x_error=first_error?first_x_error:last_error?last_x_error:0;
+- return first_error?first_error:last_error?last_error:queue_error;
++ /* FreeGC is ordered after every image on this connection. Waiting for its
++  * checked acknowledgement also advances past the image batch. Drain every
++  * image cookie afterwards, preserving the earliest error in wire order.
++  * No persistent GC, unchecked request, event ownership change or resend. */
++ xcb_void_cookie_t release=xcb_free_gc_checked(connection,gc);
++ receipt->x_error=0;int cleanup=checked(connection,release,receipt);
++ uint8_t cleanup_x_error=receipt->x_error;
++ if(!cleanup)receipt->gc_released=true;
++ for(unsigned i=0;i<used;i++){
++  receipt->x_error=0;int error=checked(connection,cookies[i],receipt);
++  if(error&&!first_error){first_error=error;first_x_error=receipt->x_error;}
++ }
++ if(!first_error&&!queue_error)receipt->image_acknowledged=true;
++ receipt->x_error=first_error?first_x_error:cleanup?cleanup_x_error:0;
++ return first_error?first_error:queue_error?queue_error:cleanup;
+ }
+ 
+ static int publish(xcb_connection_t *connection,uint32_t window,
+@@ -81,12 +82,30 @@
+  struct remesa_xcb_receipt *receipt)
+ {
+  size_t stride=(size_t)width*4;int error;uint32_t gc=0;
++ const char *profile=getenv("REMESA_GEARS_PROFILE");
++ const bool fast=profile&&!strcmp(profile,"FAST");
+  xcb_get_geometry_reply_t *geometry=NULL;xcb_get_window_attributes_reply_t *attributes=NULL;xcb_generic_error_t *xerror=NULL;
+  if(xcb_connection_has_error(connection)) {error=EPIPE;goto done;}
+- geometry=xcb_get_geometry_reply(connection,xcb_get_geometry(connection,window),&xerror);
+- if(!geometry || xerror) {if(xerror)receipt->x_error=xerror->error_code;error=EIO;goto done;}
+- attributes=xcb_get_window_attributes_reply(connection,xcb_get_window_attributes(connection,window),&xerror);
+- if(!attributes || xerror) {if(xerror)receipt->x_error=xerror->error_code;error=EIO;goto done;}
++ if(fast){
++  /* Both mandatory queries are sent before either blocking reply. On either
++   * failure consume both replies/errors, so no queued response is abandoned. */
++  xcb_get_geometry_cookie_t geometry_cookie=xcb_get_geometry(connection,window);
++  xcb_get_window_attributes_cookie_t attributes_cookie=xcb_get_window_attributes(connection,window);
++  xcb_generic_error_t *attributes_error=NULL;
++  geometry=xcb_get_geometry_reply(connection,geometry_cookie,&xerror);
++  attributes=xcb_get_window_attributes_reply(connection,attributes_cookie,&attributes_error);
++  if(!geometry||xerror||!attributes||attributes_error){
++   if(xerror)receipt->x_error=xerror->error_code;
++   else if(attributes_error)receipt->x_error=attributes_error->error_code;
++   free(attributes_error);error=EIO;goto done;
++  }
++  free(attributes_error);
++ }else{
++  geometry=xcb_get_geometry_reply(connection,xcb_get_geometry(connection,window),&xerror);
++  if(!geometry || xerror) {if(xerror)receipt->x_error=xerror->error_code;error=EIO;goto done;}
++  attributes=xcb_get_window_attributes_reply(connection,xcb_get_window_attributes(connection,window),&xerror);
++  if(!attributes || xerror) {if(xerror)receipt->x_error=xerror->error_code;error=EIO;goto done;}
++ }
+  if(window==geometry->root || (exact?(geometry->width!=width||geometry->height!=height):
+     (geometry->width<width||geometry->height<height)) ||
+     !compatible(xcb_get_setup(connection),geometry,attributes)) {error=ENOTSUP;goto done;}
+@@ -104,7 +123,7 @@
+  gc=xcb_generate_id(connection);if(gc==UINT32_MAX || !gc) {gc=0;error=ENOSPC;goto done;}
+  error=checked(connection,xcb_create_gc_checked(connection,gc,window,0,NULL),receipt);
+  if(error) {gc=0;goto done;}
+- const char *profile=getenv("REMESA_GEARS_PROFILE"),*presentation=getenv("REMESA_GEARS_PRESENT");
++ const char *presentation=getenv("REMESA_GEARS_PRESENT");
+  if(profile&&!strcmp(profile,"FAST")&&presentation&&!strcmp(presentation,"SHM")) {
+   bool sent=false,ack=false;
+   error=remesa_fast_shm_present(connection,window,gc,width,height,pixels,stride*height,
+@@ -113,8 +132,10 @@
+   receipt->image_acknowledged=ack;
+   goto done;
+  }
+- if(profile&&!strcmp(profile,"FAST")&&(height-1)/tile_rows+1<=REMESA_XCB_BATCH_MAX_COOKIES)
++ if(fast&&(height-1)/tile_rows+1<=REMESA_XCB_BATCH_MAX_COOKIES){
+   error=publish_checked_batch(connection,window,gc,width,height,stride,tile_rows,pixels,receipt);
++  gc=0; /* Helper owns the one checked FreeGC, including failure paths. */
++ }
+  else for(unsigned y=0;y<height;){
+   unsigned rows=height-y;if(rows>tile_rows)rows=tile_rows;
+   xcb_void_cookie_t image=xcb_put_image_checked(connection,XCB_IMAGE_FORMAT_Z_PIXMAP,window,gc,

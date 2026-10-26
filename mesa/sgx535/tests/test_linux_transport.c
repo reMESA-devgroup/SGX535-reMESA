@@ -9,6 +9,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
+#include <unistd.h>
 static unsigned calls,opens,closes;
 static int mode;
 int open(const char *path,int flags,...)
@@ -56,10 +57,24 @@ int main(void)
    assert(d.ops->map(d.priv,bo,false,&ptr)==EIO && !ptr);
    assert(d.ops->map(d.priv,bo,true,&ptr)==EIO && !ptr);
   }
+  /* A fence authenticates only its submitting endpoint. Wrong-owner cleanup
+   * must not consume it, and stale/unknown pointers must not be dereferenced. */
+  struct remesa_device foreign={0};
+  assert(!remesa_linux_open(&foreign,"INTERPOSED-NO-DEVICE"));
+  assert(foreign.ops->wait(foreign.priv,fence,0,true)==EINVAL);
+  foreign.ops->destroy_fence(foreign.priv,fence);
+  assert(d.ops->wait(d.priv,fence,0,true)==error);
+  assert(!remesa_linux_close_checked(&foreign));
+  assert(d.ops->wait(d.priv,(void *)1,0,true)==EINVAL);
+  d.ops->destroy_fence(d.priv,(void *)1);
+  assert(remesa_linux_close_checked(&d)==EBUSY);
   void *second=(void *)1;
   assert(d.ops->submit(d.priv,bo,&p,&second)==EBUSY && !second && calls==prior+1);
-  d.ops->destroy_fence(d.priv,fence);d.ops->destroy_bo(d.priv,bo);remesa_linux_close(&d);
+  d.ops->destroy_fence(d.priv,fence);
+  assert(d.ops->wait(d.priv,fence,0,true)==EINVAL);
+  d.ops->destroy_fence(d.priv,fence);
+  d.ops->destroy_bo(d.priv,bo);remesa_linux_close(&d);
  }
- assert(opens==6 && closes==6 && calls==6);
- puts("PASS: 6 interposed transport outcomes; no device access; failed/altered responses unreadable; no retry");
+ assert(opens==12 && closes==12 && calls==6);
+ puts("PASS: 6 interposed transport outcomes; no device access; failed/altered responses unreadable; no retry; fence owner/stale rejection");
 }

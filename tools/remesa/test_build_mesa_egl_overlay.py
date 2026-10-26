@@ -52,6 +52,11 @@ class InputValidation(unittest.TestCase):
         self.assertEqual(manifest["originals"], build.PIN)
         self.assertEqual(len(sources), 5)
         path = combined / "egl-primary-integration.json"
+        driver = combined / "src/gallium/drivers/sgx535"
+        for name in ("remesa_present.c", "remesa_present.h"):
+            self.assertEqual((driver / name).read_bytes(),
+                             (DIRECTORY.parents[1] / "mesa/sgx535" / name).read_bytes())
+        self.assertIn("'remesa_present.c'", (driver / "meson.build").read_text())
         manifest["files"][build.UNITS[0]] = "0" * 64
         path.write_text(json.dumps(manifest))
         with self.assertRaises(ValueError):

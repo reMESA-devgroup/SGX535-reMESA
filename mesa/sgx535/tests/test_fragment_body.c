@@ -126,11 +126,14 @@ int main(void)
  CHECK(!memcmp(&body,&saved,sizeof(body)));
  CHECK(remesa_fragment_body_validate(NULL)==EINVAL);
  CHECK(remesa_fragment_body_prepare(&p,NULL)==EINVAL);
- /* CPU-format success never opens the independent hardware encoder gate. */
+ /* The existing packed constant body is now reachable through the public
+  * stage encoder. Full pipeline/dispatch admission is still independent. */
  unsigned char bytes[56],saved_bytes[56];memset(bytes,0xa5,sizeof(bytes));memcpy(saved_bytes,bytes,sizeof(bytes));
  size_t written=999;
- CHECK(remesa_usse_encode(&p,bytes,sizeof(bytes),&written)==ENOTSUP);
- CHECK(written==999&&!memcmp(bytes,saved_bytes,sizeof(bytes)));
+ CHECK(!remesa_usse_encode(&p,bytes,sizeof(bytes),&written)&&written==8);
+ struct remesa_fragment_constant constant;
+ CHECK(!remesa_fragment_constant_decode(bytes,written,&constant)&&constant.argb==0xff00ff00);
+ CHECK(!memcmp(bytes+written,saved_bytes+written,sizeof(bytes)-written));
  printf("PASS %u fragment body checks; original CPU candidate, no executable qualification\n",checks);
  return 0;
 }

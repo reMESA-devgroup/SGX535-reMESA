@@ -3,6 +3,9 @@
 #define REMESA_PERSISTENT_H
 #include "remesa_device.h"
 #include "remesa/provider.h"
+#include "remesa_render_target.h"
+#include "remesa_program_registers.h"
+#include "remesa_ta_scene.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -37,6 +40,16 @@ struct remesa_persistent_ops {
   * resubmits hardware. Other errors retain quarantine semantics. */
  int (*release)(void *,uint64_t,uint64_t);
 };
+/* CPU placement policy only. These classes do not grant hardware access or
+ * establish requester coverage. Every allocation still shares the same VA
+ * ledger, reserved ranges, budget, pin/map owner and quarantine rules. */
+enum remesa_persistent_va_class {
+ REMESA_VA_DEFAULT=0, REMESA_VA_PROGRAM, REMESA_VA_RASTER,
+ REMESA_VA_SURFACE, REMESA_VA_CLASS_COUNT
+};
+struct remesa_persistent_va_range {
+ uint64_t start,end,alignment; /* half-open, alignment0 means page size */
+};
 struct remesa_persistent_config {
  const struct remesa_persistent_ops *ops;void *priv;
  uint64_t context,va_start,va_end;size_t byte_budget;
@@ -45,6 +58,18 @@ struct remesa_persistent_config {
  /* Transfer-storage limits, not GPU rendering/sampling capabilities. Zero
   * dimensions/alignment use layout defaults; bytes are clamped to budget/VA. */
  struct remesa_resource_limits resource_limits;
+ /* Occupied VA belonging to other owners of this address space (for example
+  * retained LAB BOs). Copied at open; never mapped, freed or relocated here.
+  * Half-open page-aligned ranges, inside [va_start,va_end), pairwise disjoint.
+  * No ranges means the original private-address-space allocation policy. */
+ /* An all-zero entry preserves the original root-range/page policy. Explicit
+  * entries must be contained in the root range; overlapping policies are
+  * allowed because all live allocations use the same collision ledger.
+  * PROGRAM is used by generated code/state/images, SURFACE by typed Z/region.
+  * Generic resources retain DEFAULT unless explicitly allocated by class. */
+ struct remesa_persistent_va_range placement[REMESA_VA_CLASS_COUNT];
+ unsigned reserved_count;
+ struct {uint64_t start,end;} reserved[REMESA_PERSISTENT_BUFFERS];
 };
 /* Zero-initialize device before open. Caller retains the endpoint until all
  * Gallium screens/contexts and fences referring to it have been destroyed.
@@ -60,10 +85,155 @@ int remesa_persistent_open(struct remesa_device *,const struct remesa_persistent
  * Poll detached jobs. Failed/ambiguous jobs and their backing remain retained.
  * Close returns EBUSY while resources/jobs survive; it never force-frees them. */
 int remesa_persistent_collect(struct remesa_device *);
+/* Explicit generic BO placement for native resource composition. No supplied
+ * VA or external backing is accepted. Empty disjoint output required; destroy
+ * through device.ops->destroy_bo. Does not submit or qualify any GPU path. */
+int remesa_persistent_allocate_placed(struct remesa_device *,size_t bytes,
+ enum remesa_persistent_va_class,void **bo);
 int remesa_persistent_close(struct remesa_device *);
+/* Live allocation metadata for building native job bindings. No lifetime hold,
+ * byte-content verification, requester qualification or execution permission.
+ * Caller serializes destruction/leases and must use the kernel's actual job
+ * prepare/check mechanisms before issuing. Includes typed BOs without claiming
+ * their payload valid. Any active endpoint CPU lease rejects the snapshot. */
+struct remesa_persistent_memory_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t logical_bytes,allocation_bytes;
+};
+int remesa_persistent_memory_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_memory_backing *);
+/* Resolve a linear BGRA8 target from this endpoint's live generic BO.
+ * Dimensions/pitch are framebuffer metadata, never supplied GPU addresses.
+ * This is an ownership-bound CPU descriptor; it does not publish pixels,
+ * authorize rendering or change the existing color submission ABI. */
+struct remesa_persistent_render_target_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t allocation_bytes;
+ struct remesa_render_target_state state;
+};
+int remesa_persistent_render_target_snapshot(const struct remesa_device *,void *bo,
+ uint32_t width,uint32_t height,uint32_t pitch_pixels,
+ struct remesa_persistent_render_target_backing *);
+/* Fresh scene/region backing for the recovered zero-initialized rev121 CPU
+ * option0 branch. Allocates the full page-rounded layout, explicitly zeroes
+ * and verifies it, then synchronizes through the provider. Zero content is
+ * not proof of generated region tables or GPU visibility. No job is issued. */
+int remesa_persistent_scene_allocate(struct remesa_device *,uint32_t width,
+ uint32_t height,void **bo);
+struct remesa_persistent_scene_backing {
+ uint64_t owner,generation,gpu_va,region_gpu_va;
+ uint32_t handle,width,height;
+ size_t allocation_bytes;
+ struct remesa_scene_layout layout;
+};
+/* Live owned mapping only; snapshots are CPU state, not hardware cookies or
+ * lifetime holds. Direct host writes and color submission remain forbidden. */
+int remesa_persistent_scene_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_scene_backing *);
+/* Explicit preparation only: separate padded Z storage through the existing
+ * allocator/pin/map owner. No CPU fill is a depth clear, and no scene/DSA,
+ * Gallium format or submission support is enabled. Caller destroys the BO
+ * through device.ops->destroy_bo. A nonempty output is rejected unchanged.
+ * Dimensions are restricted to the existing CPU depth descriptor profile.
+ * Requires external serialization; output cannot alias endpoint storage. */
+int remesa_persistent_depth_allocate(struct remesa_device *,uint32_t width,
+ uint32_t height,uint32_t cpp,void **bo);
+struct remesa_persistent_depth_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,width,height,pitch_pixels,cpp;
+ size_t allocation_bytes;
+ struct remesa_depth_surface_state initial_surface;
+};
+/* Derive the address/descriptor from this endpoint's live pinned/mapped BO,
+ * never caller-supplied VA or a foreign handle. The surface remains UNDEFINED;
+ * neither this snapshot nor successful software mapping authenticates GPU
+ * requester coverage, TLB visibility, initialization or release after a draw.
+ * Any active CPU lease on this endpoint refuses snapshot/allocation. */
+int remesa_persistent_depth_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_depth_backing *);
+/* Explicit preparation of one immutable word0-only ISP update. Uses the
+ * existing allocation/pin/map/VA ledger, never supplied addresses. Layout
+ * offsets are host packing policy: STATE8, USE16, PDS60 and TA-reference8 in
+ * one page, with zero-filled gaps/tail. They are not a complete scene/job.
+ * No bank is programmed or acquired: bank is an explicit entry-plan input,
+ * and the caller must qualify bank ownership/requester coverage separately.
+ * Success means staged bytes/readback only, not GPU execution admission.
+ * Destroy through device.ops->destroy_bo. Public write mapping and the color
+ * diagnostic submit reject this typed allocation. Ordinary errors roll back;
+ * uncertain provider effects retain quarantine and prevent endpoint close.
+ * Externally serialized, output must be empty and disjoint from request.
+ */
+int remesa_persistent_isp_update_prepare(struct remesa_device *,
+ const struct remesa_isp_opaque_triangle_request *,uint32_t use_bank,void **bo);
+struct remesa_persistent_isp_update_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t allocation_bytes,state_offset,use_offset,pds_offset,ta_offset;
+ size_t state_bytes,use_bytes,pds_bytes,ta_bytes;
+ struct remesa_use_entry_plan use_entry;
+ uint8_t pds_known_mask[60];
+};
+/* Owned live backing only; rejects foreign/deleted/quarantined objects and
+ * any active CPU lease. Does not authenticate GPU visibility or execution.
+ * State is immutable for the entire BO lifetime; output is transactional. */
+int remesa_persistent_isp_update_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_isp_update_backing *);
+/* Distinct final-state object, not an ISP word0 update or vertex PDS. Uses
+ * the same owner/immutable staging path, source header2000/rounded extent and
+ * close reference12. Does not close/submit a live scene or write any register.
+ * CPU preparation success is not physical termination qualification. */
+int remesa_persistent_scene_close_prepare(struct remesa_device *,uint32_t width,
+ uint32_t height,uint32_t use_bank,void **bo);
+struct remesa_persistent_scene_close_backing {
+ /* Same byte-range metadata; ta_bytes is12, including the final CPU command. */
+ struct remesa_persistent_isp_update_backing image;
+};
+/* The two snapshot APIs reject objects belonging to the other kind. */
+int remesa_persistent_scene_close_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_scene_close_backing *);
+enum remesa_persistent_state_kind {
+ REMESA_PERSISTENT_STATE_ISP_WORD0=1, REMESA_PERSISTENT_STATE_SCENE_CLOSE=2,
+ REMESA_PERSISTENT_STATE_CONSTANT_DRAW=3, REMESA_PERSISTENT_STATE_SCENE_ZCLEAR=4,
+ REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6
+};
+/* Explicit f41 draw delta /54c5 green clear state, not complete first-scene
+ * state. All fragment references derive from this shader token's owned PDS;
+ * no caller VA or borrowed program bytes are accepted. New state retains the
+ * entire shader owner until its own backing really disposes, including after
+ * public shader deletion. No job hold, bank lease or execution is admitted. */
+struct remesa_persistent_constant_state_request {
+ struct remesa_isp_opaque_triangle_request isp;
+ struct remesa_ta_window_viewport_request viewport;
+ enum remesa_ta_scalar_profile scalar_profile;
+};
+int remesa_persistent_constant_state_prepare(struct remesa_device *,void *shader_token,
+ const struct remesa_persistent_constant_state_request *,uint32_t use_bank,void **bo);
+/* Explicit cached predecessor contracts, not a live cache or job scheduler.
+ * AFTER_ZCLEAR emits b41/52B; FRAGMENT_UPDATE emits40/16B and requires all
+ * non-fragment state to be unchanged in the caller's ordered scene. Both
+ * retain their owned shader dependency exactly like the full selected delta. */
+int remesa_persistent_after_zclear_state_prepare(struct remesa_device *,void *shader_token,
+ const struct remesa_persistent_constant_state_request *,uint32_t use_bank,void **bo);
+int remesa_persistent_fragment_state_prepare(struct remesa_device *,void *shader_token,
+ uint32_t use_bank,void **bo);
+int remesa_persistent_zclear_state_prepare(struct remesa_device *,void *shader_token,
+ uint32_t use_bank,void **bo);
+struct remesa_persistent_scene_state_backing {
+ struct remesa_persistent_isp_update_backing image;
+ unsigned kind;
+ uint64_t shader_owner,shader_generation;
+ uint32_t shader_code_handle,shader_pds_handle;
+};
+/* These new state kinds are rejected by the old ISP/scene-close snapshots.
+ * Output unchanged on failure; externally serialized with owner destruction. */
+int remesa_persistent_scene_state_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_scene_state_backing *);
 struct remesa_shader_request;
 struct remesa_shader_bindings;
 struct remesa_shader_draw_programs;
+struct remesa_shader_image;
 struct remesa_usse_vertex_mapping;
 struct remesa_draw_plan;
 /* Explicit numeric VS CPU candidate plus the original FS candidate. Returns
@@ -72,6 +242,10 @@ struct remesa_draw_plan;
  * output slot is rejected unchanged. This does not alter Gallium callbacks. */
 int remesa_persistent_prepare_vertex_candidate(struct remesa_device *,
  const struct remesa_shader_draw_programs *,const struct remesa_usse_vertex_mapping *,void **);
+/* Explicit already-generated image staging. Clones immutable ownership; source
+ * may die after return. Authenticated cfg.context and next endpoint generation
+ * select the request identity. ENOTSUP+token means verified CPU backing only. */
+int remesa_persistent_prepare_image(struct remesa_device *,const struct remesa_shader_image *,void **);
 /* CPU-only original-program staging in an owned GEM object. The allocation is
  * pinned for CPU access but has NO SGX mapping, execution address or job hold.
  * A staged CPU candidate is never passed to the diagnostic executor. Tokens
@@ -137,6 +311,65 @@ struct remesa_persistent_draw_backing {
 };
 int remesa_persistent_shader_draw_backing(const struct remesa_device *,void *token,
  struct remesa_persistent_draw_backing *);
+/* Explicit immutable raw VB/IB promotion through the existing allocator,
+ * pin/map/VA ledger. Keeps the original offsets, start, bias and stride in
+ * the token's draw snapshot; never performs a vertex transform. Byte-exact
+ * CPU readback and sync succeed before publication. Token owns this storage
+ * until destruction; no independently destroyable BO or writable map escapes.
+ * No physical fetch instruction, job hold, requester or execution is admitted.
+ * Ordinary failure rolls back only the tentative allocation; uncertain side
+ * effects quarantine the token and block endpoint close. Externally serialized.
+ */
+int remesa_persistent_shader_prepare_draw_gpu(struct remesa_device *,void *token);
+struct remesa_persistent_draw_gpu_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,min_vertex,max_vertex;
+ size_t allocation_bytes,vertex_bytes,index_offset,index_bytes;
+};
+/* VA is allocator-derived. Committed byte ranges exclude deterministic zero
+ * padding and must be used for fetch bounds. Unchanged on failure. */
+int remesa_persistent_shader_draw_gpu_backing(const struct remesa_device *,void *token,
+ struct remesa_persistent_draw_gpu_backing *);
+/* Opt-in immutable GPU ownership for the exact generated POSITION4 VS16 and
+ * packed constant FS8 pair, in that order. Reuses allocation/pin/map/VA ledger,
+ * verifies zero-padded code byte-for-byte and syncs before publication. Banks
+ * are explicit software entry-plan inputs, not bank leases or admission.
+ * The token owns this BO; ordinary errors roll back only tentative storage,
+ * uncertainty quarantines ownership. No execution state, task or job is granted.
+ * Optional PDS storage and unproved host grammars return ENOTSUP unchanged. */
+int remesa_persistent_shader_prepare_gpu(struct remesa_device *,void *token,
+ const uint32_t banks[2]);
+struct remesa_persistent_shader_gpu_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t allocation_bytes,program_offset[2],program_bytes[2];
+ struct remesa_use_entry_plan entry[2];
+};
+/* Allocator-derived code addresses and exact committed ranges, never arbitrary
+ * caller VAs. No CPU lease or independently destroyable BO escapes. Snapshot
+ * is unchanged on failure and requires external serialization with teardown. */
+int remesa_persistent_shader_gpu_backing(const struct remesa_device *,void *token,
+ struct remesa_persistent_shader_gpu_backing *);
+/* Explicit CPU-profile PDS ownership, derived solely from the same token's
+ * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
+ * stride16, bias0; bounds come from the original validated draw snapshot.
+ * No arbitrary VA, task word or code bytes are accepted. Object order is
+ * primaryVS64, primaryFS56, empty-secondary4, each32-byte aligned. */
+#define REMESA_PERSISTENT_SHADER_PDS_BYTES 132u
+int remesa_persistent_shader_prepare_pds_gpu(struct remesa_device *,void *token);
+struct remesa_persistent_shader_pds_gpu_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,min_vertex,max_vertex,vertex_stride,use_lower19[2];
+ size_t allocation_bytes,object_offset[3],object_bytes[3],data_bytes[3],code_bytes[3];
+ /* Producer evidence, not hardware qualification. FS DATA0 remains mask0
+  * despite the separately derived owned USE fixup; all padding is mask0. */
+ uint8_t known_mask[REMESA_PERSISTENT_SHADER_PDS_BYTES];
+};
+/* Token owns this immutable allocation and all referenced owners. Snapshot
+ * grants no job hold, physical DATA preload, bank lease or execution. Outputs
+ * unchanged on failure; external serialization with destruction is required. */
+int remesa_persistent_shader_pds_gpu_backing(const struct remesa_device *,void *token,
+ struct remesa_persistent_shader_pds_gpu_backing *);
 struct remesa_pds_host_data_view;
 /* Snapshot and CPU-stage two original HOST DATA windows in one owned pinned
  * backing under the existing shader token. VS then FS, at most1024bytes each.
@@ -157,4 +390,38 @@ struct remesa_persistent_pds_backing {
  * Output unchanged on failure; teardown invalidates the binding. */
 int remesa_persistent_shader_pds_backing(const struct remesa_device *,void *token,
  struct remesa_persistent_pds_backing *);
+/* One immutable allocation replaces separate shader/raw/PDS/state backing for
+ * the bounded diagnostic scene. It does not own Z/color/auxiliaries, create
+ * native job holds or authorize execution. Request VA/bytes must both be0;
+ * allocation and every internal reference derive from this endpoint. Generated
+ * programs are copied, so their host images may be released after success.
+ * Public writes and color-submit reject this allocation; destroy_bo owns it.
+ * Uncertain map/unmap/sync retains quarantine. External serialization required. */
+struct remesa_depth_scene_image_request;
+struct remesa_persistent_depth_scene_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,width,height;
+ /* enum remesa_depth_vertex_profile from remesa_depth_scene_image.h. This
+  * reports the selected immutable CPU recipe, not GPU qualification. */
+ uint32_t vertex_profile;
+ size_t allocation_bytes,used_bytes,ta_offset,ta_bytes;
+ struct remesa_use_entry_plan use_entries[3]; /* VS, FS, state upload */
+};
+int remesa_persistent_depth_scene_prepare(struct remesa_device *,
+ const struct remesa_depth_scene_image_request *,void **bo);
+int remesa_persistent_depth_scene_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_depth_scene_backing *);
+int remesa_persistent_depth_scene_verify(struct remesa_device *,void *bo);
+/* Immutable raster208 + TA56 control DATA; zeroes/checks rounded padding.
+ * No referenced-BO ownership, admission, native holds or GPU execution.
+ * Public write mapping and color submission reject this typed allocation.
+ * Ordinary failure preserves output; uncertain provider effects quarantine.
+ * External serialization with all referenced owners is required. */
+#define REMESA_CONTROL_IMAGE_BYTES (REMESA_RASTER_CONTROL_BYTES+REMESA_TA_CONTROL_BYTES)
+int remesa_persistent_control_prepare(struct remesa_device *,
+ const struct remesa_raster_control_request *,
+ const struct remesa_raster_object_reference *,void **bo);
+int remesa_persistent_control_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_memory_backing *);
+int remesa_persistent_control_verify(struct remesa_device *,void *bo);
 #endif

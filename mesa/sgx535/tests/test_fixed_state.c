@@ -25,6 +25,25 @@ int main(void)
    CHECK(remesa_validate_blend(NULL) == EINVAL);
    CHECK(remesa_validate_dsa(NULL) == EINVAL);
    CHECK(remesa_validate_rasterizer(NULL) == EINVAL);
+   struct pipe_rasterizer_state window={.half_pixel_center=1,.bottom_edge_rule=1,.clamp_vertex_color=1};
+   CHECK(remesa_validate_recording_window_rasterizer(&window)==0);
+   CHECK(remesa_validate_rasterizer(&window)==ENOTSUP);
+   window.multisample=1;CHECK(remesa_validate_recording_window_rasterizer(&window)==ENOTSUP);
+   window.multisample=0;window.bottom_edge_rule=0;
+   CHECK(remesa_validate_recording_window_rasterizer(&window)==ENOTSUP);
+   CHECK(remesa_validate_recording_window_rasterizer(NULL)==EINVAL);
+   const float quarter[3][4]={{8.25f,8.25f,.5f,1},{24.25f,8.25f,.5f,1},{8.25f,24.25f,.5f,1}};
+   const float reflected[3][4]={{8.25f,23.75f,.5f,1},{24.25f,23.75f,.5f,1},{8.25f,7.75f,.5f,1}};
+   const float tied[3][4]={{8,8,.5f,1},{24,8,.5f,1},{8,24,.5f,1}};
+   CHECK(!remesa_prove_half_pixel_edge_independence(quarter,32,32));
+   CHECK(!remesa_prove_half_pixel_edge_independence(reflected,32,32));
+   CHECK(remesa_prove_half_pixel_edge_independence(tied,32,32)==ENOTSUP);
+   float malformed[3][4];memcpy(malformed,quarter,sizeof(malformed));malformed[0][0]=nextafterf(8.25f,9);
+   CHECK(remesa_prove_half_pixel_edge_independence((const float (*)[4])malformed,32,32)==ERANGE);
+   malformed[0][0]=INFINITY;
+   CHECK(remesa_prove_half_pixel_edge_independence((const float (*)[4])malformed,32,32)==EINVAL);
+   CHECK(remesa_prove_half_pixel_edge_independence(quarter,64,32)==ENOTSUP);
+   CHECK(remesa_prove_half_pixel_edge_independence(NULL,32,32)==EINVAL);
 #define BAD_B(field, value) do { struct pipe_blend_state t=b; t.field=value; CHECK(remesa_validate_blend(&t)==ENOTSUP); } while (0)
    BAD_B(rt[0].colormask, PIPE_MASK_R);
    BAD_B(rt[0].blend_enable, 1);
@@ -79,6 +98,23 @@ int main(void)
    BAD_R(light_twoside, 1);
    BAD_R(clamp_vertex_color, 1);
    BAD_R(clamp_fragment_color, 1);
+   struct pipe_rasterizer_state lab=r;lab.half_pixel_center=1;
+   CHECK(remesa_validate_rasterizer(&lab)==ENOTSUP);
+   CHECK(remesa_validate_lab_rasterizer(&lab,REMESA_LAB_RASTER_QUARTER_FBO)==0);
+   CHECK(remesa_validate_lab_rasterizer(NULL,REMESA_LAB_RASTER_QUARTER_FBO)==EINVAL);
+   CHECK(remesa_validate_lab_rasterizer(&lab,(enum remesa_lab_raster_profile)0)==ENOTSUP);
+   CHECK(remesa_validate_lab_rasterizer(&r,REMESA_LAB_RASTER_QUARTER_FBO)==ENOTSUP);
+   lab.clamp_vertex_color=1;
+   CHECK(remesa_validate_lab_rasterizer(&lab,REMESA_LAB_RASTER_QUARTER_FBO)==0);
+   CHECK(remesa_validate_rasterizer(&lab)==ENOTSUP);
+   lab.clamp_vertex_color=0;
+#define BAD_L(field,value) do {struct pipe_rasterizer_state t=lab;t.field=value;CHECK(remesa_validate_lab_rasterizer(&t,REMESA_LAB_RASTER_QUARTER_FBO)==ENOTSUP);}while(0)
+   BAD_L(bottom_edge_rule,1);BAD_L(cull_face,PIPE_FACE_BACK);
+   BAD_L(multisample,1);BAD_L(poly_stipple_enable,1);BAD_L(depth_clamp,1);
+   BAD_L(clip_halfz,1);BAD_L(rasterizer_discard,1);BAD_L(half_pixel_center,0);
+   BAD_L(fill_front,PIPE_POLYGON_MODE_LINE);BAD_L(conservative_raster_mode,1);
+   BAD_L(clamp_fragment_color,1);BAD_L(light_twoside,1);
+#undef BAD_L
    /* Triangle-only draws have no point/line primitives or varying color. */
    r.depth_clip_near=1; r.depth_clip_far=1;
    r.front_ccw=1; r.flatshade_first=1; r.scissor=1;

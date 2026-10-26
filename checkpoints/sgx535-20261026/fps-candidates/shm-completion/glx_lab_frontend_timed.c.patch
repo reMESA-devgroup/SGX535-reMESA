@@ -1,0 +1,40 @@
+--- /home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/glx_lab_frontend_timed.c
++++ /home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/glx_lab_frontend_timed.c
+@@ -23,7 +23,7 @@
+  struct pipe_screen *screen;
+  uint64_t timeout;
+  int error;
+- bool poisoned,closed,cpu_depth24,gears_runtime;
++ bool poisoned,closed,cpu_depth24,gears_runtime,shm_bound;
+  struct remesa_xcb_receipt receipt;
+  struct remesa_xcb_staging staging;
+ } lab;
+@@ -110,8 +110,15 @@
+    XFlush(display);
+    struct xcb_connection_t *connection=XGetXCBConnection(display);
+    if(!connection)error=ENOTCONN;
+-   else if(production_fast)error=remesa_xcb_present_oriented_staged(pipe,resource,
++   else if(production_fast){
++    const char *presentation=getenv("REMESA_GEARS_PRESENT");
++    if(presentation&&!strcmp(presentation,"SHM")&&!lab.shm_bound){
++     error=remesa_fast_shm_bind_display(display,connection,lab.timeout);
++     if(!error)lab.shm_bound=true;
++    }
++    if(!error)error=remesa_xcb_present_oriented_staged(pipe,resource,
+      bottom_left?REMESA_XCB_BOTTOM_LEFT:REMESA_XCB_TOP_LEFT,connection,(uint32_t)window,&lab.staging,&lab.receipt);
++   }
+    else error=remesa_xcb_present_oriented(pipe,resource,
+      bottom_left?REMESA_XCB_BOTTOM_LEFT:REMESA_XCB_TOP_LEFT,connection,(uint32_t)window,&lab.receipt);
+    /* A shared Xlib connection cannot be disconnected here. Uncertain GC
+@@ -145,7 +152,11 @@
+  pthread_mutex_lock(&lock);
+  if(display==lab.display) {
+   remesa_xcb_staging_release(&lab.staging);
++  /* Same Display -> helper mutex order as presentation. The close callback
++   * still owns a live Display; a poisoned helper never dereferences it later. */
++  if(lab.shm_bound)XLockDisplay(display);
+   int presentation_error=remesa_fast_shm_close(XGetXCBConnection(display));
++  if(lab.shm_bound)XUnlockDisplay(display);
+   if(presentation_error)fprintf(stderr,"GEARS_SHM_CLOSE error=%d\n",presentation_error);
+   lab.closed=true;lab.screen=NULL;lab.error=EPIPE;
+   memset(&lab.receipt,0,sizeof(lab.receipt));

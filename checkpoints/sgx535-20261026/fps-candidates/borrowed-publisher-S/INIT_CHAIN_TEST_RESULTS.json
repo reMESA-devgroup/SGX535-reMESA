@@ -1,0 +1,32 @@
+{
+  "classification": "CPU_ONLY_IDENTITY_CHAIN_TEST_PASS",
+  "cases": [
+    {
+      "case": "v2 full parent-script-module identity chain",
+      "pass": true
+    },
+    {
+      "case": "changed script rejected by unchanged parent",
+      "pass": true
+    },
+    {
+      "case": "changed module rejected by script identity binding",
+      "pass": true
+    },
+    {
+      "case": "original shell condition valid",
+      "exit": 0,
+      "payload_executed": true,
+      "pass": true
+    },
+    {
+      "case": "original shell condition tampered",
+      "exit": 77,
+      "payload_executed": false,
+      "pass": true
+    }
+  ],
+  "deployed": false,
+  "booted": false,
+  "GPU_submissions": 0
+}

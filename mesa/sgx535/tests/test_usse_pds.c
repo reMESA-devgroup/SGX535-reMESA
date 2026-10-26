@@ -5,6 +5,7 @@
 #include "remesa_shader_ir.h"
 #include "remesa_usse.h"
 #include "remesa_pds.h"
+#include "remesa_fragment_body.h"
 #include <assert.h>
 #include <errno.h>
 #include <stdint.h>
@@ -100,9 +101,17 @@ static void test_usse(void)
   memset(again,0xa5,sizeof(again));m=999;
   CHECK(remesa_usse_serialize_host(&a,again,n-1,&m)==ENOSPC&&m==999);
   unchanged_bytes(again,sizeof(again),0xa5);
-  CHECK(remesa_usse_encode(&a,again,sizeof(again),&m)==ENOTSUP&&m==999);
-  unchanged_bytes(again,sizeof(again),0xa5);
-  CHECK(remesa_usse_encode(&a,NULL,0,&m)==ENOTSUP&&m==999);
+  if(stage) {
+   CHECK(!remesa_usse_encode(&a,again,sizeof(again),&m)&&m==8);
+   struct remesa_fragment_constant constant;
+   CHECK(!remesa_fragment_constant_decode(again,m,&constant)&&constant.argb==0xffff00ff);
+   unchanged_bytes(again+m,sizeof(again)-m,0xa5);
+  } else {
+   CHECK(remesa_usse_encode(&a,again,sizeof(again),&m)==ENOTSUP&&m==999);
+   unchanged_bytes(again,sizeof(again),0xa5);
+  }
+  memset(again,0xa5,sizeof(again));m=999;
+  CHECK(remesa_usse_encode(&a,NULL,0,&m)==(stage?ENOSPC:ENOTSUP)&&m==999);
   CHECK(remesa_usse_encode(&a,NULL,1,&m)==EINVAL&&m==999);
   CHECK(remesa_usse_encode(&a,again,sizeof(again),NULL)==EINVAL);
   CHECK(remesa_usse_lower(&ir,NULL)==EINVAL);
@@ -238,7 +247,17 @@ static void test_constant_sharing(void)
   CHECK(!remesa_usse_serialize_host(&p,bytes,sizeof(bytes),&length));
   CHECK(!remesa_usse_deserialize_host(bytes,length,&again)&&!memcmp(&p,&again,sizeof(p)));
   memset(bytes,0xa5,sizeof(bytes));memcpy(before,bytes,sizeof(bytes));length=99;
-  CHECK(remesa_usse_encode(&p,bytes,sizeof(bytes),&length)==ENOTSUP&&length==99&&!memcmp(bytes,before,sizeof(bytes)));
+  if(rgb==3) {
+   /* Keep transactional rejection coverage with a truly unsupported value. */
+   struct remesa_usse_program unsupported=p;
+   unsupported.instructions[0].bits=UINT32_C(0x3f000000);
+   CHECK(remesa_usse_encode(&unsupported,bytes,sizeof(bytes),&length)==ENOTSUP&&length==99&&!memcmp(bytes,before,sizeof(bytes)));
+  }
+  CHECK(!remesa_usse_encode(&p,bytes,sizeof(bytes),&length)&&length==8);
+  struct remesa_fragment_constant constant;
+  CHECK(!remesa_fragment_constant_decode(bytes,length,&constant)&&
+   constant.argb==(rgb==2?UINT32_C(0xff00ff00):rgb==3?UINT32_C(0xffffff00):UINT32_C(0xffff00ff)));
+  CHECK(!memcmp(bytes+length,before+length,sizeof(bytes)-length));
   /* Unsupported -0, non-endpoint, NaN and alpha cannot be optimized into a
    * supported color. Rejection must precede any output modification. */
   const uint32_t invalid[3]={UINT32_C(0x80000000),UINT32_C(0x3f000000),UINT32_C(0x7fc00000)};

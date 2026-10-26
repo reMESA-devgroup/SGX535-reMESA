@@ -1,0 +1,14 @@
+{
+  "date": "2026-10-18",
+  "active_investigation": false,
+  "first_pc": "UNKNOWN",
+  "operational_hypothesis": "B_PLUS_Q",
+  "B": "0x20000160",
+  "q_bytes": 48,
+  "operational_address": "0x20000190",
+  "historical_results": "Preserved; no previous receipt or conclusion rewritten",
+  "reopen_only_if": "New evidence or a concrete functional blocker requires this specific question",
+  "current_priority": "Mesa/Gallium implementation and offline regression",
+  "ADMISSION_changed": false,
+  "GPU_execution_authorized": false
+}

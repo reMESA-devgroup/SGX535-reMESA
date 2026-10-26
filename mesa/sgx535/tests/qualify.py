@@ -55,7 +55,7 @@ for name, compiler, flags, prefix in variants:
         exe=a.output/(name+'-'+target)
         extra = [str(here.parents[1]/('kernel/remesa/'+name)) for name in ['registry.c','resource.c','provider.c']] if target in ('integration','persistent') else []
         if target=='persistent':
-            extra += [str(here/n) for n in ['remesa_persistent.c','remesa_shader_program.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_program_registers.c','remesa_fragment_body.c','remesa_shader_storage.c','remesa_nir.c']]
+            extra += [str(here/n) for n in ['remesa_persistent.c','remesa_shader_program.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_pds_structure.c','remesa_program_registers.c','remesa_fragment_body.c','remesa_shader_storage.c','remesa_nir.c']]
             extra.append(str(here.parents[1]/'common/remesa/shader_request.c'))
         command=compiler+base+flags+sources+extra+[str(here/'tests'/source),'-o',str(exe)]
         built=subprocess.run(command, capture_output=True, text=True, env=env)

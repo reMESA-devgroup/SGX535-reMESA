@@ -9,10 +9,104 @@
  * The Gallium adapter qualification compiles against pinned Mesa headers. */
 struct pipe_screen;
 struct remesa_device;
+/* Explicit CPU-recording LAB attachment opt-in before children exist.
+ * Enables Z24X8 host storage/clear; every draw with Z bound stays ENOTSUP. */
+int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *);
 struct pipe_context; struct pipe_resource; struct pipe_fence_handle;
 struct remesa_shader_program_report;
 struct remesa_shader_pipeline;
 struct remesa_shader_pipeline_launch;struct remesa_pds_request;
+/* Latest create_vs/create_fs result, retained independently of transient
+ * context_error resets by binds, transfers or draws. A successful semantic
+ * compile and a bounded body do not qualify a complete hardware launch.
+ * uniform_specialization denotes the existing CPU uniform-color path. */
+struct remesa_shader_compile_status {
+ uint64_t attempts;
+ int error,binary_error,launch_error;
+ size_t binary_bytes;
+ bool uniform_specialization;
+};
+/* Persistent draw rejection evidence, independent of transient state-setter
+ * errors. A frontend must not publish old pixels after a rejected draw just
+ * because a later bind succeeded. Saturating count; never reset implicitly.
+ * Read-only, output disjoint from context and owned objects. */
+struct remesa_draw_rejection_status { uint64_t failures; int error; };
+int remesa_context_draw_rejections(struct pipe_context *,struct remesa_draw_rejection_status *);
+/* PIPE_SHADER_VERTEX/FRAGMENT only; ENODATA before the first create attempt.
+ * Read-only, output unchanged on error; does not reset context_error. Output
+ * must not overlap the context, screen or any context-owned shader handle. */
+int remesa_context_shader_compile_status(struct pipe_context *,unsigned stage,
+ struct remesa_shader_compile_status *);
+struct remesa_pds_parameter_source_request;
+/* Resolve the complete bound gears VS constants into the existing typed
+ * parameter source image. User bytes are snapshotted at bind; resource bytes
+ * are synchronized and read at this call. No CPU vertex/light arithmetic,
+ * allocation, upload, PDS launch or GPU submission follows. Requires the
+ * exact37/40 or41/44 effective/transfer contract of the bound profile.
+ * Outputs are disjoint from owned context objects and unchanged on error. */
+int remesa_context_vertex_parameter_source(struct pipe_context *,
+ const struct remesa_pds_parameter_source_request *,void *,size_t,size_t *);
+struct pipe_draw_info; struct pipe_draw_start_count_bias;
+struct remesa_gears_geometry;
+/* Own a packed pre-VS triangle stream for the currently bound complete gears
+ * shader and its exact POSITION[/NORMAL] elements. Synchronizes/maps resources
+ * only for the call, deduplicating aliases; no reference ownership is adopted
+ * from draw-info. No CPU transform/lighting, upload or submission follows.
+ * Requires empty output, unchanged on rejection; source buffers may change or
+ * be released after success without changing the returned geometry. */
+int remesa_context_gears_geometry_snapshot(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ struct remesa_gears_geometry **);
+struct remesa_shader_host_pipeline_request;
+struct remesa_shader_host_pipeline;
+/* Snapshot the currently bound owned semantic pair into the original host
+ * compiler/linker. Explicit numeric mapping and original DATA recipes are
+ * supplied by the caller; no default mapping, upload or execution follows.
+ * Uniform-color specialization requires a synchronized draw and is rejected.
+ * Requires an empty output reference disjoint from the context, screen and
+ * all owned shader handles; no context state or bindings change. */
+int remesa_context_prepare_host_shader_pipeline(struct pipe_context *,
+ const struct remesa_shader_host_pipeline_request *,struct remesa_shader_host_pipeline **);
+int remesa_context_revalidate_host_shader_pipeline(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *);
+struct remesa_pds_host_transfer_request;
+struct remesa_shader_execution_contract;
+/* Resolve explicit host task inputs and VS routes only after checking the
+ * current bound programs and fresh original layout/recipe metadata. Snapshot
+ * contains no context pointers and cannot qualify execution. No state change.
+ */
+int remesa_context_prepare_shader_contract(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *,
+ const struct remesa_pds_host_transfer_request *,struct remesa_shader_execution_contract *);
+int remesa_context_revalidate_shader_contract(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *,
+ const struct remesa_pds_host_transfer_request *,const struct remesa_shader_execution_contract *);
+struct remesa_pds_cpu_pixel_task_output;
+/* Explicit CPU pixel profile; derives only FS DATA and reuses the existing
+ * VS mapping/recipe/storage. request.data[1] is ignored. metadata6 is supplied
+ * explicitly, never inferred from a shader. No binding/error/default changes,
+ * physical DS selection, CODE emission, mapping, upload or submission. */
+int remesa_context_prepare_pixel_task_pipeline(struct pipe_context *,
+ const struct remesa_shader_host_pipeline_request *,uint32_t metadata6,
+ struct remesa_shader_host_pipeline **);
+struct remesa_pds_structure_request;
+/* Explicit CPU structural encoder for the currently bound VS/constant-FS.
+ * Owns DATA, computed A2/class64 CODE fragments and masks in existing storage.
+ * No default draw policy, GPU mapping, admission or submission is changed. */
+int remesa_context_prepare_pds_structure_pipeline(struct pipe_context *,
+ const struct remesa_shader_host_pipeline_request *,const struct remesa_pds_structure_request *,
+ struct remesa_shader_host_pipeline **);
+int remesa_context_revalidate_pds_structure_pipeline(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *,
+ const struct remesa_pds_structure_request *);
+int remesa_context_prepare_pixel_task_output(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *,
+ uint32_t metadata6,const struct remesa_pds_host_transfer_request *,
+ struct remesa_pds_cpu_pixel_task_output *);
+int remesa_context_revalidate_pixel_task_output(struct pipe_context *,
+ const struct remesa_shader_host_pipeline *,const struct remesa_shader_host_pipeline_request *,
+ uint32_t metadata6,const struct remesa_pds_host_transfer_request *,
+ const struct remesa_pds_cpu_pixel_task_output *);
 /* Snapshot the currently bound, context-owned VS/constant-FS semantic pair.
  * ENODATA for an unbound stage; uniform specialization remains unsupported.
  * No context mutation, mapping, code generation or hardware admission. */
@@ -31,9 +125,10 @@ struct remesa_pds_candidate_request;struct remesa_shader_pds_preview;
  * upload, command submission, capability change or context-state mutation. */
 int remesa_context_shader_pds_preview(struct pipe_context *,unsigned stage,
  void *shader,const struct remesa_pds_candidate_request *,struct remesa_shader_pds_preview *);
-/* Actual callback-created, context-owned shader handles only. No executable
- * program is claimed; the encode call currently fails ENOTSUP transactionally.
- * Available only in REMESA_WITH_NIR builds. Does not change context state. */
+/* Actual callback-created, context-owned shader handles only. Encoding supports
+ * the bounded packed constant FS body; a complete VS/PDS pipeline remains
+ * unavailable. Available only in REMESA_WITH_NIR builds; no context mutation,
+ * allocation/upload or submission. report separates body and launch errors. */
 int remesa_context_shader_program_report(struct pipe_context *,unsigned stage,
  void *shader,struct remesa_shader_program_report *);
 int remesa_context_shader_program_encode(struct pipe_context *,unsigned stage,
@@ -60,6 +155,20 @@ int remesa_context_revalidate_texture_descriptor(struct pipe_context *,
  const struct remesa_texture_descriptor *,const struct pipe_sampler_view *,
  const struct pipe_sampler_state *,uint64_t,remesa_texture_mapping_query,void *);
 struct pipe_screen *remesa_screen_create(struct remesa_device *device);
+/* Owned attachments for an eventual window frontend; not a GLX drawable or
+ * admission override. Zero-initialize, externally serialize, and retain the
+ * owning screen. The current render profile remains 32x32 BGRA8, no depth.
+ * Reconfiguration allocates fresh planes before releasing old references;
+ * existing contexts/readers keep their own resource references. Contents of
+ * replacement planes are undefined and must not be treated as preserved. */
+struct remesa_drawable_buffers {
+ struct pipe_resource *front,*back;
+ uint32_t width,height;
+ uint64_t generation,swaps; /* host identities/counters, not GPU receipts */
+};
+int remesa_drawable_buffers_replace(struct pipe_screen *,uint32_t,uint32_t,
+ bool double_buffer,bool depth,struct remesa_drawable_buffers *);
+void remesa_drawable_buffers_release(struct remesa_drawable_buffers *);
 /* Consumes device only on success. Release runs after the final context,
  * resource and fence disappear. Without release, backend ownership is borrowed
  * and its caller must keep it alive for all children. Release must return a
@@ -79,4 +188,8 @@ uint64_t remesa_context_cpu_clear_count(const struct pipe_context *);
 /* Completed CPU byte-copy callbacks, never SGX draw/blit submissions. */
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *);
 const char *remesa_screen_unavailable_reason(void);
+/* Explicit private canonical frame collection. Storage capability alone
+ * never admits a GPU draw; a complete runtime backend is mandatory. */
+int remesa_screen_enable_gears_runtime(struct pipe_screen *);
+int remesa_context_gears_bottom_left(struct pipe_context *,bool *);
 #endif

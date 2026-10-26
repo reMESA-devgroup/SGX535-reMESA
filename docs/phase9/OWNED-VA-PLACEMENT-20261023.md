@@ -1,0 +1,15 @@
+# Owned VA placement for the full-size scene
+
+IMPLEMENTED_OFFLINE. Target1280x800; no new hardware execution.
+
+The previous owner used a single root first-fit range. A root starting at0x20000000 could not prepare typed Z, because depth checked the root rather than its selected allocation range. Conversely, putting the whole root above0x40000000 moved generated programs outside the retained LAB PDS/USE domain. Growing color and Z also changed subsequent code placement. These are host allocation constraints, not recovered instruction semantics.
+
+Optional DEFAULT, PROGRAM, RASTER and SURFACE placement policies now reuse the existing reservation ledger. Each policy has a contained half-open range and power-of-two alignment. All-zero entries preserve the old policy. Overlapping policies remain safe because collisions are checked against every live allocation and external reserved range. Alignment is reapplied after every collision; the32-bit upper boundary cannot wrap into a lower aperture. Failed reservations/provider creates return the ordinary ledger/budget resources; uncertain provider effects keep existing quarantine semantics.
+
+Generated program/state/compact-scene allocations select PROGRAM. Typed depth and scene-region backing select SURFACE. An explicit generic allocation API allows native composition to select RASTER or SURFACE without supplying a GPU address or foreign handle. Color created by existing Gallium resource allocation continues to use DEFAULT. Applications do not gain any new execution capability.
+
+The focused test executes both the original full-size layout and a single-owner layout with PROGRAM[0x20000000,0x20080000), RASTER[0x30000000,0x40000000), SURFACE/DEFAULT[0x40000000,0x42000000). Color and Z are each4096000 bytes; region backing is30pages; generated scene uses one page. VS/state share the compatible bank4 plan and pixel uses bank3. Additional cases distinguish page-first-fit from32KiB program alignment, reserved/occupied ranges, cross-class collisions, out-of-space, failed-create rollback, active leases, invalid policies and top-of-address-space rounding. These addresses are test policy inputs, not hardware qualification.
+
+The first local test expectation incorrectly assumed that an ordinary page-aligned allocation would use program alignment. The observed allocator result0x20009000 is correct for DEFAULT; the assertion was corrected to check page-first-fit and its collision with the next program slot. No production behavior was changed to satisfy that expectation.
+
+Remaining physical blocker: compose all native held resources and control/TA/XHW state, including explicitly retained auxiliary programs, at the new dimensions. The old ten-role exact32 profile intentionally rejects resized resources. The held multipage readback helper still needs native observer/capture integration. Existing physical depth remains UNKNOWN; original glxgears additionally requires shader/geometry support, repeated submission and GLX presentation. This patch changes no admission or safety gates.

@@ -58,7 +58,8 @@ static uint32_t output_fixed(void)
 static uint32_t constant_fixed(void)
 {return literal_fixed()|(UINT32_C(1)<<23)|(UINT32_C(1)<<18)|UINT32_C(1);}
 static bool constant_supported(uint32_t argb)
-{return argb==UINT32_C(0xffff00ff)||argb==UINT32_C(0xff00ff00);}
+{return argb==UINT32_C(0xffff00ff)||argb==UINT32_C(0xff00ff00)||
+        argb==UINT32_C(0xffffff00);}
 int remesa_fragment_constant_decode(const void *input,size_t bytes,
  struct remesa_fragment_constant *out)
 {

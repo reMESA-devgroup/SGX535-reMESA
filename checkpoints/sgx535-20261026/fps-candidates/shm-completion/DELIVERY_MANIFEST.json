@@ -1,0 +1,157 @@
+{
+  "status": "SEALED_FAST_SHM_OPT_IN_OFFLINE_ONLY_PHYSICAL_FPS_UNPROVEN",
+  "files": {
+    "BUILD_RESULTS.json": {
+      "bytes": 26549,
+      "sha256": "b9f58fd941f2cf2680f4f4a777eb0b5dab4c14449370f79f80cdabebd3bb8317"
+    },
+    "BUILD_SHM.py": {
+      "bytes": 3136,
+      "sha256": "70d54111939a445d5e2886d7b9ee243be54038ee273c1e2c1adce8bceef77d9e"
+    },
+    "COMPOSITION_RESULTS.json": {
+      "bytes": 1267,
+      "sha256": "f4d01bf848226bdaa9534eef0a861a9bdc0dfc71aa5a37377c7fc6d197d6618b"
+    },
+    "PRIMARY_RESEARCH.md": {
+      "bytes": 1227,
+      "sha256": "7ffcb909a30460ef3bcecacde332adae42c1e9ff13e7c9f0f2d4a5d43cb909d0"
+    },
+    "README.md": {
+      "bytes": 3701,
+      "sha256": "1ee2391237e4c8b468f41f80a960b78523609d65e5ba7104d02d76111ed0a308"
+    },
+    "SEAL_DELIVERY.py": {
+      "bytes": 3832,
+      "sha256": "f8fa0a6b871f79644b5395aa4b9fc3ec02429b42172f18c9eb34d97b93f3cca4"
+    },
+    "SHM_COMPLETION_TEST_RESULTS.json": {
+      "bytes": 4524,
+      "sha256": "e436c6e7b77a6acc5b12bc6d69449281547f4e1623f0b8976fe7244ca646eda4"
+    },
+    "TEST_SHM_COMPLETION.py": {
+      "bytes": 1663,
+      "sha256": "fcfc3f8ae53d4bd34027f59dd8d5ce4f7a78ff96ec9e254ac61b6b48c19f0a1b"
+    },
+    "base-dynamic-section.txt": {
+      "bytes": 2091,
+      "sha256": "921103220ce9b4784e94ba72440c7eebff2275f1613a3b4713354b81250fab52"
+    },
+    "candidate-dynamic-section.txt": {
+      "bytes": 2163,
+      "sha256": "c22ed85cafd95324d3a1391b6ca753258312905245971f6684f3ea3f846e0620"
+    },
+    "frontend-compile.initial-missing-staging-header.log": {
+      "bytes": 336,
+      "sha256": "52235851c859fda4f632a05eb207cf1bbc41184af5d895102eedf8adbaf669af"
+    },
+    "frontend-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "frontend-link.initial-Xext-as-needed-order.log": {
+      "bytes": 608,
+      "sha256": "96a992645ebfbd67d60c6efb42e8383f0206ee2062b6e9fafa437cb23a69d2cd"
+    },
+    "frontend-link.log": {
+      "bytes": 241,
+      "sha256": "e024678857382ef389986adc06bc86f69a67e30c6127f6326c1d4a55231e0059"
+    },
+    "glx_lab_frontend.h": {
+      "bytes": 2061,
+      "sha256": "e38bff8e5920e4d94b98645836751d89c94ad40d2209357595b0d23d6d1baca4"
+    },
+    "glx_lab_frontend.o": {
+      "bytes": 9648,
+      "sha256": "019ef0dbb9c1658ceb6e56bc0b092bc734ee544df71e026dca4b7cd173feafde"
+    },
+    "glx_lab_frontend_timed.c": {
+      "bytes": 7638,
+      "sha256": "0713221710462d87a7115081036973218ec54d02f656146f994d7582937f1f74"
+    },
+    "glx_lab_frontend_timed.c.patch": {
+      "bytes": 2050,
+      "sha256": "47d1df4b73dc69b85bd7e4902462600543db7242a8f25c8aff42ef04d0265bb8"
+    },
+    "i386-test-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "i386-test-run.log": {
+      "bytes": 375,
+      "sha256": "804c5f8b34b96478ad54dd84ecac73df11978f7cd02c6847fc691c4bcce938ba"
+    },
+    "libGL-gears-runtime.so.1": {
+      "bytes": 20413292,
+      "sha256": "6dee99991c3433d15809da6f43ba1bac3b00598675f7595637f433c5f739767d"
+    },
+    "native-test-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "native-test-run.log": {
+      "bytes": 375,
+      "sha256": "804c5f8b34b96478ad54dd84ecac73df11978f7cd02c6847fc691c4bcce938ba"
+    },
+    "remesa_fast_shm-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "remesa_fast_shm.c": {
+      "bytes": 8331,
+      "sha256": "312e143be7f7307f52724f757e7173c1eeb0810a36f4257a8f3e5266862cf769"
+    },
+    "remesa_fast_shm.c.patch": {
+      "bytes": 6947,
+      "sha256": "ae47b02b19d84453781780dae8281a8c146dac31109a32068610246b22f69fe8"
+    },
+    "remesa_fast_shm.h": {
+      "bytes": 525,
+      "sha256": "1800d5848cada3b6541e1ac258ca93de2c7787878362fd733ce87e59cb767bb7"
+    },
+    "remesa_fast_shm.h.patch": {
+      "bytes": 645,
+      "sha256": "27a5c44ff9ddb20816a425a3516144054f7f19c6a775198e621f7f9435abed91"
+    },
+    "remesa_fast_shm.o": {
+      "bytes": 8308,
+      "sha256": "cb76a4acfff22424141bedac949ff6fe011d0a56fee3fbfc9a26cf4fde2f70fa"
+    },
+    "remesa_xcb_staging.h": {
+      "bytes": 723,
+      "sha256": "27d85c1619478827acb530d0f43581b61eb93b6d3ef327b3585f4b095cac94f0"
+    },
+    "test-shm-completion-i386": {
+      "bytes": 789192,
+      "sha256": "cb8911cc939f455cd61a636fbdf83ecce0e889c4214519736054825257fa1119"
+    },
+    "test-shm-completion-native": {
+      "bytes": 75176,
+      "sha256": "56dbdf852e02ef6fe05d2f309d828c8edf4f8835e39efaf6de04f234a1e605d5"
+    },
+    "test-shm-completion-ubsan": {
+      "bytes": 78696,
+      "sha256": "53b4724f1cb3aea72ec6b293095acc015abe2ee218d9d5c28cab4f1e73ac1ed2"
+    },
+    "test_shm_completion.c": {
+      "bytes": 15956,
+      "sha256": "0721d04795eaaeee80327a4ee6caedef47786009f18273eb91b39624bd591a60"
+    },
+    "ubsan-test-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "ubsan-test-run.log": {
+      "bytes": 375,
+      "sha256": "804c5f8b34b96478ad54dd84ecac73df11978f7cd02c6847fc691c4bcce938ba"
+    }
+  },
+  "libGL_sha256": "6dee99991c3433d15809da6f43ba1bac3b00598675f7595637f433c5f739767d",
+  "source_changes": {
+    "remesa_fast_shm.c": "312e143be7f7307f52724f757e7173c1eeb0810a36f4257a8f3e5266862cf769",
+    "remesa_fast_shm.h": "1800d5848cada3b6541e1ac258ca93de2c7787878362fd733ce87e59cb767bb7",
+    "glx_lab_frontend_timed.c": "0713221710462d87a7115081036973218ec54d02f656146f994d7582937f1f74"
+  },
+  "Mini_loader_check_required": "libXext.so.6",
+  "physical_gain_demonstrated": false
+}

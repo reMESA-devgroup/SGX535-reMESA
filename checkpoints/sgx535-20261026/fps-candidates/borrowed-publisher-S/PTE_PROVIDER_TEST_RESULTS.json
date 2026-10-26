@@ -1,0 +1,72 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "remote_calls": 0,
+  "scope": "Actual provider function routing/quarantine with synthetic MMU shim; actual MMU batch separately tested",
+  "tests": [
+    {
+      "mode": "native",
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_pte_provider.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-pte-provider-native"
+      ],
+      "exit": 0,
+      "stdout": "PASS actual provider PTE routing: 24 cases, OPEN8 seal selects complete batch, legacy and cleared seal use old loop, every tested PFN/missing mapping rejects, prepare quarantine/busy preserved; CPU/GPU0\n"
+    },
+    {
+      "mode": "ubsan",
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_pte_provider.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-pte-provider-ubsan"
+      ],
+      "exit": 0,
+      "stdout": "PASS actual provider PTE routing: 24 cases, OPEN8 seal selects complete batch, legacy and cleared seal use old loop, every tested PFN/missing mapping rejects, prepare quarantine/busy preserved; CPU/GPU0\n"
+    },
+    {
+      "mode": "i386",
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_pte_provider.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-pte-provider-i386"
+      ],
+      "exit": 0,
+      "stdout": "PASS actual provider PTE routing: 24 cases, OPEN8 seal selects complete batch, legacy and cleared seal use old loop, every tested PFN/missing mapping rejects, prepare quarantine/busy preserved; CPU/GPU0\n"
+    }
+  ]
+}

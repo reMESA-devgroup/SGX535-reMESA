@@ -1,0 +1,7 @@
+{
+  "status": "PHYSICAL_SINGLE_CLEAR_OLD_BASELINE_COVERAGE_QUALIFICATION_FAILED",
+  "first_failed_pixel": 460224,
+  "reason": "Z coverage differs from old ALWAYS two-triangle baseline",
+  "production_promotion": false,
+  "raw_evidence_preserved": true
+}

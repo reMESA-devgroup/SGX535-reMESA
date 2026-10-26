@@ -167,7 +167,8 @@ static void vertex_candidate(void)
    CHECK(!remesa_usse_cpu_move_decode(bytes,8,&decoded));
    CHECK(decoded.source.class_id==sc&&decoded.source.number==boundary[s]&&
     decoded.destination.class_id==dc&&decoded.destination.number==boundary[d]&&
-    decoded.control11==flag&&decoded.control18==flag18);
+    decoded.control11==flag&&decoded.control18==flag18&&
+    !decoded.control12&&!decoded.control21&&!decoded.control23);
    /* Independent relative controls in the second little-endian CPU word. */
    CHECK(((bytes[5]>>3)&1)==flag&&((bytes[6]>>2)&1)==flag18);
    unsigned char roundtrip[8];size_t count=99;
@@ -177,6 +178,34 @@ static void vertex_candidate(void)
  struct remesa_usse_cpu_move move={.source={0,4},.destination={2,87}},decoded;
  CHECK(!remesa_usse_cpu_move_encode(&move,bytes,8,&written));
  memcpy(saved,bytes,sizeof(bytes));
+ /* Exercise the additional numeric CPU controls without embedding a retained
+  * program. Independent byte deltas must leave register fields untouched.
+  * They do not establish repetition, physical outputs or task termination. */
+ for(unsigned field=0;field<16;field++)for(unsigned flags=0;flags<4;flags++) {
+  move.control12=field;move.control21=flags&1;move.control23=flags>>1;
+  CHECK(!remesa_usse_cpu_move_encode(&move,bytes,8,&written));
+  unsigned char expected[8];memcpy(expected,saved,8);
+  expected[5]|=field<<4;expected[6]|=((flags&1)<<5)|((flags>>1)<<7);
+  CHECK(!memcmp(bytes,expected,8));
+  CHECK(!remesa_usse_cpu_move_decode(bytes,8,&decoded)&&
+   decoded.source.class_id==move.source.class_id&&decoded.source.number==move.source.number&&
+   decoded.destination.class_id==move.destination.class_id&&decoded.destination.number==move.destination.number&&
+   decoded.control12==field&&decoded.control21==(flags&1)&&decoded.control23==(flags>>1)&&
+   !decoded.control11&&!decoded.control18);
+  unsigned char again[8];size_t count=99;
+  CHECK(!remesa_usse_cpu_move_encode(&decoded,again,8,&count)&&count==8&&!memcmp(bytes,again,8));
+ }
+ move.control12=move.control21=move.control23=0;
+ memcpy(bytes,saved,sizeof(bytes));
+ for(unsigned field=0;field<3;field++) {
+  if(field==0)move.control12=16;
+  if(field==1)move.control21=2;
+  if(field==2)move.control23=2;
+  written=99;
+  CHECK(remesa_usse_cpu_move_encode(&move,bytes,8,&written)==ENOTSUP&&
+   written==99&&!memcmp(bytes,saved,sizeof(bytes)));
+  move.control12=move.control21=move.control23=0;
+ }
  move.source.number=128;written=99;
  CHECK(remesa_usse_cpu_move_encode(&move,bytes,8,&written)==ENOTSUP&&written==99&&!memcmp(bytes,saved,32));
  move.source.number=4;move.destination.class_id=3;
@@ -196,7 +225,7 @@ static void vertex_candidate(void)
  CHECK(remesa_usse_cpu_move_decode(bytes,8,(void *)bytes)==EINVAL);
  /* Selected CPU format rejects unsupported fields rather than masking them. */
  bytes[0]|=1;CHECK(remesa_usse_cpu_move_decode(bytes,8,&decoded)==ENOTSUP);
- memcpy(bytes,saved,8);bytes[6]|=128;
+ memcpy(bytes,saved,8);bytes[6]|=64;
  CHECK(remesa_usse_cpu_move_decode(bytes,8,&decoded)==ENOTSUP);
  struct remesa_shader_draw_programs pair=programs(0xff00ff00);
  struct remesa_usse_vertex_mapping mapping={0};
@@ -210,7 +239,8 @@ static void vertex_candidate(void)
   CHECK(!remesa_usse_cpu_move_decode(bytes+c*8,8,&decoded));
   CHECK(decoded.source.class_id==0&&decoded.source.number==16+c&&
    decoded.destination.class_id==2&&decoded.destination.number==80+c&&
-   !decoded.control11&&!decoded.control18);
+   !decoded.control11&&!decoded.control18&&!decoded.control12&&
+   !decoded.control21&&!decoded.control23);
  }
  struct remesa_usse_vertex_mapping bad=mapping;bad.output[3]=mapping.input[0];written=99;
  CHECK(remesa_usse_vertex_candidate(&pair.vertex.usse,&bad,bytes,32,&written)==EINVAL&&
@@ -244,6 +274,14 @@ static void vertex_candidate(void)
  CHECK(!remesa_shader_image_validate_request(image,&request));
  request.data[32]^=1;CHECK(remesa_shader_image_validate_request(image,&request)==EPROTO);
  request=before;request.data[0]^=1;CHECK(remesa_shader_image_validate_request(image,&request)==EPROTO);
+ /* A newly decodable CPU control does not widen the immutable NIR image or
+  * authorize a different VS. Rejection precedes any execution interface. */
+ const unsigned byte_offset[3]={5,6,6},bit_mask[3]={16,32,128};
+ for(unsigned i=0;i<3;i++) {
+  request=before;request.data[byte_offset[i]]|=bit_mask[i];
+  CHECK(!remesa_usse_cpu_move_decode(request.data,8,&decoded));
+  CHECK(remesa_shader_image_validate_request(image,&request)==EPROTO);
+ }
  request=before;request.resources[1].offset=0;
  CHECK(remesa_shader_image_validate_request(image,&request)==EPROTO);request=before;
  CHECK(request.resource_mask==3&&request.byte_count==40&&request.resources[0].offset==0&&

@@ -67,7 +67,8 @@ static int metadata(enum remesa_ir_stage stage,
  if(stage!=REMESA_IR_VERTEX&&stage!=REMESA_IR_FRAGMENT)return EINVAL;
  size_t unit;
  if(format==REMESA_SHADER_STORAGE_HOST_CPU_RECORDS)unit=REMESA_SHADER_STORAGE_CPU_RECORD_BYTES;
- else if(format==REMESA_SHADER_STORAGE_HOST_PDS_DATA)unit=4;
+ else if(format==REMESA_SHADER_STORAGE_HOST_PDS_DATA||
+         format==REMESA_SHADER_STORAGE_HOST_PDS_STRUCTURE)unit=4;
  else return ENOTSUP;
  if(!length||length%unit)return EINVAL;
  if(length>REMESA_SHADER_STORAGE_MAX_BYTES)return E2BIG;

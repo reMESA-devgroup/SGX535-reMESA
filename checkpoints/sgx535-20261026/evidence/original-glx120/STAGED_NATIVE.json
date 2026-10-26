@@ -1,0 +1,49 @@
+{
+  "manifest_sha256": "f51513d1b452d6d48a35ecba0cddf24959a1b9116ac0a2a8980745aa379aeb2a",
+  "whole_manifest_files_verified": 22,
+  "client_sha256": "159aa90de37785038490ff51bb5d7de86f37d81c129fc8090e13f6687713dc37",
+  "replaced_files": {
+    "assets/stream-profile.bin": {
+      "sha256": "e0fd2212a1fb97d5c75c3eaff021c0777b303d4f209a8b6bb77bfd1d6bc7b9c1",
+      "bytes": 5592
+    },
+    "assets/role0.bin": {
+      "sha256": "cd0ccee4a29015b7189ce9b65c13ba948f757803a640b6e7501069f38ec3461c",
+      "bytes": 131072
+    },
+    "assets/role1.bin": {
+      "sha256": "61a6d4bc83f820c8f344b8144d94bb08f6dd4688fb5c8dc10cbba87f6d3d5144",
+      "bytes": 32768
+    },
+    "assets/role2.bin": {
+      "sha256": "cdd783d09bd573a9ecef68d470e414b4796a70d587e2f20647f0ad415032bf0b",
+      "bytes": 131072
+    },
+    "assets/role3.bin": {
+      "sha256": "d0d2892baa65bd543d9b7f923cd5364390e989e3b9c1d04881311392f617c539",
+      "bytes": 4096
+    },
+    "assets/role4.bin": {
+      "sha256": "727e4543140fa02c395c5cd1194406bc795561db01f5ce25af2d11329d00fa65",
+      "bytes": 4096
+    }
+  },
+  "GPU_submissions": 0,
+  "boot": "21c326de-c4c8-4607-ab26-9331fb358254",
+  "profile": {
+    "status": "PRIVATE_GLX120_BUNDLE_STAGED_GPU0_NOT_GLX_APPROVAL",
+    "profile": "PRODUCTION_OPEN8_NOHASH_DEFINED_CHANNELS_Z24X8_NO_DIAGNOSTICS",
+    "maximum_frames": 120,
+    "readback": "FAST_NOHASH_OPEN8_PROOF111_MMAP_COLOR_FOR_X11",
+    "presentation": "PUTIMAGE",
+    "TRACE": false,
+    "DIAGNOSTIC": false,
+    "original_client_unchanged": true,
+    "qualification_scope": "Physical typed LESS and single-triangle clear correction; stable analytical interiors, not full GL shading/precision conformance; original raw and failed prior tests preserved"
+  },
+  "CPU_policy_prerequisite": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/LINUX_COLOR_PHYSICAL_RESULTS.json",
+  "freshboot_previously_GPU_unused": true,
+  "bundle": "/root/sgx535-gears-less-single-native-20261026T162000Z/bundle",
+  "root": "/root/sgx535-original-glx-less-single-20261026T162000Z",
+  "supervisor": "/root/sgx535-less-single-supervisor-20261026T162000Z"
+}

@@ -201,11 +201,35 @@ static void content_exhaustion_and_aliases(void)
  assert(!memcmp(&old,&p,sizeof(p)));
  ++cases;
 }
+static void invalidation(void)
+{
+ struct remesa_render_pass p, saved;
+ struct remesa_pass_ticket t;
+ struct remesa_pass_snapshot before, after;
+ assert(remesa_render_pass_invalidate(NULL)==EINVAL);
+ assert(!remesa_render_pass_init(&p,303));
+ assert(!remesa_render_pass_cpu_write(&p));
+ assert(!remesa_render_pass_snapshot(&p,&before));
+ assert(!remesa_render_pass_invalidate(&p));
+ assert(!remesa_render_pass_snapshot(&p,&after));
+ assert(after.content==REMESA_PASS_UNDEFINED && after.content_epoch==before.content_epoch+1);
+ assert(after.resource_cookie==before.resource_cookie);
+ assert(!remesa_render_pass_begin(&p,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&t));
+ saved=p;assert(remesa_render_pass_invalidate(&p)==EBUSY && !memcmp(&p,&saved,sizeof(p)));
+ assert(!remesa_render_pass_submitted(&p,&t));
+ saved=p;assert(remesa_render_pass_invalidate(&p)==EBUSY && !memcmp(&p,&saved,sizeof(p)));
+ assert(!remesa_render_pass_fail(&p,&t,EIO));
+ saved=p;assert(remesa_render_pass_invalidate(&p)==EIO && !memcmp(&p,&saved,sizeof(p)));
+ assert(!remesa_render_pass_init(&p,304));p.content_epoch=UINT64_MAX;saved=p;
+ assert(remesa_render_pass_invalidate(&p)==EOVERFLOW && !memcmp(&p,&saved,sizeof(p)));
+ ++cases;
+}
 int main(void)
 {
  rejection(); cancellation(); proof_and_identity(); quarantine();
  sequence(2); sequence(10); sequence(100);
  content_identity(); content_exhaustion_and_aliases();
+ invalidation();
  printf("PASS %u render-pass cases; simulated completion, no SGX\n",cases);
  return 0;
 }

@@ -7,29 +7,39 @@
 #include "remesa_usse.h"
 #include "remesa_pds.h"
 #include "remesa_pds_candidate.h"
+#include "remesa_pds_structure.h"
 #include "remesa_program_registers.h"
 #include "remesa_shader_storage.h"
+#include "remesa_usse_fragment_color.h"
 
 /* Host policy identifiers, not hardware version/register fields. */
 #define REMESA_SHADER_PROGRAM_SCHEMA 1u
 enum remesa_shader_program_status {
- REMESA_PROGRAM_SEMANTIC_ONLY = 1
+ REMESA_PROGRAM_SEMANTIC_ONLY = 1,
+ /* Strict white-diffuse VS or COL0-input FS CPU path; scalar planner absent. */
+ REMESA_PROGRAM_COMPILE_OFFLINE = 2
 };
 struct remesa_shader_program {
  uint32_t schema;
  enum remesa_shader_program_status status;
  struct remesa_shader_ir semantic;
- struct remesa_usse_program usse;
+ struct remesa_usse_program usse; /* canonical zero for COMPILE_OFFLINE */
 };
 struct remesa_shader_program_report {
  enum remesa_ir_stage stage;
  enum remesa_shader_program_status status;
- unsigned virtual_instructions;
+ unsigned virtual_instructions; /* semantic IR count for COMPILE_OFFLINE */
  int binary_error;
+ size_t binary_bytes; /* supported stage body only; zero when unavailable */
+ int launch_error; /* full pipeline/dispatch qualification is separate */
  /* Public program-base field facts are reported separately from executable
   * instruction evidence. Their presence must never admit a GPU shader. */
  struct remesa_program_register_evidence register_evidence;
 };
+/* Metadata for the exact offline COL0 FS. R10 is the original CPU PDS
+ * descriptor ID; this query never prepares a PDS launch or transport. */
+int remesa_shader_program_fragment_color_extent(const struct remesa_shader_program *,
+ struct remesa_usse_fragment_color_extent *);
 struct remesa_shader_pds_preview {
  enum remesa_ir_stage stage;
  uint64_t semantic_identity;
@@ -87,6 +97,12 @@ struct remesa_shader_image_view {
  const struct remesa_shader_draw_programs *programs; /* borrowed, immutable */
  struct remesa_shader_storage_view fragment;
  struct remesa_shader_storage_view vertex; /* zero when no numeric mapping supplied */
+ /* Optional generated primary FS DATA+CODE and original evidence mask.
+  * Nonzero fragment_pds_error rejects its staging; ENODATA means unrequested.
+  * Mask0 DATA remains unknown despite a recorded symbolic entry relocation.
+  * Neither a complete CODE mask nor CPU staging qualifies GPU execution. */
+ struct remesa_shader_storage_view fragment_pds,fragment_pds_mask;
+ int fragment_pds_error;
  size_t vertex_byte_length; /* CPU candidate length, not executable storage */
  int execution_error;
  enum remesa_shader_candidate_form fragment_form; /* CPU grammar only */
@@ -100,6 +116,9 @@ int remesa_shader_image_prepare(const struct remesa_shader_draw_programs *,
  * bank mapping or termination is inferred. Execution still returns ENOTSUP. */
 int remesa_shader_image_prepare_vertex_candidate(const struct remesa_shader_draw_programs *,
  const struct remesa_usse_vertex_mapping *,struct remesa_shader_image **);
+/* Independent immutable owner; typed metadata is copied and existing payload
+ * storage references are retained. Empty output, transactional failure. */
+int remesa_shader_image_clone(const struct remesa_shader_image *,struct remesa_shader_image **);
 int remesa_shader_image_validate(const struct remesa_shader_image *);
 int remesa_shader_image_inspect(const struct remesa_shader_image *,
  struct remesa_shader_image_view *);
@@ -110,6 +129,10 @@ struct remesa_shader_request;
  * stages. Request owner/generation still need endpoint authentication. */
 int remesa_shader_image_validate_request(const struct remesa_shader_image *,
  const struct remesa_shader_request *);
+/* One canonical CPU-only STAGE serializer shared by native/persistent adapters.
+ * Owner/generation are supplied by the authenticated endpoint, not GPU VA. */
+int remesa_shader_image_build_request(const struct remesa_shader_image *,
+ uint64_t owner,uint64_t generation,struct remesa_shader_request *);
 /* Preview public-kernel USE window arithmetic for the exact owned candidate
  * candidate. request.program_bytes must match its immutable encoded byte length;
  * the entry must be losslessly representable by the observed software fixups
@@ -139,6 +162,132 @@ struct remesa_shader_pds_links {
  struct remesa_shader_pipeline_launch launch;
  struct remesa_pds_use_link use[2];
 };
+/* Original CPU compiler/linker input, in VS/FS order. The numeric VS register
+ * mapping is explicit, never selected as a hardware default. PDS blocks use
+ * the existing checked DATA/CODE suballocation policy; USE bindings must name
+ * the exact independently generated stage lengths. Recipes are original host
+ * DATA cells, not copied task words or executable instructions. All symbolic
+ * bindings belong to one owner/operation/generation; no mapping is acquired.
+ */
+struct remesa_shader_host_pipeline_request {
+ struct remesa_usse_vertex_mapping vertex_mapping;
+ struct remesa_pds_block_request pds[2];
+ struct remesa_pds_binding use[2];
+ uint32_t banks[2];
+ uint64_t data_byte_offsets[2];
+ struct remesa_pds_host_data_recipe data[2];
+};
+struct remesa_shader_host_pipeline;
+struct remesa_shader_host_pipeline_view {
+ const struct remesa_shader_image *image_owner; /* borrowed immutable staging image */
+ struct remesa_shader_image_view image;
+ const struct remesa_shader_pds_links *links; /* borrowed immutable snapshot */
+ struct remesa_pds_host_data_view data[2];
+ /* Optional fragment CPU structural image. DATA is data[1] above; these
+  * immutable stores contain CODE slots and per-byte known-bit masks.
+  * Zero-mask bytes include initial/final CODE and unresolved DATA cells.
+  * structure_error=0 means original CPU-class encoding only, never launch. */
+ struct remesa_shader_storage_view structure_code,structure_code_mask,structure_data_mask;
+ const struct remesa_pds_structure *structure; /* borrowed canonical CPU grammar */
+ int structure_error;
+ int pds_code_error,execution_error;
+};
+/* One transactional host build of the explicit VS candidate, constant FS,
+ * DATA/CODE layout, USE links and relocated original DATA. Uses shader_image
+ * and shader_storage ownership; no CODE bytes, MMIO, GPU upload or execution.
+ * Copies all source state, including recipes, before publishing an empty out
+ * reference. Every failure leaves out unchanged and releases temporary state.
+ * Per-stage DATA is bounded by REMESA_SHADER_STORAGE_MAX_BYTES (host policy).
+ */
+int remesa_shader_host_pipeline_create(const struct remesa_shader_draw_programs *,
+ const struct remesa_shader_host_pipeline_request *,struct remesa_shader_host_pipeline **);
+int remesa_shader_host_pipeline_validate(const struct remesa_shader_host_pipeline *);
+int remesa_shader_host_pipeline_inspect(const struct remesa_shader_host_pipeline *,
+ struct remesa_shader_host_pipeline_view *);
+/* Rebuild and compare exact semantic/layout/recipe state to current inputs.
+ * Hashes alone never authenticate mapping freshness. Does not alter storage.
+ */
+int remesa_shader_host_pipeline_revalidate(const struct remesa_shader_host_pipeline *,
+ const struct remesa_shader_draw_programs *,const struct remesa_shader_host_pipeline_request *);
+/* Explicit restricted CPU pixel-task profile. The FS recipe is generated from
+ * current USE relocation + caller metadata6; request.data[1] is ignored by
+ * these two APIs. VS recipe/mapping/storage are reused without alteration.
+ * Require a packed eight-byte original FS candidate, 48-byte FS DATA and
+ * entry relocation at DATA+0. These are software profile limits, not proof
+ * of a hardware launch or task resource requirement. metadata6 is never
+ * inferred from color/body size. Zero padding is an original host policy.
+ * No CODE is emitted, and no default draw/backend policy is changed. */
+int remesa_shader_host_pipeline_create_pixel_task(const struct remesa_shader_draw_programs *,
+ const struct remesa_shader_host_pipeline_request *,uint32_t metadata6,
+ struct remesa_shader_host_pipeline **);
+int remesa_shader_host_pipeline_revalidate_pixel_task(const struct remesa_shader_host_pipeline *,
+ const struct remesa_shader_draw_programs *,const struct remesa_shader_host_pipeline_request *,
+ uint32_t metadata6);
+/* Explicit offline psb CPU descriptor grammar. Reuses immutable stage storage,
+ * USE lower19 fixup, layout/owner validation and semantic VS/FS snapshots.
+ * FS DATA recipe is generated from structure; request.data[1] is ignored.
+ * Require an eight-byte constant FS body, exact DATA/CODE extents, no extra
+ * padding between them and entry offset0. Texture addresses stay symbolic.
+ * A2/class64 CODE is calculated; initial/final slots remain masked holes.
+ * Does not implement physical task launch, infer feature R from NIR, or
+ * change remesa_pds_encode()/execution admission. Outputs unchanged on error. */
+int remesa_shader_host_pipeline_create_pds_structure(const struct remesa_shader_draw_programs *,
+ const struct remesa_shader_host_pipeline_request *,const struct remesa_pds_structure_request *,
+ struct remesa_shader_host_pipeline **);
+int remesa_shader_host_pipeline_revalidate_pds_structure(const struct remesa_shader_host_pipeline *,
+ const struct remesa_shader_draw_programs *,const struct remesa_shader_host_pipeline_request *,
+ const struct remesa_pds_structure_request *);
+void remesa_shader_host_pipeline_destroy(struct remesa_shader_host_pipeline *);
+/* Original host execution requirements, not hardware task fields. Logical
+ * DATA slots are supplied explicitly; no DS register/bank default is chosen.
+ * The canonical VS routes also drive the existing numeric candidate emitter.
+ * Every listed hardware blocker stays set regardless of caller-supplied data.
+ */
+#define REMESA_SHADER_EXECUTION_CONTRACT_SCHEMA 1u
+enum remesa_shader_execution_blocker {
+ REMESA_EXECUTION_DATA_TO_DS=1u<<0,
+ REMESA_EXECUTION_TASK_CONTROL=1u<<1,
+ REMESA_EXECUTION_PDS_INSTRUCTIONS=1u<<2,
+ REMESA_EXECUTION_VS_INPUT_BANK=1u<<3,
+ REMESA_EXECUTION_VS_EXPORT=1u<<4,
+ REMESA_EXECUTION_USSE_TERMINATION=1u<<5,
+ REMESA_EXECUTION_DEVICE_COMPLETION=1u<<6
+};
+struct remesa_shader_execution_contract {
+ uint32_t schema,blockers;
+ uint64_t operation,generation,owner_cookie;
+ uint64_t fragment_identity;
+ uint32_t fragment_bytes,fragment_form;
+ struct remesa_pds_host_task_plan task[2];
+ struct remesa_usse_vertex_export_plan vertex;
+ int pds_instruction_error,fragment_termination_error,completion_error,execution_error;
+};
+/* Resolve actual immutable DATA, USE entries, explicit logical routing and VS
+ * export dependencies into one self-contained snapshot. Success means CPU
+ * planning only. Does not mutate DATA/CODE, callbacks, Gallium bindings, bank
+ * leases or device state. No pointer into the source requests is retained.
+ * All outputs unchanged on errors, with full-owner/descriptor alias checks.
+ */
+int remesa_shader_host_pipeline_prepare_contract(const struct remesa_shader_host_pipeline *,
+ const struct remesa_pds_host_transfer_request requests[2],struct remesa_shader_execution_contract *);
+int remesa_shader_host_pipeline_validate_contract(const struct remesa_shader_host_pipeline *,
+ const struct remesa_pds_host_transfer_request requests[2],const struct remesa_shader_execution_contract *);
+/* Resolve/consume the three CPU profile values from the actual immutable DATA
+ * via the validated complete VS/FS transfer graph. This checks the exact
+ * profile, fresh retained bindings, slot addresses and the packed FS body.
+ * Three is a CPU source count only. Physical DS, hardware task arity, dispatch
+ * and termination remain unsupported; no caller status can qualify them. */
+int remesa_shader_host_pipeline_prepare_pixel_task_output(const struct remesa_shader_host_pipeline *,
+ const struct remesa_pds_host_transfer_request requests[2],struct remesa_pds_cpu_pixel_task_output *);
+int remesa_shader_host_pipeline_validate_pixel_task_output(const struct remesa_shader_host_pipeline *,
+ const struct remesa_pds_host_transfer_request requests[2],const struct remesa_pds_cpu_pixel_task_output *);
+/* Final emission boundary: validates the complete current contract, rejects
+ * caller-cleared blocker states, then returns ENOTSUP without writing bytes.
+ * No control flag or prepared host plan can qualify executable PDS CODE.
+ */
+int remesa_shader_host_pipeline_encode_contract(const struct remesa_shader_host_pipeline *,
+ const struct remesa_pds_host_transfer_request requests[2],const struct remesa_shader_execution_contract *,
+ void *,size_t,size_t *written);
 int remesa_shader_pipeline_prepare_launch(const struct remesa_shader_program *vertex,
  const struct remesa_shader_program *fragment,const struct remesa_pds_request *vertex_request,
  const struct remesa_pds_request *fragment_request,struct remesa_shader_pipeline_launch *);
@@ -163,8 +312,9 @@ int remesa_shader_program_prepare_color(uint32_t argb,struct remesa_shader_progr
 int remesa_shader_program_validate(const struct remesa_shader_program *);
 int remesa_shader_program_report(const struct remesa_shader_program *,
                                 struct remesa_shader_program_report *);
-/* No partial output and no fallback to the historical program. An admitted
- * instruction format is required before bytes can ever be returned. */
+/* Encode only the bounded stage body supported by remesa_usse_encode, not a
+ * complete launch. No partial output or historical-program fallback. Output
+ * and written must be disjoint from the complete immutable program object. */
 int remesa_shader_program_encode(const struct remesa_shader_program *,
                                 void *,size_t,size_t *);
 /* Prepare only symbolic resource requirements. This does not pin resources,
@@ -177,4 +327,59 @@ int remesa_shader_program_encode_launch(const struct remesa_shader_program *,
  void *,size_t,size_t *);
 /* Explicit host ownership release; idempotent. Not GEM retirement. */
 void remesa_shader_program_finish(struct remesa_shader_program *);
+/* Explicit selected compiler path; every existing scalar/pair ABI is unchanged.
+ * These resource fields describe exact typed CPU producers and host storage,
+ * not general shader limits or executable device admission. */
+struct remesa_shader_selected_resources {
+ uint32_t profile,logical_use_bytes,reserved_use_bytes,host_alignment;
+ uint64_t semantic_identity;
+ struct remesa_shader_vertex_layout vertex;
+ uint32_t fragment_input_slot,fragment_components,r_id,r_components,r_mode,r_flag;
+ uint32_t constant_argb;
+};
+int remesa_shader_program_selected_resources(const struct remesa_shader_program *,
+ struct remesa_shader_selected_resources *);
+int remesa_shader_program_prepare_selected_pds(const struct remesa_shader_program *,
+ const struct remesa_pds_selected_request *,struct remesa_pds_selected_plan *);
+/* Missing default three-attribute transport and admitted draw packet are
+ * explicit blockers after successful selected USE/PDS byte production. */
+enum remesa_shader_selected_blocker {
+ REMESA_SELECTED_VERTEX_TRANSPORT=1u<<0,
+ REMESA_SELECTED_DRAW_PACKET=1u<<1
+};
+struct remesa_shader_selected_pipeline;
+struct remesa_shader_selected_pipeline_view {
+ const struct remesa_shader_program *programs; /* borrowed arrays[2], VS/FS */
+ const struct remesa_shader_selected_resources *resources;
+ const struct remesa_pds_selected_plan *plans;
+ struct remesa_shader_storage_view use[2],pds[2],known_mask[2];
+ uint32_t blockers;
+ int vertex_transport_error,draw_packet_error,execution_error;
+};
+/* Actual encoded USE and resolved primary PDS DATA+CODE/masks are copied into
+ * six existing immutable host stores. The owner copies semantic programs and
+ * all pointer-free selected plan inputs. VBO bytes/mappings remain caller
+ * owned and unauthenticated; source bounds do not qualify their transport.
+ * The pair is exact3xvec4 white Lambert VS plus exact COL0 FS. GREEN
+ * driver baseline remains a standalone PDS profile; its pairing with WHITE64
+ * is unqualified and rejected. Reserved USE tails are metadata only: stores
+ * contain committed64/8 bytes, never uninitialized allocation padding.
+ * Output must be empty; every failure is transactional. */
+int remesa_shader_selected_pipeline_prepare(const struct remesa_shader_program programs[2],
+ const struct remesa_pds_selected_request requests[2],struct remesa_shader_selected_pipeline **);
+int remesa_shader_selected_pipeline_validate(const struct remesa_shader_selected_pipeline *);
+int remesa_shader_selected_pipeline_revalidate(const struct remesa_shader_selected_pipeline *,
+ const struct remesa_shader_program programs[2],const struct remesa_pds_selected_request current[2]);
+int remesa_shader_selected_pipeline_inspect(const struct remesa_shader_selected_pipeline *,
+ struct remesa_shader_selected_pipeline_view *);
+int remesa_shader_selected_pipeline_clone(const struct remesa_shader_selected_pipeline *,
+ struct remesa_shader_selected_pipeline **);
+/* Serializes all four actual USE/PDS blobs via the existing CPU-candidate
+ * request builder. No execution flag, bank lease, mapping, upload or submit. */
+int remesa_shader_selected_pipeline_build_request(const struct remesa_shader_selected_pipeline *,
+ uint64_t owner,uint64_t generation,struct remesa_shader_request *);
+int remesa_shader_selected_pipeline_validate_request(const struct remesa_shader_selected_pipeline *,
+ const struct remesa_shader_request *);
+int remesa_shader_selected_pipeline_validate_execution(const struct remesa_shader_selected_pipeline *);
+void remesa_shader_selected_pipeline_destroy(struct remesa_shader_selected_pipeline *);
 #endif

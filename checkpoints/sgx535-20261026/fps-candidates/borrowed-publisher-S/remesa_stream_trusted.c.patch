@@ -1,0 +1,97 @@
+--- /home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_trusted.c
++++ /home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_trusted.c
+@@ -40,6 +40,7 @@
+  u64 begin_ns,freeze_ns,check_ns,clear_ns,service_ns,issue_ns,publish_ns,hash_ns,source_ns;
+  u64 prepare_ns,snapshot_ns,aliases_ns,visible_gate_ns,role_clear_ns[6];
+  bool attached,started,completed,visible,acknowledged,inputs_authenticated;
++ bool borrowed_images; /* Only FAST provider-owned mappings; never vunmap. */
+  unsigned input_check_calls,input_hash_passes,input_byte_passes;
+ };
+ struct trusted_stream {
+@@ -168,6 +169,70 @@
+ release:remesa_gem_stream_release(s->memory);s->memory=NULL;return e;
+ }
+ static const struct remesa_job_executor executor;
++/* Publisher image view lifetime: provider holds and stream topology stay
++ * owned by GEM; this only lends six existing mappings to the fixed service.
++ * LAB retains independently allocated aliases and its qualified cleanup. */
++static int bind_publisher_images(struct trusted_stream *s,struct trusted_operation *o)
++{
++ unsigned i;
++ if(s->fast_nohash){
++  if(!s->claimed || s->quarantined || s->op!=o || o->borrowed_images ||
++     !o->owner.borrowed_backing || !o->owner.initialized ||
++     o->owner.user_images_flushed ||
++     o->owner.session.phase!=SGX535_PHASE_HOST_IMAGE_FINAL)return -EACCES;
++  /* Validate ALL roles first: a rejected loan publishes no partial pointers. */
++  for(i=0;i<=SGX535_BO_COLOR;i++){
++   struct sgx535_gma500_bo *b=&o->owner.objects[i];
++   const struct remesa_memory_view *v=&o->views[i];
++   if(b->cpu || o->owner.views[i].bytes || o->owner.views[i].length ||
++      !v->cpu || !v->pages || b->pages!=v->pages ||
++      b->page_count!=v->page_count || b->gem.size!=v->binding.bytes)
++    return -EACCES;
++  }
++  for(i=0;i<=SGX535_BO_COLOR;i++){
++   o->owner.objects[i].cpu=o->views[i].cpu;
++   o->owner.views[i].bytes=o->views[i].cpu;
++   o->owner.views[i].length=o->views[i].binding.bytes;
++  }
++  o->borrowed_images=true;return 0;
++ }
++ for(i=0;i<=SGX535_BO_COLOR;i++) {
++  o->owner.objects[i].cpu=vmap(o->views[i].pages,o->views[i].page_count,VM_MAP,PAGE_KERNEL);
++  if(!o->owner.objects[i].cpu)return -ENOMEM;
++  o->owner.views[i].bytes=o->owner.objects[i].cpu;o->owner.views[i].length=o->views[i].binding.bytes;
++ }
++ return 0;
++}
++int remesa_stream_trusted_consume_images(struct sgx535_gma500_owner *owner,bool *handled)
++{
++ struct trusted_stream *s=&stream;struct trusted_operation *o=s->op;unsigned i;
++ if(!handled)return -EINVAL;
++ *handled=false;
++ if(!o || &o->owner!=owner || !s->claimed)return -EACCES;
++ if(!s->fast_nohash)return 0;
++ *handled=true;
++ if(s->quarantined || !o->borrowed_images || !owner->borrowed_backing ||
++    !owner->initialized || owner->user_images_flushed || o->completed ||
++    o->visible || o->acknowledged ||
++    owner->session.phase!=SGX535_PHASE_HOST_IMAGE_FINAL)return -EACCES;
++ /* Called only after publication/PFN validation, held-provider cache transfer
++  * and dma_wmb in stream_owner_flush, under the existing GEM job mutex.
++  * Validate every loan before revoking any pointer. No extra PFN walk. */
++ for(i=0;i<=SGX535_BO_COLOR;i++){
++  struct sgx535_gma500_bo *b=&owner->objects[i];
++  const struct remesa_memory_view *v=&o->views[i];
++  if(!v->cpu || !v->pages || b->pages!=v->pages ||
++     b->page_count!=v->page_count || b->gem.size!=v->binding.bytes ||
++     b->cpu!=v->cpu || owner->views[i].bytes!=v->cpu ||
++     owner->views[i].length!=v->binding.bytes)return -EACCES;
++ }
++ for(i=0;i<=SGX535_BO_COLOR;i++){
++  owner->objects[i].cpu=NULL;
++  owner->views[i].bytes=NULL;owner->views[i].length=0;
++ }
++ o->borrowed_images=false;return 0;
++}
++/* End publisher image lifetime helpers. */
+ static int freeze(void *ctx,const struct remesa_stream *r)
+ {
+  struct trusted_stream *s=ctx;struct trusted_operation *o;struct remesa_memory_binding uses[11];
+@@ -205,13 +270,9 @@
+  o->clear_ns=diagnostic_clock(s)-mark;
+  e=remesa_borrowed_owner_init(&o->borrower,&o->owner,s->dev,o->ticket,o->views,11,
+   o->snapshot.mmu_end,&profile.commands,verify_borrower,s);if(e)return e;
+- /* Fixed publisher consumes private aliases, independently from job views. */
++ /* FAST lends held provider mappings; LAB keeps private aliases. */
+  mark=diagnostic_clock(s);
+- for(i=0;i<=SGX535_BO_COLOR;i++) {
+-  o->owner.objects[i].cpu=vmap(o->views[i].pages,o->views[i].page_count,VM_MAP,PAGE_KERNEL);
+-  if(!o->owner.objects[i].cpu)return -ENOMEM;
+-  o->owner.views[i].bytes=o->owner.objects[i].cpu;o->owner.views[i].length=o->views[i].binding.bytes;
+- }
++ e=bind_publisher_images(s,o);if(e)return e;
+  o->aliases_ns=diagnostic_clock(s)-mark;
+  e=remesa_stream_source_bind(s,&o->observation,&o->backend,o->ticket.operation,s->sequence);if(e)return e;
+  e=remesa_gem_stream_attach(s->memory,o->ticket,&executor,s);if(e)return e;

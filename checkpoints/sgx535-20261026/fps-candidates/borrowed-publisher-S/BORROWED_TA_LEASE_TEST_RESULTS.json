@@ -1,0 +1,71 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "scope": "Actual provider and real heap-backed fake GEM pages; synthetic mappings/vmap-budget failure, no hardware coherence proof",
+  "tests": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_borrowed_lease.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-borrowed-lease-native"
+      ],
+      "stdout": "PASS actual GEM READTA cached lease under exhausted vmap budget; readonly/fallback/generation/holds/quarantine; UNLEASE/postclose no borrowed vunmap; unpin/discard free once; CREATE flag reset; CPU metadata/vmap mock GPU0\n"
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_borrowed_lease.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-borrowed-lease-ubsan"
+      ],
+      "stdout": "PASS actual GEM READTA cached lease under exhausted vmap budget; readonly/fallback/generation/holds/quarantine; UNLEASE/postclose no borrowed vunmap; unpin/discard free once; CREATE flag reset; CPU metadata/vmap mock GPU0\n"
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_borrowed_lease.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-borrowed-lease-i386"
+      ],
+      "stdout": "PASS actual GEM READTA cached lease under exhausted vmap budget; readonly/fallback/generation/holds/quarantine; UNLEASE/postclose no borrowed vunmap; unpin/discard free once; CREATE flag reset; CPU metadata/vmap mock GPU0\n"
+    }
+  ]
+}

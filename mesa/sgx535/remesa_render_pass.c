@@ -41,6 +41,14 @@ int remesa_render_pass_cpu_write(struct remesa_render_pass *p)
  if (e) return e;
  ++p->content_epoch; p->content = REMESA_PASS_PRESENT; return 0;
 }
+int remesa_render_pass_invalidate(struct remesa_render_pass *p)
+{
+ int e = remesa_render_pass_admit_cpu_write(p);
+ if (e) return e;
+ /* Even unchanged backing has a new content identity: a prior PRESENT
+  * snapshot must not be reusable after an application declares it invalid. */
+ ++p->content_epoch; p->content = REMESA_PASS_UNDEFINED; return 0;
+}
 int remesa_render_pass_snapshot(const struct remesa_render_pass *p,
  struct remesa_pass_snapshot *out)
 {

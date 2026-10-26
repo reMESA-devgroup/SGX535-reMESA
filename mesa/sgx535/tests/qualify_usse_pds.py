@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Independent original semantic USSE/PDS qualification; no hardware encoding."""
+"""Original semantic USSE/PDS and bounded constant-FS encoding; no GPU use."""
 import argparse, hashlib, json, os, subprocess, shlex
 from pathlib import Path
 p=argparse.ArgumentParser()
 p.add_argument('--cache',type=Path,required=True)
 p.add_argument('--output',type=Path,required=True)
+p.add_argument('--test',choices=['test_pds_pixel_task.c','test_usse_pds.c','test_pds_contract.c','test_usse_export_contract.c'],default='test_usse_pds.c')
 a=p.parse_args()
 a.output.mkdir(parents=True,exist_ok=False)
 repo=Path(__file__).resolve().parents[3]
@@ -15,7 +16,7 @@ env.update(json.loads((m/'build-environment.json').read_text()))
 base=['-std=c11','-D_GNU_SOURCE','-ffunction-sections','-fdata-sections','-Wl,--gc-sections','-DHAVE_ENDIAN_H','-DHAVE_SECURE_GETENV','-DHAVE_PTHREAD','-DHAVE_STRUCT_TIMESPEC','-UNDEBUG','-Wall','-Wextra','-Werror']
 base += ['-I'+str(here)]
 for inc in [s/'include',s/'src',s/'src/compiler/nir',b/'src/compiler/nir',b/'src/compiler',b/'src']:base += ['-isystem',str(inc)]
-sources=[here/'remesa_usse.c',here/'remesa_pds.c',here/'remesa_shader_ir.c',here/'remesa_nir.c',here/'tests/test_usse_pds.c']
+sources=[here/'remesa_usse.c',here/'remesa_pds.c',here/'remesa_shader_ir.c',here/'remesa_nir.c',here/'remesa_fragment_body.c',here/'remesa_program_registers.c',here/'tests'/a.test]
 q=Path('/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386')
 results=[]
 for name,cc,flags,runner in [('native',['cc'],['-O2'],[]),('ubsan',['cc'],['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'],[]),('i386',[str(m/'wrappers/cc')],['-O2','-march=i486','-static'],[str(q)])]:
@@ -41,5 +42,5 @@ for i,source in enumerate(sources):
   dependency_inputs.add(str(path.resolve()))
 (a.output/'compiler-inputs.json').write_text(json.dumps({'scope':'Compiler-reported input paths, not syscall audit','commands':dependency_commands,'files':sorted(dependency_inputs)},indent=2)+'\n')
 paths=sources+[here/'remesa_usse.h',here/'remesa_pds.h',here/'remesa_shader_ir.h',here/'remesa_nir.h',Path(__file__).resolve(),m/'build-environment.json']
-(a.output/'result.json').write_text(json.dumps({'status':'PASS','classification':'OFFLINE QUALIFIED','scope':'Original HOST semantic schema, lowering, transport and PDS relocation metadata. ENOTSUP required for all hardware emission and decoding. Zero SGX instructions executed. Round trips do not prove hardware correctness.','processes':len(results),'tests':results,'sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in paths}},indent=2)+'\n')
+(a.output/'result.json').write_text(json.dumps({'status':'PASS','classification':'OFFLINE QUALIFIED','scope':'Original HOST semantic schema, lowering, transport and PDS relocation metadata. Bounded original magenta/green FS body encoding supported; unsupported USSE/PDS profiles still return ENOTSUP. Zero SGX instructions executed. Round trips do not prove hardware correctness.','processes':len(results),'tests':results,'sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in paths}},indent=2)+'\n')
 print(json.dumps(results,indent=2))

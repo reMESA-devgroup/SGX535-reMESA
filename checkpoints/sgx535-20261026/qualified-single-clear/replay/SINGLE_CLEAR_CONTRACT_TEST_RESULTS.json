@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "positive_strict_COLOR_Z_coverage_and_old_artifact_removal": true,
+  "negative_cases": [
+    "depth_without_COLOR",
+    "lost_existing_visible_pixel",
+    "new_bogus_background_geometry",
+    "background_nonblack",
+    "old_removed_depth_has_reference_geometry",
+    "visible_depth_farther",
+    "wrong_visible_gear",
+    "wrong_nearest_depth",
+    "no_nearer_depth_improvement",
+    "no_stable_reference"
+  ]
+}

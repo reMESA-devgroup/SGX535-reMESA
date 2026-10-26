@@ -1,0 +1,71 @@
+{
+  "scope": "Diagnostic only, does not approve failed qualification",
+  "frames": [
+    {
+      "frame": 1,
+      "closer": 26563,
+      "farther": 2,
+      "coverage_changed": 2,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    },
+    {
+      "frame": 2,
+      "closer": 24868,
+      "farther": 1,
+      "coverage_changed": 1,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    },
+    {
+      "frame": 3,
+      "closer": 26206,
+      "farther": 1,
+      "coverage_changed": 1,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    },
+    {
+      "frame": 4,
+      "closer": 26563,
+      "farther": 2,
+      "coverage_changed": 2,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    },
+    {
+      "frame": 5,
+      "closer": 24868,
+      "farther": 1,
+      "coverage_changed": 1,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    },
+    {
+      "frame": 6,
+      "closer": 26206,
+      "farther": 1,
+      "coverage_changed": 1,
+      "missing_COLOR_on_depth": 0,
+      "missing_COLOR_stable": 0,
+      "wrong_gear_stable": 0,
+      "depth_wrong_stable": 0,
+      "first_failures": []
+    }
+  ]
+}

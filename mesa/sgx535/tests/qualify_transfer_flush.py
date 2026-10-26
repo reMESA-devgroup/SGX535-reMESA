@@ -21,7 +21,7 @@ def main():
     parser.add_argument('--archive-only', action='store_true',
                         help='Test only the rebuilt archive; do not repeat source tests')
     parser.add_argument('--targets', help='Comma-separated source test names, without test_ or .c')
-    parser.add_argument('--archive-test', choices=('transfer_flush', 'mip_transfers', 'context_texture_metadata', 'clip_pipeline'),
+    parser.add_argument('--archive-test', choices=('resource_sync', 'resource_invalidate', 'framebuffer_contract', 'transfer_flush', 'mip_transfers', 'context_texture_metadata', 'clip_pipeline'),
                         default='transfer_flush', help='Callback test linked to the actual Mesa archive')
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[3]
@@ -48,7 +48,7 @@ def main():
                'remesa_sampler_state.c', 'remesa_texture_binding.c',
                'remesa_texture_descriptor.c', 'remesa_screen.c', 'remesa_draw.c',
                'remesa_present.c')] + [repo/'common/remesa/draw_packet.c']
-    tests = ['test_transfer_flush.c', 'test_mip_transfers.c', 'test_transfer_resources.c',
+    tests = ['test_resource_sync.c', 'test_resource_invalidate.c', 'test_transfer_flush.c', 'test_mip_transfers.c', 'test_transfer_resources.c',
              'test_framebuffer_contract.c', 'test_driver.c']
     if args.targets:
         selected = args.targets.split(',')
@@ -58,6 +58,7 @@ def main():
         tests = [names[n] for n in selected]
     inputs = sources + list(here.glob('*.h')) + [here/'tests'/n for n in tests]
     inputs += [here/'tests/test_transfer_resources.c']
+    inputs += [here/'tests/test_resource_sync.c']
     inputs += [Path(__file__).resolve()]
     hashes = {str(p): digest(p) for p in inputs}
     results = []
@@ -95,8 +96,10 @@ def main():
             if not path.is_file() or path.suffix not in ('.c', '.h'):
                 continue
             relative = path.relative_to(staged)
-            if str(relative) == 'draw_packet.c':
-                original = repo/'common/remesa/draw_packet.c'
+            if str(relative) in ('draw_packet.c', 'shader_request.c', 'retained_evidence.c'):
+                original = repo/'common/remesa'/relative.name
+            elif str(relative) in ('registry.c', 'resource.c', 'provider.c'):
+                original = repo/'kernel/remesa'/relative.name
             elif relative.parts[:2] == ('include', 'remesa'):
                 original = repo/'include/remesa'/relative.name
             elif str(relative) == 'include/drm/drm.h':

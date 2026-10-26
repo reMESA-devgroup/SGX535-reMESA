@@ -1,0 +1,13 @@
+{
+  "status": "PRINCIPAL_SOURCE_AND_SEAL_REVIEW_OFFLINE_ONLY",
+  "GPU_submissions": 0,
+  "physical_FPS_gain": "UNPROVEN",
+  "sealed_files_verified": 25,
+  "source_review": [
+    "FAST queues both mandatory geometry and attribute queries before draining both responses and errors",
+    "FreeGC queued after image batch and checked first; every image cookie still checked in wire order",
+    "LAB serial path, memory safety and held framebuffer lifetime retained"
+  ],
+  "required_physical_before_deployment": "Comparison on same corrected physical rendering profile at1280x800, sustained original GLXGears FPS, errors/retirement/closure and rollback; revert if gain not demonstrated",
+  "new_bootstrap_required": "No change; use qualified R fefe373..."
+}

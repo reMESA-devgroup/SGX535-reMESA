@@ -1,0 +1,42 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "tests": [
+    {
+      "script": "TEST_NOHASH_TRUSTED.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_NOHASH_OUTPUT.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_CACHE_REGRESSIONS.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_CACHE_DOMAINS.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_BORROWED_TA_LEASE.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_PTE_BATCH.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_PTE_PROVIDER.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_COMBINED_CACHE_PTE.py",
+      "exit": 0
+    },
+    {
+      "script": "TEST_FROZEN_INPUT_CACHE.py",
+      "exit": 0
+    }
+  ]
+}

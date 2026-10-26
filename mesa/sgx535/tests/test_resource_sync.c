@@ -16,6 +16,7 @@ struct job { struct bo *bo; bool live,safe; unsigned state; struct remesa_draw_p
 struct fixture {
  struct job jobs[16]; unsigned count,allocated,freed,maps,waits;
  uint64_t timeout; bool visible; unsigned owner_releases; int fail; bool missing_fence;
+ int map_error;bool null_mapping;unsigned unmaps;
 };
 static void drop(void *data,void *obj)
 { struct fixture *f=data;struct bo *b=obj;assert(b->refs);if(!--b->refs) {free(b->bytes);free(b);++f->freed;} }
@@ -24,8 +25,8 @@ static void release_job(struct fixture *f,struct job *j)
 static int allocate(void *data,size_t n,void **out)
 { struct fixture *f=data;struct bo *b=calloc(1,sizeof(*b));assert(b);b->bytes=calloc(1,n);assert(b->bytes);b->refs=1;*out=b;++f->allocated;return 0; }
 static int map_bo(void *data,void *obj,bool write,void **out)
-{ struct fixture *f=data;(void)write;++f->maps;*out=((struct bo *)obj)->bytes;return 0; }
-static void unmap_bo(void *data,void *obj,bool write) { (void)data;(void)obj;(void)write; }
+{ struct fixture *f=data;(void)write;++f->maps;*out=f->null_mapping?NULL:((struct bo *)obj)->bytes;return f->map_error; }
+static void unmap_bo(void *data,void *obj,bool write) { ++((struct fixture *)data)->unmaps;(void)obj;(void)write; }
 static int submit(void *data,void *obj,const struct remesa_draw_packet *p,void **out)
 {
  struct fixture *f=data;assert(f->count<16);struct job *j=&f->jobs[f->count++];
@@ -75,7 +76,21 @@ int main(void)
  const float vertices[3][4]={{8,8,.5f,1},{24,8,.5f,1},{8,24,.5f,1}};const uint16_t ix[3]={0,1,2};
  struct pipe_box box={.width=48,.height=1,.depth=1};struct pipe_transfer *tr=NULL;void *p=a->buffer_map(a,v,0,PIPE_MAP_WRITE,&box,&tr);assert(p);memcpy(p,vertices,48);a->buffer_unmap(a,tr);
  box.width=6;p=a->buffer_map(a,i,0,PIPE_MAP_WRITE,&box,&tr);assert(p);memcpy(p,ix,6);a->buffer_unmap(a,tr);
- bind(a,v,t);bind(b,v,t);draw(a,i);assert(!remesa_context_error(a)&&f.count==1);a->destroy(a);
+ bind(a,v,t);bind(b,v,t);draw(a,i);assert(!remesa_context_error(a)&&f.count==1);
+ /* Rejecting a later draw before dispatch must not hide the fence for work
+  * already submitted by this context. A returned fence still polls pending;
+  * the error is not manufactured completion or permission to reuse backing. */
+ struct pipe_fence_handle *before_error=NULL,*after_error=NULL;
+ a->flush(a,&before_error,0);assert(before_error);
+ struct pipe_draw_info rejected={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};
+ struct pipe_draw_start_count_bias rejected_draw={.count=3};
+ struct pipe_draw_indirect_info indirect={0};
+ a->draw_vbo(a,&rejected,0,&indirect,&rejected_draw,1);
+ assert(remesa_context_error(a)==ENOTSUP&&f.count==1);
+ a->flush(a,&after_error,0);assert(after_error==before_error);
+ assert(!s->fence_finish(s,a,after_error,0)&&f.visible);
+ s->fence_reference(s,&before_error,NULL);s->fence_reference(s,&after_error,NULL);
+ a->destroy(a);
  /* Another surface has its own writer; publishing it cannot unblock t. */
  struct pipe_resource *u=target(s);assert(u);bind(b,v,u);draw(b,i);assert(f.count==2);
  published(&f,&f.jobs[1]);box.width=box.height=32;
@@ -100,6 +115,18 @@ int main(void)
   for(unsigned x=0;x<128;x++) assert(snapshot[y*144+x]==0);
   for(unsigned x=128;x<144;x++) assert(snapshot[y*144+x]==0xa5);
  }
+ /* A backend mapping refusal is not a rendering failure. Return its precise
+  * error without copying expected bytes, and release only acquired leases. */
+ for(unsigned failure=0;failure<3;failure++) {
+  f.map_error=failure<2?EAGAIN:0;f.null_mapping=failure!=0;
+  unsigned before_unmaps=f.unmaps;memset(snapshot,0xa5,sizeof(snapshot));
+  int expected=failure<2?EAGAIN:EPROTO;
+  assert(remesa_present_snapshot(b,t,snapshot,144,sizeof(snapshot))==expected);
+  assert(remesa_context_error(b)==expected);
+  assert(f.unmaps==before_unmaps+(failure!=1));
+  for(unsigned x=0;x<sizeof(snapshot);x++)assert(snapshot[x]==0xa5);
+ }
+ f.map_error=0;f.null_mapping=false;
  /* Persistent inputs and target: three new submissions, with explicit oracle
   * publication between them. These are not repeated SGX frame evidence. */
  for(unsigned frame=0;frame<3;frame++) {
@@ -115,13 +142,26 @@ int main(void)
  published(&f,&f.jobs[5]);assert(!f.jobs[5].bo);
  for(unsigned scenario=0;scenario<3;scenario++) {
   b=s->context_create(s,NULL,0);t=target(s);bind(b,v,t);
+  struct job *prior=NULL;
+  if(!scenario) {
+   draw(b,i);assert(!remesa_context_error(b));prior=&f.jobs[f.count-1];
+   struct pipe_resource *previous=t;t=target(s);assert(t);bind(b,v,t);
+   resource_drop(previous);
+  }
   f.fail=scenario==2 ? 0 : EIO;f.missing_fence=scenario!=0;
   draw(b,i);assert(remesa_context_error(b)==(scenario==2 ? EPROTO : EIO));unsigned count=f.count;
   maps=f.maps;box.width=box.height=32;
   assert(!b->texture_map(b,t,0,PIPE_MAP_WRITE,&box,&tr)&&!tr&&f.maps==maps);
   assert(!b->texture_map(b,t,0,PIPE_MAP_READ,&box,&tr)&&!tr&&f.maps==maps);
   draw(b,i);assert(f.count==count);struct pipe_fence_handle *fence=NULL;b->flush(b,&fence,0);assert(!fence);
+  /* A later no-op clears the callback error, not the unknown failed work.
+   * Flush must still reject the previous successful fence as its substitute. */
+  struct pipe_draw_info empty_info={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};
+  struct pipe_draw_start_count_bias empty_draw={0};
+  b->draw_vbo(b,&empty_info,0,NULL,&empty_draw,1);assert(!remesa_context_error(b));
+  b->flush(b,&fence,0);assert(!fence&&f.count==count);
   b->destroy(b);resource_drop(t);assert(f.jobs[count-1].bo);
+  if(prior){assert(prior->bo);published(&f,prior);assert(!prior->bo);}
   /* Explicit simulated recovery, never automatic driver rearming. */
   published(&f,&f.jobs[count-1]);assert(!f.jobs[count-1].bo);
  }
@@ -156,4 +196,5 @@ int main(void)
  assert(remesa_screen_collect(s)==EBUSY&&f.count==issued);
  published(&f,pending);assert(!remesa_screen_collect(s)&&f.count==issued&&f.owner_releases==2);
  puts("PASS: deferred owned-screen cleanup and pending-release collection without redispatch, fenced padded snapshots/error propagation; per-surface/shared-resource fences, poll/block deadlines, publication, persistent host reuse, pending teardown, 3 failed-submit cases and sticky completion failure; NO SGX");
+ return 0;
 }

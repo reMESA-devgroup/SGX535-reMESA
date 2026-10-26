@@ -1,0 +1,10 @@
+--- /home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_trusted.h
++++ /home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_trusted.h
+@@ -18,6 +18,7 @@
+ int remesa_stream_profile_install(const struct remesa_stream_profile *);
+ int remesa_stream_trusted_install(void);
+ struct sgx535_gma500_owner;
++int remesa_stream_trusted_consume_images(struct sgx535_gma500_owner *,bool *);
+ int remesa_stream_trusted_prefire_cache(struct sgx535_gma500_owner *,bool *);
+ int remesa_stream_trusted_owner(struct drm_device *,struct drm_file *);
+ #endif

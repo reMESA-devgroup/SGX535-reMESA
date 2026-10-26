@@ -41,6 +41,10 @@ int remesa_render_pass_init(struct remesa_render_pass *, uint64_t cookie);
  * only the frontend gate; backend mapping/coherency admission still applies. */
 int remesa_render_pass_admit_cpu_write(const struct remesa_render_pass *);
 int remesa_render_pass_cpu_write(struct remesa_render_pass *);
+/* Explicit whole-resource discard, after the owner has synchronized writers
+ * and excluded CPU leases. Does not erase memory, release backing or establish
+ * completion. Pending and quarantined passes remain protected. */
+int remesa_render_pass_invalidate(struct remesa_render_pass *);
 /* Obtain ready content identity without authenticating physical memory.
  * Reserved/pending/quarantined resources cannot produce a ready snapshot.
  * UNDEFINED remains explicit; callers must not treat it as initialized data.

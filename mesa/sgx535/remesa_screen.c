@@ -4,9 +4,12 @@
 #ifdef REMESA_WITH_MESA_HEADERS
 #include "remesa_resource_ref.h"
 #include "remesa_device.h"
+#include "remesa_gears_runtime.h"
+#include <stdio.h>
 #include "remesa_resource_layout.h"
 #include "remesa_draw.h"
 #include "remesa_fixed_state.h"
+#include "remesa_depth_cpu.h"
 #include "remesa_render_pass.h"
 #include "remesa_sampler_state.h"
 #include "remesa_texture_binding.h"
@@ -18,6 +21,7 @@
 #include "remesa_shader_program.h"
 #include "nir.h"
 #include "util/ralloc.h"
+#include "gallium/auxiliary/util/u_upload_mgr.h"
 #endif
 #include "pipe/p_screen.h"
 #include "pipe/p_context.h"
@@ -31,7 +35,7 @@ static void draw(struct pipe_context *,const struct pipe_draw_info *,unsigned,
 struct screen {
  struct pipe_screen base; struct remesa_device device; unsigned refs; bool closing;
  int (*release_device)(struct remesa_device *);int release_error;bool release_pending;
- uint64_t resource_cookie;
+ uint64_t resource_cookie;bool cpu_depth24_lab,gears_runtime;
 };
 static void screen_hold(struct screen *sc) { ++sc->refs; }
 static void screen_drop(struct screen *sc)
@@ -52,9 +56,9 @@ struct resource {
  struct remesa_render_pass pass;struct remesa_pass_ticket ticket;
 };
 enum fixed_kind { FIXED_BLEND,FIXED_DSA,FIXED_RASTER,FIXED_COUNT };
-struct fixed { struct fixed *next; enum fixed_kind kind; bool deleted,scissor,depth_clip,full_clip;
- unsigned cull_face;bool front_ccw,depth_clip_near,depth_clip_far; };
-struct elements { struct elements *next; struct pipe_vertex_element position; bool deleted; };
+struct fixed { struct fixed *next; enum fixed_kind kind; bool deleted,scissor,depth_clip,full_clip,recording_edge_proof;
+ unsigned cull_face,depth_func;bool bottom_edge_rule,front_ccw,depth_clip_near,depth_clip_far,flat,flat_first,clamp_vertex_color,depth_enabled,depth_write; };
+struct elements { struct elements *next; struct pipe_vertex_element position,normal; unsigned count; bool deleted; };
 struct vertex { struct vertex *next; unsigned input_slot; bool deleted;
 #ifdef REMESA_WITH_NIR
  struct remesa_shader_program program;
@@ -67,9 +71,14 @@ struct fragment { struct fragment *next; uint32_t argb; bool deleted,uses_unifor
  struct remesa_uniform_color uniform; };
 struct transfer;
 struct context {
- struct pipe_context base; struct pipe_vertex_buffer vb; struct pipe_vertex_element position;
- struct pipe_resource *target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
+ struct pipe_context base; struct pipe_vertex_buffer vb,second_vb; unsigned vb_count; struct pipe_vertex_element position;
+ struct pipe_resource *target,*depth_target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
  int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies;
+ bool failed_submission;
+ bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
+ struct pipe_resource *gears_target,*gears_depth;
+ struct remesa_draw_rejection_status draw_rejections;
+ struct remesa_shader_compile_status shader_compile[2];
  struct fragment *fragments,*bound_fragment;
  bool invalid_viewport,invalid_scissor,invalid_constants,sample_enabled; uint32_t constant_rejections[2];
  struct vertex *vertices,*bound_vertex; bool vertex_required,viewport_set;
@@ -80,6 +89,8 @@ struct context {
  struct remesa_texture_binding_bank *textures;
  struct pipe_resource *fragment_constants;unsigned constant_offset,constant_size;
  void *constant_snapshot;
+ struct pipe_resource *vertex_constants;unsigned vertex_constant_offset,vertex_constant_size;
+ void *vertex_constant_snapshot;
  struct transfer *transfers;
 };
 struct pipe_fence_handle { unsigned refs; struct screen *screen; void *backend; };
@@ -90,6 +101,22 @@ struct transfer {
 static struct screen *s(struct pipe_screen *p) { return (struct screen *)p; }
 static struct context *c(struct pipe_context *p) { return (struct context *)p; }
 static struct resource *r(struct pipe_resource *p) { return (struct resource *)p; }
+/* New host inspection/build APIs must not publish into their own owner or
+ * immutable shader handles. Validate the whole output range before any write
+ * (including the constructor's output-reference read). */
+static bool context_output_valid(struct context *ctx,const void *out,size_t bytes)
+{
+ uintptr_t start=(uintptr_t)out;
+ if(!out||bytes>UINTPTR_MAX-start)return false;
+ uintptr_t end=start+bytes;
+#define OUTPUT_OVERLAPS(object) (start<(uintptr_t)(object)+sizeof(*(object))&&end>(uintptr_t)(object))
+ if(OUTPUT_OVERLAPS(ctx)||OUTPUT_OVERLAPS(s(ctx->base.screen)))return false;
+ for(struct vertex *v=ctx->vertices;v;v=v->next)if(OUTPUT_OVERLAPS(v))return false;
+ for(struct fragment *f=ctx->fragments;f;f=f->next)if(OUTPUT_OVERLAPS(f))return false;
+ for(struct elements *e=ctx->elements;e;e=e->next)if(OUTPUT_OVERLAPS(e))return false;
+#undef OUTPUT_OVERLAPS
+ return true;
+}
 static void fence_ref(struct pipe_screen *,struct pipe_fence_handle **,struct pipe_fence_handle *);
 static void set_capabilities(struct screen *sc)
 {
@@ -97,9 +124,23 @@ static void set_capabilities(struct screen *sc)
  /* Narrow Gallium contract only; this does not advertise an OpenGL version. */
  caps.graphics=!sc->device.resource_only_backend;
  caps.accelerated=!sc->device.resource_only_backend&&!sc->device.retained_fragment_carrier&&sc->device.qualified_hardware_backend ? 1 : 0;
- caps.max_render_targets=1; caps.max_texture_2d_size=32;
- caps.max_vertex_buffers=1; caps.max_vertex_attrib_stride=16;
+ caps.max_render_targets=1; caps.max_texture_2d_size=sc->cpu_depth24_lab?4096:32;
+ /* Binding/storage limits; the legacy draw admission below remains one
+  * element/one VB. The complete gears capture has separate validation. */
+ caps.max_vertex_buffers=2; caps.max_vertex_attrib_stride=2048;
+ /* Mesa copies this hint over its 512-KiB core default. Zero leaves the
+  * immediate-mode VBO without storage before shader/draw validation. This
+  * bounds CPU stream allocation; it adds no vertex instruction support. */
+ caps.gl_begin_end_buffer_size=512*1024;
+ caps.constant_buffer_offset_alignment=16;
  caps.max_viewports=1; caps.supported_prim_modes=1u<<MESA_PRIM_TRIANGLES;
+ /* Whole-resource invalidation keeps backing stable and synchronizes the
+  * authenticated writer. This is a storage contract, not GPU clear support. */
+ caps.invalidate_buffer=true;
+ /* clear() clips and validates a rectangular CPU write after synchronizing
+  * the resource writer. Let Mesa use that callback instead of lowering a
+  * scissored clear to an unsupported shader draw. This is not a GPU clear. */
+ caps.clear_scissored=true;
  /* Position is a built-in VS output, not an interpolated user varying.
   * Fragment coordinates/interpolation are rejected by the NIR recognizer;
   * their convention flags must not advertise unqualified GPU semantics. */
@@ -132,12 +173,27 @@ static const struct nir_shader_compiler_options *compiler_options(struct pipe_sc
 }
 #endif
 
+/* Renderbuffers use PIPE_TEXTURE_RECT on Mesa screens without NPOT
+ * sampling. Its single-level pixel storage and attachment coordinates are
+ * identical to 2D here; this helper does not admit rectangle samplers. */
+static bool color_storage_target(enum pipe_texture_target target)
+{ return target==PIPE_TEXTURE_2D||target==PIPE_TEXTURE_RECT; }
 static bool format(struct pipe_screen *p,enum pipe_format f,enum pipe_texture_target t,unsigned samples,unsigned storage,unsigned bind)
 {
- (void)p;if(samples>1 || storage>1) return false;
- if(t==PIPE_BUFFER) return !(bind & ~(PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER|PIPE_BIND_CONSTANT_BUFFER)) &&
+ if(samples>1 || storage>1) return false;
+ if(s(p)->cpu_depth24_lab&&color_storage_target(t)&&f==PIPE_FORMAT_Z24X8_UNORM)
+  return bind==PIPE_BIND_DEPTH_STENCIL;
+ /* Mesa's display-list VBO allocator adds VERTEX_STATE to index storage
+  * even when HasDrawVertexState is false and playback uses ordinary VAOs.
+  * It is a storage hint here, not permission to execute a new draw class.
+  * Require an actual vertex/index role and byte storage for this hint. */
+ if(t==PIPE_BUFFER && (bind&PIPE_BIND_VERTEX_STATE) &&
+    (!(bind&(PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER)) ||
+     f!=PIPE_FORMAT_R8_UNORM))return false;
+ if(t==PIPE_BUFFER) return !(bind & ~(PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER|PIPE_BIND_CONSTANT_BUFFER|PIPE_BIND_VERTEX_STATE)) &&
   (f==PIPE_FORMAT_R8_UNORM || (!(bind&PIPE_BIND_CONSTANT_BUFFER)&&remesa_position_format_bytes(f)));
- if(t!=PIPE_TEXTURE_2D)return false;
+ if(!color_storage_target(t))return false;
+ if(t==PIPE_TEXTURE_RECT)return f==PIPE_FORMAT_B8G8R8A8_UNORM&&bind==PIPE_BIND_RENDER_TARGET;
  /* Transfer-only storage is not sampler or render capability. Real SGX render
   * attachments remain the exact BGRA32 profile; sampler binds are unsupported. */
  if(!bind)return f==PIPE_FORMAT_B8G8R8A8_UNORM||f==PIPE_FORMAT_R8G8B8A8_UNORM;
@@ -147,7 +203,9 @@ static struct pipe_resource *create_resource(struct pipe_screen *p,const struct 
 {
  struct resource *b;size_t bytes;unsigned stride=0;struct remesa_texture_layout layout={0};
  if(s(p)->closing || !t || !format(p,t->format,t->target,t->nr_samples,t->nr_storage_samples,t->bind) ||
-    t->array_size!=1 || t->depth0!=1 || t->flags) return NULL;
+    t->array_size!=1 || t->depth0!=1 ||
+    (t->flags&~PIPE_RESOURCE_FLAG_SINGLE_THREAD_USE) ||
+    (t->flags&&t->target!=PIPE_BUFFER)) return NULL;
  if(t->target==PIPE_BUFFER) {
   uint64_t budget=s(p)->device.resource_limits.max_resource_bytes;
   if(!budget)budget=UINT64_C(64)*1024*1024;
@@ -157,13 +215,13 @@ static struct pipe_resource *create_resource(struct pipe_screen *p,const struct 
   layout.levels[0]=(struct remesa_texture_level){t->width0,1,0,0,bytes};
  }
  else {
-  if(t->bind) { if(t->width0!=32 || t->height0!=32||t->last_level)return NULL; }
+  if(t->bind) { if((!s(p)->cpu_depth24_lab&&(t->width0!=32||t->height0!=32))||t->last_level)return NULL; }
   /* The exact physical profile requires tight rows; transfer-only storage
    * follows explicit backend alignment and independently bounded capacity. */
   struct remesa_resource_limits limits=s(p)->device.resource_limits;
   if(t->bind&&limits.row_alignment>1) {
    if((limits.row_alignment&(limits.row_alignment-1))||
-      (128u&(limits.row_alignment-1)))return NULL;
+      (((uint64_t)t->width0*4)&(limits.row_alignment-1)))return NULL;
   }
   if(remesa_texture_layout(&limits,t->width0,t->height0,4,t->last_level,&layout))return NULL;
   bytes=layout.bytes;stride=layout.levels[0].stride;
@@ -217,48 +275,73 @@ static int resource_sync(struct pipe_screen *p,struct resource *b,uint64_t timeo
  }
  return error;
 }
+static void invalidate_resource(struct pipe_context *p,struct pipe_resource *res)
+{
+ struct context *ctx=c(p);
+ if(s(p->screen)->closing){ctx->error=ESHUTDOWN;return;}
+ if(!res||res->screen!=p->screen){ctx->error=EINVAL;return;}
+ struct resource *b=r(res);
+ /* Invalidation is not cancellation. Never drop an in-flight writer, change
+  * its backing, or turn a failed/uncertain submission into a fresh target. */
+ if(b->maps){ctx->error=EBUSY;return;}
+ ctx->error=resource_sync(p->screen,b,UINT64_MAX);if(ctx->error)return;
+ ctx->error=remesa_render_pass_invalidate(&b->pass);if(ctx->error)return;
+ b->has_contents=false;
+}
 static void *map(struct pipe_context *p,struct pipe_resource *b,unsigned level,unsigned usage,const struct pipe_box *box,struct pipe_transfer **out)
 {
- struct transfer *t;void *ptr=NULL;size_t offset,row,span;struct screen *sc=s(p->screen);
- const unsigned write_hints=PIPE_MAP_DISCARD_RANGE|PIPE_MAP_DISCARD_WHOLE_RESOURCE|PIPE_MAP_FLUSH_EXPLICIT;
+ struct transfer *t;void *ptr=NULL;size_t offset,row,span;struct screen *sc=s(p->screen);int error=EINVAL;
+ const unsigned write_hints=PIPE_MAP_DISCARD_RANGE|PIPE_MAP_DISCARD_WHOLE_RESOURCE|PIPE_MAP_FLUSH_EXPLICIT|PIPE_MAP_UNSYNCHRONIZED;
  if(out) *out=NULL;
- if(sc->closing || !b || b->screen!=p->screen || !box || !out || level>=r(b)->layout.count || !(usage & (PIPE_MAP_READ|PIPE_MAP_WRITE)) ||
+ if(sc->closing){error=ESHUTDOWN;goto fail;}
+ if(!b || b->screen!=p->screen || !box || !out || level>=r(b)->layout.count || !(usage & (PIPE_MAP_READ|PIPE_MAP_WRITE)) ||
     usage & ~(PIPE_MAP_READ|PIPE_MAP_WRITE|PIPE_MAP_DONTBLOCK|PIPE_MAP_DIRECTLY|write_hints) ||
     ((usage & write_hints) && (!(usage & PIPE_MAP_WRITE)||(usage & PIPE_MAP_READ))) ||
     ((usage & PIPE_MAP_FLUSH_EXPLICIT)&&(usage & PIPE_MAP_DIRECTLY)) ||
-    box->x<0 || box->width<=0 || r(b)->maps) return NULL;
+    box->x<0 || box->width<=0) goto fail;
+ if(r(b)->maps){error=EBUSY;goto fail;}
  const struct remesa_texture_level *mip=&r(b)->layout.levels[level];
  if(b->target==PIPE_BUFFER) {
   if(box->y || box->z || box->height!=1 || box->depth!=1 ||
-     (uint64_t)box->x+box->width>mip->width) return NULL;
+     (uint64_t)box->x+box->width>mip->width) goto fail;
   offset=box->x;row=box->width;
  } else {
   if(box->y<0 || box->z || box->height<=0 || box->depth!=1 ||
-     (uint64_t)box->x+box->width>mip->width || (uint64_t)box->y+box->height>mip->height) return NULL;
+     (uint64_t)box->x+box->width>mip->width || (uint64_t)box->y+box->height>mip->height) goto fail;
   offset=(size_t)box->y*mip->stride+(size_t)box->x*4;row=(size_t)box->width*4;
  }
- if(box->height>1 && mip->stride>(SIZE_MAX-row)/(box->height-1))return NULL;
+ if(box->height>1 && mip->stride>(SIZE_MAX-row)/(box->height-1))goto fail;
  span=(size_t)(box->height-1)*mip->stride+row;
- if(offset>mip->bytes||span>mip->bytes-offset)return NULL;
+ if(offset>mip->bytes||span>mip->bytes-offset)goto fail;
  offset+=mip->offset; /* Checked immutable layout keeps this inside the BO. */
  /* Discard is permission to lose old contents, not permission to skip an
   * outstanding writer. Keep backing stable and synchronize even for discard. */
- if(resource_sync(p->screen,r(b),(usage & PIPE_MAP_DONTBLOCK) ? 0 : UINT64_MAX)) return NULL;
- if((usage & PIPE_MAP_WRITE) && remesa_render_pass_admit_cpu_write(&r(b)->pass)) return NULL;
- t=calloc(1,sizeof(*t));if(!t) return NULL;
+ /* Mesa's upload manager maps fresh/disjoint stream storage unsynchronized.
+  * Never wait under that flag and never use it to ignore a retained writer:
+  * reject instead, preserving publication, quarantine and backing ownership. */
+ if(usage&PIPE_MAP_UNSYNCHRONIZED) {
+  if(r(b)->writer||r(b)->write_error){error=r(b)->write_error?r(b)->write_error:EBUSY;goto fail;}
+ } else {
+  error=resource_sync(p->screen,r(b),(usage & PIPE_MAP_DONTBLOCK) ? 0 : UINT64_MAX);
+  if(error)goto fail;
+ }
+ if(usage & PIPE_MAP_WRITE){error=remesa_render_pass_admit_cpu_write(&r(b)->pass);if(error)goto fail;}
+ t=calloc(1,sizeof(*t));if(!t){error=ENOMEM;goto fail;}
  if(usage & PIPE_MAP_FLUSH_EXPLICIT) {
-  t->staging=calloc(1,span);if(!t->staging){free(t);return NULL;}
+  t->staging=calloc(1,span);if(!t->staging){free(t);error=ENOMEM;goto fail;}
  }
  int mapped=sc->device.ops->map(sc->device.priv,r(b)->bo,(usage & PIPE_MAP_WRITE)!=0,&ptr);
  if(mapped || !ptr) {
   if(!mapped||ptr)sc->device.ops->unmap(sc->device.priv,r(b)->bo,(usage & PIPE_MAP_WRITE)!=0);
-  free(t->staging);free(t);return NULL;
+  free(t->staging);free(t);error=mapped?mapped:EPROTO;goto fail;
  }
  remesa_resource_reference(&t->base.resource,b);t->base.level=level;t->base.usage=usage;t->base.box=*box;
  t->base.stride=mip->stride;t->base.layer_stride=t->staging?span:mip->bytes;
  t->backing=(unsigned char *)ptr+offset;t->write=(usage & PIPE_MAP_WRITE)!=0;
  t->dirty=t->write&&!t->staging;t->next=c(p)->transfers;c(p)->transfers=t;
- ++r(b)->maps;*out=&t->base;return t->staging?t->staging:t->backing;
+ ++r(b)->maps;*out=&t->base;c(p)->error=0;return t->staging?t->staging:t->backing;
+fail:
+ c(p)->error=error;return NULL;
 }
 /* Transfers are context-private (Mesa 25.2 p_context.h). Membership is checked
  * before dereferencing a supplied handle, including foreign/unmapped handles. */
@@ -318,7 +401,7 @@ static void buffer_subdata(struct pipe_context *p,struct pipe_resource *b,unsign
  if(!size){ctx->error=0;return;}
  ctx->error=resource_sync(p->screen,r(b),usage&PIPE_MAP_DONTBLOCK?0:UINT64_MAX);if(ctx->error)return;
  struct pipe_box box={.x=offset,.width=size,.height=1,.depth=1};
- dst=map(p,b,0,usage|PIPE_MAP_WRITE,&box,&t);if(!dst){ctx->error=EIO;return;}
+ dst=map(p,b,0,usage|PIPE_MAP_WRITE,&box,&t);if(!dst)return;
  memmove(dst,data,size);unmap(p,t);ctx->error=0;
 }
 static void texture_subdata(struct pipe_context *p,struct pipe_resource *b,unsigned level,unsigned usage,
@@ -326,7 +409,7 @@ static void texture_subdata(struct pipe_context *p,struct pipe_resource *b,unsig
 {
  struct context *ctx=c(p);struct pipe_transfer *t=NULL;void *dst;size_t row,span;
  if(s(p->screen)->closing){ctx->error=ESHUTDOWN;return;}
- if(!b||b->screen!=p->screen||b->target!=PIPE_TEXTURE_2D||level>=r(b)->layout.count||!box||box->x<0||box->y<0||box->z||
+ if(!b||b->screen!=p->screen||!color_storage_target(b->target)||level>=r(b)->layout.count||!box||box->x<0||box->y<0||box->z||
     box->width<0||box->height<0||box->depth!=1||
     (uint64_t)box->x+box->width>r(b)->layout.levels[level].width||
     (uint64_t)box->y+box->height>r(b)->layout.levels[level].height||
@@ -337,7 +420,7 @@ static void texture_subdata(struct pipe_context *p,struct pipe_resource *b,unsig
  span=(size_t)(box->height-1)*stride+row;
  if(layer_stride&&layer_stride<span){ctx->error=EINVAL;return;}
  ctx->error=resource_sync(p->screen,r(b),usage&PIPE_MAP_DONTBLOCK?0:UINT64_MAX);if(ctx->error)return;
- dst=map(p,b,level,usage|PIPE_MAP_WRITE,box,&t);if(!dst){ctx->error=EIO;return;}
+ dst=map(p,b,level,usage|PIPE_MAP_WRITE,box,&t);if(!dst)return;
  for(unsigned y=0;y<(unsigned)box->height;y++)memcpy((unsigned char *)dst+y*t->stride,(const unsigned char *)data+y*stride,row);
  unmap(p,t);ctx->error=0;
 }
@@ -361,7 +444,7 @@ static void copy_region(struct pipe_context *p,struct pipe_resource *dst,unsigne
  if(src->target==PIPE_BUFFER){
   if(box->y||box->height!=1||dsty)goto done;
   row=(size_t)box->width;
- }else if(src->target==PIPE_TEXTURE_2D){
+ }else if(color_storage_target(src->target)){
   if(src->format!=PIPE_FORMAT_B8G8R8A8_UNORM&&src->format!=PIPE_FORMAT_R8G8B8A8_UNORM)goto done;
   if((size_t)box->width>SIZE_MAX/4)goto done;
   row=(size_t)box->width*4;
@@ -377,12 +460,12 @@ static void copy_region(struct pipe_context *p,struct pipe_resource *dst,unsigne
  error=resource_sync(p->screen,r(src),UINT64_MAX);if(error)goto done;
  error=resource_sync(p->screen,r(dst),UINT64_MAX);if(error)goto done;
  snapshot=malloc(bytes);if(!snapshot){error=ENOMEM;goto done;}
- ptr=map(p,src,src_level,PIPE_MAP_READ,box,&transfer);if(!ptr){error=EIO;goto done;}
+ ptr=map(p,src,src_level,PIPE_MAP_READ,box,&transfer);if(!ptr){error=ctx->error;goto done;}
  for(unsigned y=0;y<(unsigned)box->height;y++)
   memcpy(snapshot+(size_t)y*row,(unsigned char *)ptr+(size_t)y*transfer->stride,row);
  unmap(p,transfer);transfer=NULL;
  dest=*box;dest.x=dstx;dest.y=dsty;
- ptr=map(p,dst,dst_level,PIPE_MAP_WRITE,&dest,&transfer);if(!ptr){error=EIO;goto done;}
+ ptr=map(p,dst,dst_level,PIPE_MAP_WRITE,&dest,&transfer);if(!ptr){error=ctx->error;goto done;}
  for(unsigned y=0;y<(unsigned)box->height;y++)
   memcpy((unsigned char *)ptr+(size_t)y*transfer->stride,snapshot+(size_t)y*row,row);
  unmap(p,transfer);transfer=NULL;++ctx->cpu_copies;error=0;
@@ -396,7 +479,7 @@ static void clear_texture(struct pipe_context *p,struct pipe_resource *res,unsig
  struct context *ctx=c(p);struct pipe_transfer *transfer=NULL;void *ptr;
  unsigned char pixel[4];int error=EINVAL;
  if(s(p->screen)->closing){ctx->error=ESHUTDOWN;return;}
- if(!res||res->screen!=p->screen||res->target!=PIPE_TEXTURE_2D||level>=r(res)->layout.count||!box||!data||
+ if(!res||res->screen!=p->screen||!color_storage_target(res->target)||level>=r(res)->layout.count||!box||!data||
     (res->format!=PIPE_FORMAT_B8G8R8A8_UNORM&&res->format!=PIPE_FORMAT_R8G8B8A8_UNORM)||
     box->x<0||box->y<0||box->z||box->width<0||box->height<0||box->depth!=1||
     (uint64_t)box->x+box->width>r(res)->layout.levels[level].width||
@@ -405,7 +488,7 @@ static void clear_texture(struct pipe_context *p,struct pipe_resource *res,unsig
  if(r(res)->maps){error=EBUSY;goto done;}
  error=resource_sync(p->screen,r(res),UINT64_MAX);if(error)goto done;
  memcpy(pixel,data,sizeof(pixel));
- ptr=map(p,res,level,PIPE_MAP_WRITE,box,&transfer);if(!ptr){error=EIO;goto done;}
+ ptr=map(p,res,level,PIPE_MAP_WRITE,box,&transfer);if(!ptr){error=ctx->error;goto done;}
  for(unsigned y=0;y<(unsigned)box->height;y++)
   for(unsigned x=0;x<(unsigned)box->width;x++)
    memcpy((unsigned char *)ptr+(size_t)y*transfer->stride+(size_t)x*4,pixel,4);
@@ -414,29 +497,47 @@ static void clear_texture(struct pipe_context *p,struct pipe_resource *res,unsig
 }
 static void set_vb(struct pipe_context *p,unsigned count,const struct pipe_vertex_buffer *v)
 {
- struct context *ctx=c(p);remesa_resource_reference(&ctx->vb.buffer.resource,NULL);memset(&ctx->vb,0,sizeof(ctx->vb));
+ struct context *ctx=c(p);remesa_resource_reference(&ctx->vb.buffer.resource,NULL);
+ remesa_resource_reference(&ctx->second_vb.buffer.resource,NULL);
+ memset(&ctx->vb,0,sizeof(ctx->vb));memset(&ctx->second_vb,0,sizeof(ctx->second_vb));ctx->vb_count=0;
  if(!count) return;
  /* Mesa 25.2 transfers these resource references to the callback. */
- if(count!=1 || !v || v[0].is_user_buffer) {
-  ctx->error=ENOTSUP;if(v) for(unsigned i=0;i<count;i++) if(!v[i].is_user_buffer) {
+ int error=count<=2&&v?0:ENOTSUP;
+ if(!error)for(unsigned i=0;i<count;i++) {
+  struct pipe_resource *res=v[i].buffer.resource;
+  if(v[i].is_user_buffer){error=ENOTSUP;break;}
+  /* Pinned Mesa display lists allocate current_bo as ELEMENT_ARRAY_BUFFER
+   * + VERTEX_STATE, then use it as the VAO's vertex source. Binding flags
+   * describe storage usage, not a distinct allocation format. Accept that
+   * raw storage here; legacy GPU admission still requires VERTEX_BUFFER. */
+  bool vertex_storage=res&&((res->bind&PIPE_BIND_VERTEX_BUFFER)||
+   (res->bind&(PIPE_BIND_INDEX_BUFFER|PIPE_BIND_VERTEX_STATE))==
+              (PIPE_BIND_INDEX_BUFFER|PIPE_BIND_VERTEX_STATE));
+  if(res&&(res->screen!=p->screen||res->target!=PIPE_BUFFER||!vertex_storage)){
+   error=EINVAL;break;
+  }
+ }
+ if(error) {
+  ctx->error=error;if(v) for(unsigned i=0;i<count;i++) if(!v[i].is_user_buffer) {
    struct pipe_resource *owned=v[i].buffer.resource;remesa_resource_reference(&owned,NULL);
   }
   return;
  }
- ctx->vb=v[0];if(ctx->vb.buffer.resource && (ctx->vb.buffer.resource->screen!=p->screen||
-    ctx->vb.buffer.resource->target!=PIPE_BUFFER||!(ctx->vb.buffer.resource->bind&PIPE_BIND_VERTEX_BUFFER))) {
-  remesa_resource_reference(&ctx->vb.buffer.resource,NULL);ctx->error=EINVAL;
- }
+ ctx->vb=v[0];if(count==2)ctx->second_vb=v[1];ctx->vb_count=count;ctx->error=0;
 }
 static void *create_elements(struct pipe_context *p,unsigned count,const struct pipe_vertex_element *e)
 {
  struct context *ctx=c(p);struct elements *out;
- if(count!=1 || !e || !remesa_position_format_bytes(e->src_format) || e->vertex_buffer_index ||
-    e->instance_divisor || e->dual_slot || !e->src_stride) {
+ bool valid=(count==1||count==2)&&e;
+ if(valid)for(unsigned i=0;i<count;i++)if(!remesa_position_format_bytes(e[i].src_format)||
+    (i==1&&e[i].src_format==PIPE_FORMAT_R32G32_FLOAT)||e[i].vertex_buffer_index>=2||
+    e[i].instance_divisor||e[i].dual_slot)valid=false;
+ if(!valid) {
   ctx->invalid_elements=true;ctx->error=ENOTSUP;return NULL;
  }
  out=calloc(1,sizeof(*out));if(!out){ctx->invalid_elements=true;ctx->error=ENOMEM;return NULL;}
- out->position=*e;out->next=ctx->elements;ctx->elements=out;ctx->error=0;return out;
+ out->position=*e;if(count==2)out->normal=e[1];out->count=count;
+ out->next=ctx->elements;ctx->elements=out;ctx->error=0;return out;
 }
 static struct elements *find_elements(struct context *ctx,void *handle)
 {
@@ -462,23 +563,31 @@ static void framebuffer(struct pipe_context *p,const struct pipe_framebuffer_sta
  struct context *ctx=c(p);
  /* Validate while the previous binding is live: the incoming texture can
   * be that same resource and the context can own its final reference. */
- if(f&&!f->nr_cbufs&&!f->zsbuf.texture&&!f->resolve&&!f->viewmask){remesa_resource_reference(&ctx->target,NULL);ctx->error=0;return;}
- if(!f || f->nr_cbufs!=1 || f->width!=32 || f->height!=32 || f->samples>1 || f->zsbuf.texture ||
+ if(f&&!f->nr_cbufs&&!f->zsbuf.texture&&!f->resolve&&!f->viewmask){remesa_resource_reference(&ctx->target,NULL);remesa_resource_reference(&ctx->depth_target,NULL);ctx->error=0;return;}
+ if(!f || f->nr_cbufs!=1 || (!s(p->screen)->cpu_depth24_lab&&(f->width!=32||f->height!=32)) || !f->width||!f->height || f->samples>1 || (f->zsbuf.texture&&(!s(p->screen)->cpu_depth24_lab||
+    f->zsbuf.format!=PIPE_FORMAT_Z24X8_UNORM||f->zsbuf.texture->format!=PIPE_FORMAT_Z24X8_UNORM||
+    f->zsbuf.texture->screen!=p->screen||f->zsbuf.texture->bind!=PIPE_BIND_DEPTH_STENCIL||
+    !color_storage_target(f->zsbuf.texture->target)||f->zsbuf.texture->width0!=f->width||f->zsbuf.texture->height0!=f->height||
+    f->zsbuf.texture->depth0!=1||f->zsbuf.texture->array_size!=1||f->zsbuf.texture->nr_samples>1||
+    f->zsbuf.level||f->zsbuf.first_layer||f->zsbuf.last_layer||f->zsbuf.nr_samples>1)) ||
     f->resolve || f->viewmask || f->cbufs[0].level || f->cbufs[0].first_layer || f->cbufs[0].last_layer ||
+    f->cbufs[0].nr_samples>1 ||
     !f->cbufs[0].texture || f->cbufs[0].format!=PIPE_FORMAT_B8G8R8A8_UNORM ||
-    f->cbufs[0].texture->screen!=p->screen || f->cbufs[0].texture->target!=PIPE_TEXTURE_2D ||
+    f->cbufs[0].texture->screen!=p->screen || !color_storage_target(f->cbufs[0].texture->target) ||
     !(f->cbufs[0].texture->bind&PIPE_BIND_RENDER_TARGET) ||
-    f->cbufs[0].texture->format!=PIPE_FORMAT_B8G8R8A8_UNORM || f->cbufs[0].texture->width0!=32 || f->cbufs[0].texture->height0!=32 ||
-    f->cbufs[0].texture->depth0!=1 || f->cbufs[0].texture->array_size!=1 || f->cbufs[0].texture->nr_samples>1) { remesa_resource_reference(&ctx->target,NULL);ctx->error=ENOTSUP;return; }
+    f->cbufs[0].texture->format!=PIPE_FORMAT_B8G8R8A8_UNORM || f->cbufs[0].texture->width0!=f->width || f->cbufs[0].texture->height0!=f->height ||
+    f->cbufs[0].texture->depth0!=1 || f->cbufs[0].texture->array_size!=1 || f->cbufs[0].texture->nr_samples>1) { remesa_resource_reference(&ctx->target,NULL);remesa_resource_reference(&ctx->depth_target,NULL);ctx->error=ENOTSUP;return; }
  remesa_resource_reference(&ctx->target,f->cbufs[0].texture);
+ remesa_resource_reference(&ctx->depth_target,f->zsbuf.texture);
  ctx->error=0;
 }
 static struct pipe_surface *create_surface(struct pipe_context *p,struct pipe_resource *b,const struct pipe_surface *t)
 {
  struct pipe_surface *out;
- if(!b || b->screen!=p->screen || b->target!=PIPE_TEXTURE_2D || !(b->bind&PIPE_BIND_RENDER_TARGET)||
-    b->format!=PIPE_FORMAT_B8G8R8A8_UNORM||!t ||
-    t->format!=PIPE_FORMAT_B8G8R8A8_UNORM || t->level || t->first_layer || t->last_layer || t->nr_samples>1) return NULL;
+ if(!b || b->screen!=p->screen || !color_storage_target(b->target) ||
+    !((b->bind==PIPE_BIND_RENDER_TARGET&&b->format==PIPE_FORMAT_B8G8R8A8_UNORM)||
+      (s(p->screen)->cpu_depth24_lab&&b->bind==PIPE_BIND_DEPTH_STENCIL&&b->format==PIPE_FORMAT_Z24X8_UNORM))||!t ||
+    t->format!=b->format || t->level || t->first_layer || t->last_layer || t->nr_samples>1) return NULL;
  out=calloc(1,sizeof(*out));if(!out) return NULL;*out=*t;
  out->reference.count=1;out->texture=NULL;remesa_resource_reference(&out->texture,b);
  out->context=p;return out;
@@ -495,6 +604,21 @@ static void *unsupported_shader(struct pipe_context *p,const struct pipe_shader_
  c(p)->error=ENOTSUP;return NULL;
 }
 #ifdef REMESA_WITH_NIR
+static void record_shader_compile(struct context *ctx,unsigned stage,int error,
+ const struct remesa_shader_program *program,bool uniform)
+{
+ struct remesa_shader_compile_status *status=&ctx->shader_compile[stage];
+ uint64_t attempts=status->attempts==UINT64_MAX?UINT64_MAX:status->attempts+1;
+ *status=(struct remesa_shader_compile_status){.attempts=attempts,.error=error,
+  .binary_error=ENOTSUP,.launch_error=ENOTSUP,.uniform_specialization=!error&&uniform};
+ if(!error&&!uniform) {
+  struct remesa_shader_program_report report;
+  int err=remesa_shader_program_report(program,&report);
+  if(!err) {status->binary_error=report.binary_error;status->binary_bytes=report.binary_bytes;
+   status->launch_error=report.launch_error;}
+  else status->binary_error=err;
+ }
+}
 static void *create_vertex(struct pipe_context *p,const struct pipe_shader_state *state)
 {
  struct vertex *v=NULL;unsigned slot;int err=ENOTSUP;
@@ -508,6 +632,7 @@ static void *create_vertex(struct pipe_context *p,const struct pipe_shader_state
   ralloc_free(state->ir.nir);
   if(!err) {v=calloc(1,sizeof(*v));if(!v)err=ENOMEM;else {v->input_slot=slot;v->program=program;v->next=c(p)->vertices;c(p)->vertices=v;}}
  }
+ record_shader_compile(c(p),0,err,&program,false);
  c(p)->error=err;return v;
 }
 static struct vertex *find_vertex(struct context *ctx,void *handle)
@@ -538,7 +663,9 @@ static void *create_fragment(struct pipe_context *p,const struct pipe_shader_sta
  struct remesa_shader_program program={0};
  if(state && state->type==PIPE_SHADER_IR_NIR) {
   err=state->stream_output.num_outputs ? ENOTSUP : remesa_shader_ir_lower(state->ir.nir,&semantic);
-  if(!err)err=remesa_shader_ir_fragment_color(&semantic,&argb);
+  if(!err&&remesa_shader_ir_fragment_color_input(&semantic)&&
+     remesa_shader_ir_fragment_flat_color_input(&semantic))
+   err=remesa_shader_ir_fragment_color(&semantic,&argb);
   if(!err)err=remesa_shader_program_prepare(&semantic,&program);
   if(err==ENOTSUP&&!state->stream_output.num_outputs) {
    err=remesa_nir_uniform_fragment(state->ir.nir,&descriptor);uniform=!err;
@@ -551,6 +678,7 @@ static void *create_fragment(struct pipe_context *p,const struct pipe_shader_sta
    else {f->argb=argb;f->program=program;f->uses_uniform=uniform;f->uniform=descriptor;f->next=c(p)->fragments;c(p)->fragments=f;}
   }
  }
+ record_shader_compile(c(p),1,err,&program,uniform);
  c(p)->error=err;return f;
 }
 static struct fragment *find_fragment(struct context *ctx,void *handle)
@@ -637,6 +765,122 @@ int remesa_context_shader_pipeline_report(struct pipe_context *p,struct remesa_s
  if(f->uses_uniform)return ENOTSUP;
  return remesa_shader_pipeline_prepare(&v->program,&f->program,out);
 }
+static int context_shader_programs(struct pipe_context *p,struct remesa_shader_draw_programs *out)
+{
+ if(!p||p->draw_vbo!=draw||!out)return EINVAL;
+ if(s(p->screen)->closing)return ESHUTDOWN;
+ struct context *ctx=c(p);
+ if(!ctx->bound_vertex||!ctx->bound_fragment)return ENODATA;
+ struct vertex *v=find_vertex(ctx,ctx->bound_vertex);
+ struct fragment *f=find_fragment(ctx,ctx->bound_fragment);
+ if(!v||!f)return EINVAL;
+ if(f->uses_uniform)return ENOTSUP;
+ return remesa_shader_draw_programs_prepare(&v->program,&f->program,out);
+}
+int remesa_context_prepare_host_shader_pipeline(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline_request *request,struct remesa_shader_host_pipeline **out)
+{
+ if(!p||p->draw_vbo!=draw||!request||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ return remesa_shader_host_pipeline_create(&programs,request,out);
+}
+int remesa_context_revalidate_host_shader_pipeline(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,const struct remesa_shader_host_pipeline_request *request)
+{
+ if(!pipeline||!request)return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ return remesa_shader_host_pipeline_revalidate(pipeline,&programs,request);
+}
+int remesa_context_prepare_shader_contract(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,const struct remesa_shader_host_pipeline_request *current,
+ const struct remesa_pds_host_transfer_request *transfers,struct remesa_shader_execution_contract *out)
+{
+ if(!p||p->draw_vbo!=draw||!current||sizeof(*current)>UINTPTR_MAX-(uintptr_t)current||
+    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ int error=remesa_context_revalidate_host_shader_pipeline(p,pipeline,current);if(error)return error;
+ uintptr_t begin=(uintptr_t)out,end=begin+sizeof(*out);
+ if(begin<(uintptr_t)current+sizeof(*current)&&end>(uintptr_t)current)return EINVAL;
+ /* Revalidation checked each recipe length/pointer before these range checks.
+  * The output must also preserve the fresh caller inputs, not just our copy. */
+ for(unsigned i=0;i<2;i++) {
+  uintptr_t source=(uintptr_t)current->data[i].cells;
+  size_t bytes=current->data[i].cell_count*sizeof(*current->data[i].cells);
+  if(begin<source+bytes&&end>source)return EINVAL;
+ }
+ return remesa_shader_host_pipeline_prepare_contract(pipeline,transfers,out);
+}
+int remesa_context_revalidate_shader_contract(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,const struct remesa_shader_host_pipeline_request *current,
+ const struct remesa_pds_host_transfer_request *transfers,const struct remesa_shader_execution_contract *contract)
+{
+ int error=remesa_context_revalidate_host_shader_pipeline(p,pipeline,current);if(error)return error;
+ return remesa_shader_host_pipeline_validate_contract(pipeline,transfers,contract);
+}
+int remesa_context_prepare_pixel_task_pipeline(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline_request *request,uint32_t metadata6,
+ struct remesa_shader_host_pipeline **out)
+{
+ if(!p||p->draw_vbo!=draw||!request||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ return remesa_shader_host_pipeline_create_pixel_task(&programs,request,metadata6,out);
+}
+int remesa_context_prepare_pds_structure_pipeline(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline_request *request,const struct remesa_pds_structure_request *source,
+ struct remesa_shader_host_pipeline **out)
+{
+ if(!p||p->draw_vbo!=draw||!request||!source||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ return remesa_shader_host_pipeline_create_pds_structure(&programs,request,source,out);
+}
+int remesa_context_revalidate_pds_structure_pipeline(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,const struct remesa_shader_host_pipeline_request *request,
+ const struct remesa_pds_structure_request *source)
+{
+ if(!pipeline||!request||!source)return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ return remesa_shader_host_pipeline_revalidate_pds_structure(pipeline,&programs,request,source);
+}
+static int context_pixel_task_current(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,
+ const struct remesa_shader_host_pipeline_request *current,uint32_t metadata6,
+ const struct remesa_pds_cpu_pixel_task_output *out)
+{
+ if(!p||p->draw_vbo!=draw||!current||sizeof(*current)>UINTPTR_MAX-(uintptr_t)current||
+    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct remesa_shader_draw_programs programs;
+ int error=context_shader_programs(p,&programs);if(error)return error;
+ error=remesa_shader_host_pipeline_revalidate_pixel_task(pipeline,&programs,current,metadata6);
+ if(error)return error;
+ /* Revalidation checked the consumed VS recipe. The FS recipe in current
+  * is explicitly ignored by this API and need not point to accessible data. */
+ uintptr_t begin=(uintptr_t)out,end=begin+sizeof(*out),source=(uintptr_t)current;
+ if(begin<source+sizeof(*current)&&end>source)return EINVAL;
+ source=(uintptr_t)current->data[0].cells;
+ size_t bytes=current->data[0].cell_count*sizeof(*current->data[0].cells);
+ if(begin<source+bytes&&end>source)return EINVAL;
+ return 0;
+}
+int remesa_context_prepare_pixel_task_output(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,
+ const struct remesa_shader_host_pipeline_request *current,uint32_t metadata6,
+ const struct remesa_pds_host_transfer_request *transfers,struct remesa_pds_cpu_pixel_task_output *out)
+{
+ int error=context_pixel_task_current(p,pipeline,current,metadata6,out);if(error)return error;
+ return remesa_shader_host_pipeline_prepare_pixel_task_output(pipeline,transfers,out);
+}
+int remesa_context_revalidate_pixel_task_output(struct pipe_context *p,
+ const struct remesa_shader_host_pipeline *pipeline,
+ const struct remesa_shader_host_pipeline_request *current,uint32_t metadata6,
+ const struct remesa_pds_host_transfer_request *transfers,const struct remesa_pds_cpu_pixel_task_output *out)
+{
+ int error=context_pixel_task_current(p,pipeline,current,metadata6,out);if(error)return error;
+ return remesa_shader_host_pipeline_validate_pixel_task_output(pipeline,transfers,out);
+}
 int remesa_context_prepare_shader_launch(struct pipe_context *p,
  const struct remesa_pds_request *vertex,const struct remesa_pds_request *fragment,
  struct remesa_shader_pipeline_launch *out)
@@ -666,6 +910,20 @@ int remesa_context_revalidate_shader_launch(struct pipe_context *p,
  return remesa_shader_pipeline_revalidate_launch(launch,&v->program,&f->program,vertex,fragment);
 }
 #endif
+int remesa_context_shader_compile_status(struct pipe_context *p,unsigned stage,
+ struct remesa_shader_compile_status *out)
+{
+ if(!p||p->draw_vbo!=draw||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ if(s(p->screen)->closing)return ESHUTDOWN;
+ if(stage!=PIPE_SHADER_VERTEX&&stage!=PIPE_SHADER_FRAGMENT)return ENOTSUP;
+#ifdef REMESA_WITH_NIR
+ const struct remesa_shader_compile_status *status=&c(p)->shader_compile[stage==PIPE_SHADER_FRAGMENT];
+ if(!status->attempts)return ENODATA;
+ *out=*status;return 0;
+#else
+ return ENOTSUP;
+#endif
+}
 /* Pure state admission does not generate new SGX state bytes. These immutable
  * descriptors require semantics equivalent to the unchanged restricted profile.
  * Invalid creates/binds remain latched independently of transient API errors. */
@@ -708,11 +966,22 @@ static void *create_blend(struct pipe_context *p,const struct pipe_blend_state *
 static void bind_blend(struct pipe_context *p,void *state){bind_fixed(p,state,FIXED_BLEND);}
 static void delete_blend(struct pipe_context *p,void *state){delete_fixed(p,state,FIXED_BLEND);}
 static void *create_dsa(struct pipe_context *p,const struct pipe_depth_stencil_alpha_state *state)
-{ return create_fixed(p,FIXED_DSA,remesa_validate_dsa(state),false,false); }
+{
+ int error=s(p->screen)->gears_runtime?remesa_validate_gears_dsa(state):remesa_validate_dsa(state);
+ struct fixed *out=create_fixed(p,FIXED_DSA,error,false,false);
+ if(out&&state){out->depth_enabled=state->depth_enabled;out->depth_write=state->depth_writemask;out->depth_func=state->depth_func;}
+ return out;
+}
 static void bind_dsa(struct pipe_context *p,void *state){bind_fixed(p,state,FIXED_DSA);}
 static void delete_dsa(struct pipe_context *p,void *state){delete_fixed(p,state,FIXED_DSA);}
 static void *create_raster(struct pipe_context *p,const struct pipe_rasterizer_state *state)
 {
+ if(s(p->screen)->gears_runtime){
+  if(state&&getenv("REMESA_GEARS_TRACE"))fprintf(stderr,"GEARS_RASTER half=%u bottom=%u cull=%u ccw=%u flat=%u first=%u clamp_v=%u clamp_f=%u twoside=%u fill=%u/%u clip=%u/%u halfz=%u precision=%u/%u\n",state->half_pixel_center,state->bottom_edge_rule,state->cull_face,state->front_ccw,state->flatshade,state->flatshade_first,state->clamp_vertex_color,state->clamp_fragment_color,state->light_twoside,state->fill_front,state->fill_back,state->depth_clip_near,state->depth_clip_far,state->clip_halfz,state->subpixel_precision_x,state->subpixel_precision_y);
+  struct fixed *out=create_fixed(p,FIXED_RASTER,remesa_validate_gears_rasterizer(state),state&&state->scissor,state&&(state->depth_clip_near||state->depth_clip_far));
+  if(out){out->bottom_edge_rule=state->bottom_edge_rule;out->flat=state->flatshade;out->clamp_vertex_color=state->clamp_vertex_color;out->flat_first=state->flatshade_first;out->front_ccw=state->front_ccw;out->cull_face=state->cull_face;out->depth_clip_near=state->depth_clip_near;out->depth_clip_far=state->depth_clip_far;}
+  return out;
+ }
  const struct pipe_rasterizer_state *admitted=state;struct pipe_rasterizer_state host;
  bool recording=s(p->screen)->device.offline_test_backend&&!s(p->screen)->device.qualified_hardware_backend;
  /* Host-facing culling is connected only to the recording preparation path.
@@ -720,8 +989,16 @@ static void *create_raster(struct pipe_context *p,const struct pipe_rasterizer_s
  if(state&&state->cull_face&&recording&&state->depth_clip_near&&state->depth_clip_far) {
   host=*state;host.cull_face=PIPE_FACE_NONE;admitted=&host;
  }
- struct fixed *out=create_fixed(p,FIXED_RASTER,remesa_validate_rasterizer(admitted),state&&state->scissor,state&&(state->depth_clip_near||state->depth_clip_far));
- if(out){out->full_clip=state->depth_clip_near&&state->depth_clip_far;
+ const struct remesa_device *device=&s(p->screen)->device;
+ bool finite_lab=device->qualified_hardware_backend&&device->retained_fragment_carrier&&
+  device->retained_gl_fbo_half_pixel_center;
+ bool recording_window=recording&&admitted&&admitted->half_pixel_center&&admitted->bottom_edge_rule;
+ int error=recording_window?remesa_validate_recording_window_rasterizer(admitted):
+  finite_lab?remesa_validate_lab_rasterizer(admitted,REMESA_LAB_RASTER_QUARTER_FBO):
+  remesa_validate_rasterizer(admitted);
+ struct fixed *out=create_fixed(p,FIXED_RASTER,error,state&&state->scissor,state&&(state->depth_clip_near||state->depth_clip_far));
+ if(out){out->recording_edge_proof=recording_window;
+  out->full_clip=state->depth_clip_near&&state->depth_clip_far;
   out->depth_clip_near=state->depth_clip_near;out->depth_clip_far=state->depth_clip_far;
   out->cull_face=state->cull_face;out->front_ccw=state->front_ccw;}
  return out; }
@@ -731,7 +1008,13 @@ static void viewport_state(struct pipe_context *p,unsigned start,unsigned count,
 {
  struct context *ctx=c(p);ctx->invalid_viewport=true;
  if(start || count!=1 || !v){ctx->error=ENOTSUP;return;}
- if(v->swizzle_x||v->swizzle_y||v->swizzle_z||v->swizzle_w){ctx->error=ENOTSUP;return;}
+ if(!remesa_viewport_swizzle_is_identity(v)){ctx->error=ENOTSUP;return;}
+ if(s(p->screen)->gears_runtime){
+  if(v->scale[0]!=640.0f||(v->scale[1]!=400.0f&&v->scale[1]!=-400.0f)||v->scale[2]!=0.5f||
+     v->translate[0]!=640.0f||v->translate[1]!=400.0f||v->translate[2]!=0.5f){ctx->error=ENOTSUP;return;}
+  ctx->viewport=*v;ctx->viewport_set=true;ctx->invalid_viewport=false;ctx->error=0;return;
+ }
+
  bool identity=true,canonical=true;
  for(unsigned i=0;i<3;i++) {
   if(v->scale[i]!=1||v->translate[i]!=0)identity=false;
@@ -835,6 +1118,15 @@ static void destroy_sampler_view(struct pipe_context *p,struct pipe_sampler_view
 {
  c(p)->error=view?remesa_texture_view_destroy(c(p)->textures,view):0;
 }
+/* Mesa state_tracker releases even a NULL pixel-map view at teardown.
+ * Release the frontend reference, preserving the view bank's owner callback.
+ * This lifetime hook does not advertise texture execution support. */
+static void release_sampler_view(struct pipe_context *p,struct pipe_sampler_view *view)
+{
+ (void)p;
+ if(view && !__atomic_sub_fetch(&view->reference.count,1,__ATOMIC_ACQ_REL))
+  view->context->sampler_view_destroy(view->context,view);
+}
 static void set_sampler_views(struct pipe_context *p,enum pipe_shader_type stage,
  unsigned start,unsigned count,unsigned trailing,struct pipe_sampler_view **views)
 { c(p)->error=remesa_texture_views_bind(c(p)->textures,stage,start,count,trailing,views); }
@@ -846,7 +1138,7 @@ static void constant_buffer(struct pipe_context *p,enum pipe_shader_type shader,
  if(buffer&&take_ownership)owned=buffer->buffer;
  /* A borrowed rebind may name the buffer held solely by the old binding.
   * Keep it alive while validation replaces that binding, including failures. */
- if(buffer&&buffer->buffer&&shader==PIPE_SHADER_FRAGMENT&&!slot)
+ if(buffer&&buffer->buffer&&(shader==PIPE_SHADER_FRAGMENT||shader==PIPE_SHADER_VERTEX)&&!slot)
   remesa_resource_reference(&incoming,buffer->buffer);
  bool stage=shader==PIPE_SHADER_VERTEX||shader==PIPE_SHADER_FRAGMENT;
  bool empty=!buffer||(!buffer->buffer&&!buffer->user_buffer&&!buffer->buffer_size&&!buffer->buffer_offset);
@@ -857,8 +1149,35 @@ static void constant_buffer(struct pipe_context *p,enum pipe_shader_type shader,
    remesa_resource_reference(&ctx->fragment_constants,NULL);
    free(ctx->constant_snapshot);ctx->constant_snapshot=NULL;ctx->constant_size=0;ctx->constant_offset=0;
   }
+  if(shader==PIPE_SHADER_VERTEX&&!slot) {
+   remesa_resource_reference(&ctx->vertex_constants,NULL);
+   free(ctx->vertex_constant_snapshot);ctx->vertex_constant_snapshot=NULL;
+   ctx->vertex_constant_size=0;ctx->vertex_constant_offset=0;
+  }
 #ifdef REMESA_WITH_NIR
-  if(!empty&&shader==PIPE_SHADER_FRAGMENT&&!slot) {
+  if(!empty&&shader==PIPE_SHADER_VERTEX&&!slot) {
+   int error=ENOTSUP;
+   /* The complete state records declare9 or10 float4 vectors. This is
+    * binding capacity, not the amount a particular shader reads. */
+   if(buffer->buffer_size==144u||buffer->buffer_size==160u) {
+    if(buffer->buffer&&!buffer->user_buffer) {
+     struct pipe_resource *b=buffer->buffer;
+     if(b->screen==p->screen&&b->target==PIPE_BUFFER&&(b->bind&PIPE_BIND_CONSTANT_BUFFER)&&
+        buffer->buffer_offset<=r(b)->bytes&&buffer->buffer_size<=r(b)->bytes-buffer->buffer_offset&&
+        !(buffer->buffer_offset&15u)) {
+      remesa_resource_reference(&ctx->vertex_constants,b);
+      ctx->vertex_constant_offset=buffer->buffer_offset;error=0;
+     }
+    } else if(buffer->user_buffer&&!buffer->buffer&&!buffer->buffer_offset) {
+     ctx->vertex_constant_snapshot=malloc(buffer->buffer_size);
+     if(!ctx->vertex_constant_snapshot)error=ENOMEM;
+     else {memcpy(ctx->vertex_constant_snapshot,buffer->user_buffer,buffer->buffer_size);error=0;}
+    }
+   }
+   if(error)ctx->constant_rejections[index]|=1u<<slot;
+   else {ctx->vertex_constant_size=buffer->buffer_size;ctx->constant_rejections[index]&=~(1u<<slot);}
+   ctx->error=error;
+  } else if(!empty&&shader==PIPE_SHADER_FRAGMENT&&!slot) {
    int error=ENOTSUP;
    if(buffer->buffer_size>=16&&buffer->buffer_size<=REMESA_UNIFORM_BYTES_MAX) {
     if(buffer->buffer&&!buffer->user_buffer) {
@@ -893,6 +1212,8 @@ static void constant_buffer(struct pipe_context *p,enum pipe_shader_type shader,
 static int fragment_color(struct pipe_context *p,uint32_t *argb)
 {
  struct context *ctx=c(p);struct fragment *f=ctx->bound_fragment;
+ /* Offline varying compilation is not a constant-color draw contract. */
+ if(f&&!f->uses_uniform&&f->program.status==REMESA_PROGRAM_COMPILE_OFFLINE)return ENOTSUP;
  if(!f||!f->uses_uniform){*argb=ctx->argb;return 0;}
  if(!ctx->constant_size)return ENODATA;
  if(!ctx->fragment_constants)
@@ -907,6 +1228,111 @@ static int fragment_color(struct pipe_context *p,uint32_t *argb)
  sc->device.ops->unmap(sc->device.priv,b->bo,false);return error;
 }
 #endif
+int remesa_context_vertex_parameter_source(struct pipe_context *p,
+ const struct remesa_pds_parameter_source_request *request,void *out,size_t capacity,size_t *written)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw||!request||
+    (uintptr_t)request%_Alignof(struct remesa_pds_parameter_source_request)||
+    sizeof(*request)>UINTPTR_MAX-(uintptr_t)request||
+    !context_output_valid(c(p),out,capacity)||
+    !context_output_valid(c(p),written,sizeof(*written)))return EINVAL;
+ struct context *ctx=c(p);struct vertex *v=ctx->bound_vertex;
+ if(!v||v->deleted||remesa_shader_ir_gears_vertex(&v->program.semantic)||
+    ctx->invalid_constants||ctx->constant_rejections[0])return ENOTSUP;
+ const unsigned coefficients=v->program.semantic.instructions[0].bits[0]*4u;
+ if(request->coefficient_dwords!=coefficients||request->transfer_dwords!=((coefficients+4u)&~3u))return ENOTSUP;
+ if(!ctx->vertex_constant_size)return ENODATA;
+ if(ctx->vertex_constant_size<coefficients*4u)return ENOSPC;
+ if(!ctx->vertex_constants)
+  return remesa_pds_structure_encode_parameter_source(request,ctx->vertex_constant_snapshot,
+   coefficients*4u,out,capacity,written);
+ struct resource *b=r(ctx->vertex_constants);struct screen *sc=s(p->screen);void *bytes=NULL;
+ if(b->maps)return EBUSY;
+ int error=resource_sync(p->screen,b,UINT64_MAX);if(error)return error;
+ error=sc->device.ops->map(sc->device.priv,b->bo,false,&bytes);
+ if(error){if(bytes)sc->device.ops->unmap(sc->device.priv,b->bo,false);return error;}
+ error=bytes?remesa_pds_structure_encode_parameter_source(request,
+  (unsigned char *)bytes+ctx->vertex_constant_offset,coefficients*4u,out,capacity,written):EPROTO;
+ sc->device.ops->unmap(sc->device.priv,b->bo,false);return error;
+#else
+ (void)p;(void)request;(void)out;(void)capacity;(void)written;return ENOTSUP;
+#endif
+}
+
+int remesa_context_gears_geometry_snapshot(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ struct remesa_gears_geometry **out)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw||!info||!draw_info||
+    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);struct vertex *v=ctx->bound_vertex;struct elements *e=ctx->bound_elements;
+ if(s(p->screen)->closing)return ESHUTDOWN;
+ if(!v||v->deleted||remesa_shader_ir_gears_vertex(&v->program.semantic)||
+    !e||e->deleted||ctx->invalid_elements)return ENOTSUP;
+ unsigned attr=v->program.semantic.instructions[0].input_slot;
+ if(attr>1||e->count!=1+attr)return ENOTSUP;
+ struct pipe_vertex_buffer *vb[2]={&ctx->vb,&ctx->second_vb};
+ const struct pipe_vertex_element *element[2]={&e->position,&e->normal};
+ struct resource *resources[3]={0};void *bytes[3]={0};bool mapped[3]={0};
+ unsigned resource_count=0,slot[2]={0},index_slot=0;
+ int error=0;
+ for(unsigned a=0;a<1+attr;a++) {
+  unsigned b=element[a]->vertex_buffer_index;
+  if(b>=ctx->vb_count||!vb[b]->buffer.resource)return ENODATA;
+  struct resource *res=r(vb[b]->buffer.resource);unsigned j;
+  for(j=0;j<resource_count&&resources[j]!=res;j++);
+  if(j==resource_count)resources[resource_count++]=res;
+  slot[a]=j;
+ }
+ if(info->index_size&&!info->has_user_indices) {
+  struct pipe_resource *ib=info->index.resource;
+  if(!ib||ib->screen!=p->screen||ib->target!=PIPE_BUFFER||!(ib->bind&PIPE_BIND_INDEX_BUFFER))return EINVAL;
+  unsigned j;for(j=0;j<resource_count&&resources[j]!=r(ib);j++);
+  if(j==resource_count)resources[resource_count++]=r(ib);
+  index_slot=j;
+ }
+ /* Reject output aliases before inspecting its previous reference or mapping. */
+ for(unsigned j=0;j<resource_count;j++) {
+  uintptr_t x=(uintptr_t)out,y=(uintptr_t)resources[j];
+  if(x<y+sizeof(*resources[j])&&y<x+sizeof(*out))return EINVAL;
+  if(resources[j]->maps)return EBUSY;
+ }
+ if(*out)return EBUSY;
+ for(unsigned j=0;j<resource_count;j++) {
+  error=resource_sync(p->screen,resources[j],UINT64_MAX);if(error)goto done;
+ }
+ struct screen *sc=s(p->screen);
+ for(unsigned j=0;j<resource_count;j++) {
+  error=sc->device.ops->map(sc->device.priv,resources[j]->bo,false,&bytes[j]);
+  mapped[j]=!error||bytes[j];if(error)goto done;
+  if(!bytes[j]){error=EPROTO;goto done;}
+ }
+ struct remesa_gears_attribute attributes[2]={{0}};
+ for(unsigned a=0;a<1+attr;a++) {
+  const struct pipe_vertex_element *el=element[a];unsigned b=el->vertex_buffer_index;
+  attributes[a]=(struct remesa_gears_attribute){bytes[slot[a]],resources[slot[a]]->bytes,
+   (uint64_t)vb[b]->buffer_offset+el->src_offset,el->src_stride,el->src_format};
+ }
+ const void *indices=NULL;size_t index_bytes=0;
+ if(info->index_size) {
+  if(info->has_user_indices) {
+   uint64_t n=((uint64_t)draw_info->start+draw_info->count-draw_info->count%3)*info->index_size;
+   if(n>SIZE_MAX){error=EOVERFLOW;goto done;}
+   indices=info->index.user;index_bytes=(size_t)n;
+  } else {indices=bytes[index_slot];index_bytes=resources[index_slot]->bytes;}
+ }
+ error=remesa_gears_geometry_create(info,draw_info,attr,&attributes[0],attr?&attributes[1]:NULL,
+                                   indices,index_bytes,out);
+done:
+ for(unsigned j=resource_count;j>0;j--)if(mapped[j-1])
+  s(p->screen)->device.ops->unmap(s(p->screen)->device.priv,resources[j-1]->bo,false);
+ return error;
+#else
+ (void)p;(void)info;(void)draw_info;(void)out;return ENOTSUP;
+#endif
+}
 static void stencil_ref(struct pipe_context *p,const struct pipe_stencil_ref reference)
 { (void)reference;c(p)->error=0; /* All admitted DSA states disable stencil. */ }
 static void blend_color(struct pipe_context *p,const struct pipe_blend_color *color)
@@ -915,19 +1341,28 @@ static void blend_color(struct pipe_context *p,const struct pipe_blend_color *co
  for(unsigned i=0;i<4;i++)if(!isfinite(color->color[i])){c(p)->error=EINVAL;return;}
  c(p)->error=0; /* All admitted blend states disable blending. */
 }
+/* Mesa uploads the initial polygon pattern even when stippling is disabled.
+ * Every admitted rasterizer state rejects poly_stipple_enable, so the pattern
+ * cannot affect an admitted draw. Keep the required lifecycle hook non-NULL;
+ * this neither implements stippling nor advertises additional raster caps. */
+static void polygon_stipple(struct pipe_context *p,const struct pipe_poly_stipple *pattern)
+{ c(p)->error=pattern?0:EINVAL; }
 static void sample_mask(struct pipe_context *p,unsigned mask)
 { c(p)->sample_enabled=(mask&1)!=0;c(p)->error=0; /* Single sample only. */ }
 /* Explicit CPU transfer fallback, not a GPU clear. It cannot establish GL
  * conformance: the native draw profile still clears/replaces its whole target.
  * Sync the resource writer before mapping; never synthesize a completion. */
 static int cpu_clear(struct pipe_context *p,struct pipe_resource *target,
- const union pipe_color_union *color,unsigned x,unsigned y,unsigned width,unsigned height)
+ const union pipe_color_union *color,double depth,unsigned x,unsigned y,unsigned width,unsigned height)
 {
  struct context *ctx=c(p);struct screen *sc=s(p->screen);struct remesa_color_clear region;void *ptr=NULL;int error;
  if(sc->closing)return ESHUTDOWN;
- if(!target||target->screen!=p->screen||target->target!=PIPE_TEXTURE_2D||
+ if(!target||target->screen!=p->screen||!color_storage_target(target->target)||
     !color)return ENOTSUP;
- error=remesa_prepare_color_clear(target->format,target->width0,target->height0,r(target)->stride,
+ if(target->format==PIPE_FORMAT_Z24X8_UNORM&&sc->cpu_depth24_lab)
+  error=remesa_prepare_depth24_clear(target->format,target->width0,target->height0,r(target)->stride,
+   r(target)->bytes,depth,x,y,width,height,&region);
+ else error=remesa_prepare_color_clear(target->format,target->width0,target->height0,r(target)->stride,
    r(target)->bytes,color,x,y,width,height,&region);if(error)return error;
  if(!width||!height)return 0;
  if(r(target)->maps)return EBUSY;
@@ -946,14 +1381,34 @@ static int cpu_clear(struct pipe_context *p,struct pipe_resource *target,
 static void clear(struct pipe_context *p,unsigned buffers,const struct pipe_scissor_state *scissor,
  const union pipe_color_union *color,double depth,unsigned stencil)
 {
- (void)depth;(void)stencil;
- if(!buffers){c(p)->error=0;return;}
- if(buffers!=PIPE_CLEAR_COLOR0){c(p)->error=ENOTSUP;return;}
- if(scissor&&(scissor->minx>scissor->maxx||scissor->miny>scissor->maxy||scissor->maxx>32||scissor->maxy>32)) {
-  c(p)->error=EINVAL;return;
+ (void)stencil;struct context *ctx=c(p);
+ if(s(p->screen)->gears_runtime&&buffers){
+  bool bad=(buffers&~(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))||ctx->gears_pending||ctx->gears_poisoned||!ctx->target||ctx->target->width0!=1280||ctx->target->height0!=800;
+  if(scissor&&(scissor->minx||scissor->miny||scissor->maxx!=1280||scissor->maxy!=800))bad=true;
+  if((buffers&PIPE_CLEAR_DEPTH)&&depth!=1.0)bad=true;
+  if(buffers&PIPE_CLEAR_COLOR0){if(!color)bad=true;else for(unsigned i=0;i<4;i++)if(color->f[i]!=0.0f)bad=true;}
+  if(bad){if(getenv("REMESA_GEARS_TRACE"))fprintf(stderr,"GEARS_CLEAR_REJECT buffers=%x pending=%u poisoned=%u size=%ux%u depth=%g color=%g,%g,%g,%g\n",buffers,ctx->gears_pending,ctx->gears_poisoned,ctx->target?ctx->target->width0:0,ctx->target?ctx->target->height0:0,depth,color?color->f[0]:0,color?color->f[1]:0,color?color->f[2]:0,color?color->f[3]:0);ctx->gears_poisoned=true;ctx->error=ENOTSUP;return;}
  }
- c(p)->error=cpu_clear(p,c(p)->target,color,scissor?scissor->minx:0,scissor?scissor->miny:0,
-                      scissor?scissor->maxx-scissor->minx:32,scissor?scissor->maxy-scissor->miny:32);
+ if(!buffers){ctx->error=0;return;}
+ if((buffers&~(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))||
+    ((buffers&PIPE_CLEAR_DEPTH)&&(!s(p->screen)->cpu_depth24_lab||!ctx->depth_target))||!ctx->target){ctx->error=ENOTSUP;return;}
+ unsigned w=ctx->target->width0,h=ctx->target->height0;
+ unsigned x=scissor?scissor->minx:0,y=scissor?scissor->miny:0;
+ if(scissor&&(x>scissor->maxx||y>scissor->maxy||scissor->maxx>w||scissor->maxy>h)){ctx->error=EINVAL;return;}
+ unsigned rw=scissor?scissor->maxx-x:w,rh=scissor?scissor->maxy-y:h;
+ /* Validate both plans before either attachment is written. */
+ struct remesa_color_clear plan;
+ if(buffers&PIPE_CLEAR_DEPTH){ctx->error=remesa_prepare_depth24_clear(PIPE_FORMAT_Z24X8_UNORM,w,h,
+  r(ctx->depth_target)->stride,r(ctx->depth_target)->bytes,depth,x,y,rw,rh,&plan);if(ctx->error)return;}
+ if(buffers&PIPE_CLEAR_COLOR0){ctx->error=remesa_prepare_color_clear(ctx->target->format,w,h,
+  r(ctx->target)->stride,r(ctx->target)->bytes,color,x,y,rw,rh,&plan);if(ctx->error)return;}
+ ctx->error=0;
+ if(buffers&PIPE_CLEAR_COLOR0)ctx->error=cpu_clear(p,ctx->target,color,depth,x,y,rw,rh);
+ if(!ctx->error&&(buffers&PIPE_CLEAR_DEPTH)){union pipe_color_union unused={0};
+  ctx->error=cpu_clear(p,ctx->depth_target,&unused,depth,x,y,rw,rh);} if(s(p->screen)->gears_runtime){
+  if(ctx->error)ctx->gears_poisoned=true;
+  else ctx->gears_clear_mask|=buffers;
+ }
 }
 static void clear_target(struct pipe_context *p,struct pipe_surface *surface,
  const union pipe_color_union *color,unsigned x,unsigned y,unsigned width,unsigned height,bool conditional)
@@ -962,7 +1417,73 @@ static void clear_target(struct pipe_context *p,struct pipe_surface *surface,
     surface->level||surface->first_layer||surface->last_layer||surface->nr_samples>1) {
   c(p)->error=ENOTSUP;return;
  }
- c(p)->error=cpu_clear(p,surface->texture,color,x,y,width,height);
+ c(p)->error=cpu_clear(p,surface->texture,color,0,x,y,width,height);
+}
+/* Whole-frame gears preparation never calls the legacy CPU transform/clip
+ * path. Only the existing pre-VS snapshot and typed uniform encoder run. */
+static int gears_reject(struct context *ctx,unsigned line,int error)
+{
+ if(getenv("REMESA_GEARS_TRACE"))fprintf(stderr,"GEARS_DRIVER_REJECT line=%u error=%d clear=%x poisoned=%u viewport=%g,%g,%g/%g,%g,%g invalid=%u,%u,%u,%u fixed=%u,%u,%u\n",line,error,ctx->gears_clear_mask,ctx->gears_poisoned,ctx->viewport.scale[0],ctx->viewport.scale[1],ctx->viewport.scale[2],ctx->viewport.translate[0],ctx->viewport.translate[1],ctx->viewport.translate[2],ctx->invalid_viewport,ctx->invalid_scissor,ctx->invalid_constants,ctx->invalid_elements,ctx->invalid_fixed[0],ctx->invalid_fixed[1],ctx->invalid_fixed[2]);
+ return error;
+}
+static int queue_gears(struct pipe_context *p,const struct pipe_draw_info *info,unsigned drawid,
+ const struct pipe_draw_indirect_info *indirect,const struct pipe_draw_start_count_bias *draws,unsigned count)
+{
+#ifdef REMESA_WITH_NIR
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);int error=ENOTSUP;
+ struct remesa_gears_geometry *geometry=NULL;struct remesa_gears_geometry_view view;
+ unsigned char parameters[176];size_t written=0;
+ if(ctx->gears_poisoned)return gears_reject(ctx,__LINE__,EIO);
+ if(!info||!draws||count!=1||indirect||drawid||info->mode!=MESA_PRIM_TRIANGLES||info->instance_count!=1||info->start_instance)return gears_reject(ctx,__LINE__,ENOTSUP);
+ if(!draws->count||!ctx->sample_enabled)return 0;
+ if(!ctx->target||!ctx->depth_target||ctx->target->format!=PIPE_FORMAT_B8G8R8A8_UNORM||
+    ctx->depth_target->format!=PIPE_FORMAT_Z24X8_UNORM||ctx->target->width0!=1280||ctx->target->height0!=800||
+    ctx->depth_target->width0!=1280||ctx->depth_target->height0!=800||r(ctx->target)->maps||r(ctx->depth_target)->maps||
+    r(ctx->target)->write_error||r(ctx->depth_target)->write_error||
+    (ctx->gears_clear_mask&(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))!=(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))return gears_reject(ctx,__LINE__,ENOTSUP);
+ if(ctx->invalid_viewport||ctx->invalid_scissor||ctx->invalid_constants||ctx->invalid_elements||ctx->constant_rejections[0]||ctx->constant_rejections[1])return gears_reject(ctx,__LINE__,ENOTSUP);
+ for(unsigned i=0;i<FIXED_COUNT;i++)if(ctx->invalid_fixed[i]||!ctx->bound_fixed[i])return gears_reject(ctx,__LINE__,ENOTSUP);
+ struct fixed *depth=ctx->bound_fixed[FIXED_DSA],*raster=ctx->bound_fixed[FIXED_RASTER];
+ if(!depth->depth_enabled||!depth->depth_write||depth->depth_func!=PIPE_FUNC_LESS||raster->scissor||
+    raster->cull_face!=PIPE_FACE_BACK||!raster->depth_clip_near||!raster->depth_clip_far)return gears_reject(ctx,__LINE__,ENOTSUP);
+ if(!ctx->viewport_set||!remesa_viewport_swizzle_is_identity(&ctx->viewport)||
+    ctx->viewport.scale[0]!=640.0f||ctx->viewport.scale[2]!=0.5f||
+    ctx->viewport.translate[0]!=640.0f||ctx->viewport.translate[1]!=400.0f||ctx->viewport.translate[2]!=0.5f)return gears_reject(ctx,__LINE__,ENOTSUP);
+ /* Mesa mirrors viewport Y and front-face together for bottom-origin
+  * storage. Canonicalize only this paired convention, never vertices. */
+ bool bottom_left=ctx->viewport.scale[1]==400.0f&&!raster->front_ccw;
+ bool top_left=ctx->viewport.scale[1]==-400.0f&&raster->front_ccw;
+ if((!bottom_left&&!top_left)||raster->bottom_edge_rule!=top_left)return gears_reject(ctx,__LINE__,ENOTSUP);
+ if(ctx->gears_pending&&ctx->gears_bottom_left!=bottom_left)return gears_reject(ctx,__LINE__,ENOTSUP);
+ if(!ctx->bound_vertex||!ctx->bound_fragment||ctx->bound_vertex->deleted||ctx->bound_fragment->deleted||
+    remesa_shader_program_validate(&ctx->bound_vertex->program)||remesa_shader_program_validate(&ctx->bound_fragment->program)||
+    remesa_shader_ir_gears_vertex(&ctx->bound_vertex->program.semantic))return gears_reject(ctx,__LINE__,ENOTSUP);
+ bool flat=!remesa_shader_ir_fragment_flat_color_input(&ctx->bound_fragment->program.semantic);
+ if((!flat&&remesa_shader_ir_fragment_color_input(&ctx->bound_fragment->program.semantic))||
+    ctx->bound_fragment->program.semantic.instructions[0].input_slot!=1||
+    (raster->flat&&!flat)||(flat&&raster->flat_first))return gears_reject(ctx,__LINE__,ENOTSUP);
+ error=remesa_sampler_draw_admit(ctx->samplers);if(error)return error;
+ error=remesa_texture_draw_admit(ctx->textures);if(error)return error;
+ struct pipe_draw_start_count_bias complete=*draws;complete.count-=complete.count%3;
+ if(!complete.count)return 0;
+ error=remesa_context_gears_geometry_snapshot(p,info,&complete,&geometry);if(error)goto done;
+ error=remesa_gears_geometry_inspect(geometry,&view);if(error)goto done;
+ unsigned attr=view.normal_from_attribute;
+ const struct remesa_pds_parameter_source_request source={0x20000000,131072,0x6400,attr?36u:40u,attr?40u:44u};
+ error=remesa_context_vertex_parameter_source(p,&source,parameters,sizeof(parameters),&written);if(error)goto done;
+ if(written!=source.transfer_dwords*4u){error=EPROTO;goto done;}
+ if(ctx->gears_pending&&(ctx->gears_target!=ctx->target||ctx->gears_depth!=ctx->depth_target)){error=ENOTSUP;goto done;}
+ if(!ctx->gears_pending){remesa_resource_reference(&ctx->gears_target,ctx->target);remesa_resource_reference(&ctx->gears_depth,ctx->depth_target);ctx->gears_pending=true;ctx->gears_bottom_left=bottom_left;ctx->gears_origin_valid=true;}
+ const struct remesa_gears_runtime_draw request={.vertex=&ctx->bound_vertex->program,.fragment=&ctx->bound_fragment->program,
+  .geometry=&view,.coefficients=parameters+4,.coefficient_bytes=source.coefficient_dwords*4u,
+  .width=1280,.height=800,.stride=r(ctx->target)->stride,.format=ctx->target->format,
+  .depth_target=r(ctx->depth_target)->bo,.depth_stride=r(ctx->depth_target)->stride,.depth_format=ctx->depth_target->format,
+  .flat=flat,.front_ccw=true,.bottom_left_storage=bottom_left,.clamp_vertex_color=raster->clamp_vertex_color,.cull_face=raster->cull_face};
+ error=sc->device.gears_runtime->queue(sc->device.priv,r(ctx->target)->bo,&request);
+ done:remesa_gears_geometry_destroy(geometry);return error?gears_reject(ctx,__LINE__,error):0;
+#else
+ (void)p;(void)info;(void)drawid;(void)indirect;(void)draws;(void)count;return ENOTSUP;
+#endif
 }
 static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsigned drawid,
  const struct pipe_draw_indirect_info *indirect,const struct pipe_draw_start_count_bias *draws,unsigned count)
@@ -982,13 +1503,21 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
  if(info->index_size && info->take_index_buffer_ownership && !info->has_user_indices)
   owned_index=info->index.resource;
  if(sc->closing) { err=ESHUTDOWN;goto done; }
- if(sc->device.resource_only_backend) goto done;
+ if(sc->gears_runtime){err=queue_gears(p,info,drawid,indirect,draws,count);if(err)ctx->gears_poisoned=true;goto done;}
+ if(sc->device.resource_only_backend||ctx->depth_target) goto done; /* CPU-only depth attachment never admits a draw. */
  if(!draws || count!=1 || indirect || drawid) goto done;
  /* Triangle-list assembly ignores an incomplete final primitive. Do this
   * before buffer mapping or range checks: its unused vertices/indices need
   * not be present in the supplied resources. Other modes remain unsupported. */
  if(info->mode==MESA_PRIM_TRIANGLES){complete_draw=*draws;complete_draw.count-=complete_draw.count%3;draws=&complete_draw;}
  if(!draws->count || !info->instance_count || !ctx->sample_enabled) { err=0;goto done; }
+#ifdef REMESA_WITH_NIR
+ /* A recognized flat FS cannot inherit a smooth legacy raster contract. */
+ if(ctx->bound_fragment&&!remesa_shader_ir_fragment_flat_color_input(&ctx->bound_fragment->program.semantic))goto done;
+#endif
+ /* Expanded host bindings never widen the historical GPU draw contract. */
+ if(ctx->vb_count!=1||!ctx->bound_elements||ctx->bound_elements->count!=1)goto done;
+ if(ctx->vb.buffer.resource&&!(ctx->vb.buffer.resource->bind&PIPE_BIND_VERTEX_BUFFER))goto done;
  int sampling=remesa_sampler_draw_admit(ctx->samplers);if(sampling){err=sampling;goto done;}
  sampling=remesa_texture_draw_admit(ctx->textures);if(sampling){err=sampling;goto done;}
  if(ctx->invalid_viewport || ctx->invalid_scissor || ctx->invalid_elements || ctx->invalid_constants || ctx->constant_rejections[0] || ctx->constant_rejections[1]) goto done;
@@ -1058,7 +1587,7 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
   * A real backend owns encoding, upload and PDS/USSE admission. Preparation
   * failures return before framebuffer reservation or any draw dispatch. */
 #ifdef REMESA_WITH_NIR
- if(original_shader_draw) {
+ if(original_shader_draw&&!(raster&&raster->recording_edge_proof)) {
   err=sc->device.ops->prepare_shader_programs(sc->device.priv,shader_snapshot,&shader_programs);
   if(err)goto done;
   if(!shader_programs){err=EPROTO;goto done;}
@@ -1107,6 +1636,23 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
  }
  if(packed!=REMESA_DRAW_VALIDATED) { err=packed==REMESA_DRAW_NOMEM ? ENOMEM :
      packed==REMESA_DRAW_UNSUPPORTED ? ENOTSUP : EINVAL;goto done; }
+ if(raster&&raster->recording_edge_proof) {
+  /* Never enter this model on a real backend, regardless of raster handle. */
+  if(!sc->device.offline_test_backend||sc->device.qualified_hardware_backend){err=ENOTSUP;goto done;}
+  for(unsigned i=0;i<packet->index_count;i+=3) {
+   float triangle[3][4];
+   for(unsigned v=0;v<3;v++)memcpy(triangle[v],packet->positions[packet->indices[i+v]],sizeof(triangle[v]));
+   err=remesa_prove_half_pixel_edge_independence((const float (*)[4])triangle,packet->width,packet->height);
+   if(err)goto done;
+  }
+#ifdef REMESA_WITH_NIR
+  if(original_shader_draw) {
+   err=sc->device.ops->prepare_shader_programs(sc->device.priv,shader_snapshot,&shader_programs);
+   if(err)goto done;
+   if(!shader_programs){err=EPROTO;goto done;}
+  }
+#endif
+ }
  enum remesa_pass_load load=r(ctx->target)->has_contents&&!ctx->diagnostic_discard ? REMESA_PASS_PRESERVE : REMESA_PASS_DISCARD;
  if(original_shader_draw) {
   /* Preserve the actual pre-VS data and fixed state. Passing just packet's
@@ -1157,6 +1703,7 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
  if(err && submitted) {
   /* A returned error fence may represent uncertain issuance. Never let a CPU
    * overwrite or another draw turn it into an apparently valid resource. */
+  ctx->failed_submission=true;
   r(ctx->target)->write_error=err;
   remesa_render_pass_fail(&r(ctx->target)->pass,&r(ctx->target)->ticket,err);
   if(backend) sc->device.ops->destroy_fence(sc->device.priv,backend);
@@ -1167,11 +1714,77 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
  free(shader_snapshot);
 #endif
  free(packet);free(f);ctx->error=err;
+ if(err) {
+  if(ctx->draw_rejections.failures!=UINT64_MAX)ctx->draw_rejections.failures++;
+  ctx->draw_rejections.error=err;
+ }
+}
+static int flush_gears(struct pipe_context *p)
+{
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);void *backend=NULL;int error=0;
+ if(!ctx->gears_pending)return ctx->gears_poisoned?EIO:0;
+ if(ctx->gears_poisoned)return EIO;
+ struct resource *color=r(ctx->gears_target),*depth=r(ctx->gears_depth);
+ struct pipe_fence_handle *f=calloc(1,sizeof(*f));if(!f)return ENOMEM;
+ error=resource_sync(p->screen,color,UINT64_MAX);if(!error)error=resource_sync(p->screen,depth,UINT64_MAX);
+ if(!error)error=remesa_render_pass_begin(&color->pass,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&color->ticket);
+ if(!error)error=remesa_render_pass_begin(&depth->pass,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&depth->ticket);
+ if(!error)error=remesa_render_pass_submitted(&color->pass,&color->ticket);
+ if(!error)error=remesa_render_pass_submitted(&depth->pass,&depth->ticket);
+ if(!error)error=sc->device.gears_runtime->flush(sc->device.priv,color->bo,&backend);
+ if(!error&&!backend)error=EPROTO;
+ if(error){
+  ctx->failed_submission=ctx->gears_poisoned=true;color->write_error=depth->write_error=error;
+  remesa_render_pass_fail(&color->pass,&color->ticket,error);remesa_render_pass_fail(&depth->pass,&depth->ticket,error);
+  if(backend)sc->device.ops->destroy_fence(sc->device.priv,backend);
+  free(f);return error;
+ }
+ f->refs=1;f->screen=sc;f->backend=backend;screen_hold(sc);
+ color->has_contents=depth->has_contents=true;
+ fence_ref(p->screen,&color->writer,f);fence_ref(p->screen,&depth->writer,f);fence_ref(p->screen,&ctx->last,f);fence_ref(p->screen,&f,NULL);
+ ctx->gears_pending=false;ctx->gears_clear_mask=0;
+ remesa_resource_reference(&ctx->gears_target,NULL);remesa_resource_reference(&ctx->gears_depth,NULL);
+ return 0;
 }
 static void flush(struct pipe_context *p,struct pipe_fence_handle **f,unsigned flags)
-{ (void)flags;if(f) fence_ref(p->screen,f,c(p)->error ? NULL : c(p)->last); }
+{
+ (void)flags;
+ if(s(p->screen)->gears_runtime){int error=flush_gears(p);if(error)c(p)->error=error;}
+ /* A rejected, unissued draw does not cancel earlier work. Preserve its
+  * real fence even when validation or a resource poll reports an error.
+  * Conversely an uncertain failed submission must never be represented by
+  * an older successful fence. That condition remains sticky for this context. */
+ if(f)fence_ref(p->screen,f,c(p)->failed_submission ? NULL : c(p)->last);
+}
 static void destroy_context(struct pipe_context *p)
-{ struct context *ctx=c(p);struct screen *sc=s(p->screen);while(ctx->transfers)unmap(p,&ctx->transfers->base);remesa_resource_reference(&ctx->vb.buffer.resource,NULL);remesa_resource_reference(&ctx->target,NULL);remesa_resource_reference(&ctx->fragment_constants,NULL);free(ctx->constant_snapshot);fence_ref(p->screen,&ctx->last,NULL);while(ctx->fragments){struct fragment *f=ctx->fragments;ctx->fragments=f->next;free(f);}while(ctx->vertices){struct vertex *v=ctx->vertices;ctx->vertices=v->next;free(v);}while(ctx->fixed_states){struct fixed *state=ctx->fixed_states;ctx->fixed_states=state->next;free(state);}while(ctx->elements){struct elements *e=ctx->elements;ctx->elements=e->next;free(e);}remesa_sampler_bank_destroy(ctx->samplers);remesa_texture_binding_close(ctx->textures);free(ctx);screen_drop(sc); }
+{ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(ctx->gears_pending){
+  int error=sc->device.gears_runtime->cancel(sc->device.priv,r(ctx->gears_target)->bo);
+  if(error){ctx->error=error;ctx->failed_submission=true;return;}
+  ctx->gears_pending=false;
+ }
+ remesa_resource_reference(&ctx->gears_target,NULL);remesa_resource_reference(&ctx->gears_depth,NULL);
+#ifdef REMESA_WITH_NIR
+ /* Release upload-owned map leases and references while the context callbacks
+  * and screen owner are still live, including partial construction failure. */
+ if(p->const_uploader)u_upload_destroy(p->const_uploader);
+ if(p->stream_uploader)u_upload_destroy(p->stream_uploader);
+#endif
+ while(ctx->transfers)unmap(p,&ctx->transfers->base);
+ remesa_resource_reference(&ctx->vb.buffer.resource,NULL);
+ remesa_resource_reference(&ctx->second_vb.buffer.resource,NULL);
+ remesa_resource_reference(&ctx->target,NULL);
+ remesa_resource_reference(&ctx->depth_target,NULL);
+ remesa_resource_reference(&ctx->fragment_constants,NULL);
+ remesa_resource_reference(&ctx->vertex_constants,NULL);free(ctx->vertex_constant_snapshot);
+ free(ctx->constant_snapshot);fence_ref(p->screen,&ctx->last,NULL);
+ while(ctx->fragments){struct fragment *f=ctx->fragments;ctx->fragments=f->next;free(f);}
+ while(ctx->vertices){struct vertex *v=ctx->vertices;ctx->vertices=v->next;free(v);}
+ while(ctx->fixed_states){struct fixed *state=ctx->fixed_states;ctx->fixed_states=state->next;free(state);}
+ while(ctx->elements){struct elements *e=ctx->elements;ctx->elements=e->next;free(e);}
+ remesa_sampler_bank_destroy(ctx->samplers);remesa_texture_binding_close(ctx->textures);
+ free(ctx);screen_drop(sc);
+}
 static struct pipe_context *create_context(struct pipe_screen *p,void *priv,unsigned flags)
 {
  /* PREFER_THREADED is a hint; NO_LOD_BIAS adds no unsupported sampler state.
@@ -1185,6 +1798,7 @@ static struct pipe_context *create_context(struct pipe_screen *p,void *priv,unsi
  ctx->base.transfer_flush_region=flush_region;
  ctx->base.buffer_subdata=buffer_subdata;ctx->base.texture_subdata=texture_subdata;
  ctx->base.resource_copy_region=copy_region;
+ ctx->base.invalidate_resource=invalidate_resource;
  ctx->base.clear_texture=clear_texture;
  ctx->base.set_vertex_buffers=set_vb;ctx->base.create_vertex_elements_state=create_elements;
  ctx->base.bind_vertex_elements_state=bind_elements;ctx->base.delete_vertex_elements_state=delete_elements;
@@ -1199,10 +1813,23 @@ static struct pipe_context *create_context(struct pipe_screen *p,void *priv,unsi
  ctx->base.create_rasterizer_state=create_raster;ctx->base.bind_rasterizer_state=bind_raster;ctx->base.delete_rasterizer_state=delete_raster;
  ctx->base.set_stencil_ref=stencil_ref;ctx->base.set_blend_color=blend_color;
  ctx->base.set_constant_buffer=constant_buffer;ctx->base.set_sample_mask=sample_mask;
+ ctx->base.set_polygon_stipple=polygon_stipple;
  ctx->base.create_sampler_state=create_sampler;ctx->base.bind_sampler_states=bind_samplers;ctx->base.delete_sampler_state=delete_sampler;
- ctx->base.create_sampler_view=create_sampler_view;ctx->base.sampler_view_destroy=destroy_sampler_view;ctx->base.set_sampler_views=set_sampler_views;
+ ctx->base.create_sampler_view=create_sampler_view;ctx->base.sampler_view_destroy=destroy_sampler_view;ctx->base.sampler_view_release=release_sampler_view;ctx->base.set_sampler_views=set_sampler_views;
  ctx->base.set_viewport_states=viewport_state;ctx->base.set_scissor_states=scissor_state;
- ctx->base.set_framebuffer_state=framebuffer;ctx->base.draw_vbo=draw;ctx->base.flush=flush;screen_hold(s(p));return &ctx->base;
+ ctx->base.set_framebuffer_state=framebuffer;ctx->base.draw_vbo=draw;ctx->base.flush=flush;screen_hold(s(p));
+#ifdef REMESA_WITH_NIR
+ /* Standard Mesa-owned uploads for the production NIR context. Keep stream
+  * and constant backing separate; no persistent mappings or GPU capability
+  * is implied. Start at one page, sufficient for the restricted draw profile. */
+ ctx->base.stream_uploader=u_upload_create(&ctx->base,4096,
+  PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER,PIPE_USAGE_STREAM,0);
+ if(!ctx->base.stream_uploader){destroy_context(&ctx->base);return NULL;}
+ ctx->base.const_uploader=u_upload_create(&ctx->base,4096,
+  PIPE_BIND_CONSTANT_BUFFER,PIPE_USAGE_STREAM,0);
+ if(!ctx->base.const_uploader){destroy_context(&ctx->base);return NULL;}
+#endif
+ return &ctx->base;
 }
 static void destroy_screen(struct pipe_screen *p)
 { if(!s(p)->closing) { s(p)->closing=true;screen_drop(s(p)); } }
@@ -1239,6 +1866,33 @@ int remesa_screen_collect(struct pipe_screen *p)
 }
 struct pipe_screen *remesa_screen_create(struct remesa_device *device)
 { return remesa_screen_create_owned(device,NULL); }
+int remesa_context_gears_bottom_left(struct pipe_context *p,bool *bottom_left)
+{
+ if(!p||p->draw_vbo!=draw||!bottom_left||!context_output_valid(c(p),bottom_left,sizeof(*bottom_left)))return EINVAL;
+ if(!s(p->screen)->gears_runtime||!c(p)->gears_origin_valid||c(p)->gears_poisoned)return ENOTSUP;
+ *bottom_left=c(p)->gears_bottom_left;return 0;
+}
+int remesa_screen_enable_gears_runtime(struct pipe_screen *p)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->destroy!=destroy_screen)return EINVAL;
+ struct screen *sc=s(p);const struct remesa_gears_runtime_ops *ops=sc->device.gears_runtime;
+ if(!ops||!ops->queue||!ops->flush||!ops->cancel||sc->device.resource_only_backend||
+    sc->device.retained_fragment_carrier||sc->device.offline_test_backend==sc->device.qualified_hardware_backend)return ENOTSUP;
+ if(sc->closing||sc->refs!=1||sc->resource_cookie)return EBUSY;
+ sc->gears_runtime=true;sc->cpu_depth24_lab=true;set_capabilities(sc);return 0;
+#else
+ (void)p;return ENOTSUP;
+#endif
+}
+int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *p)
+{
+ if(!p||p->destroy!=destroy_screen)return EINVAL;
+ struct screen *sc=s(p);
+ if(!sc->device.offline_test_backend||sc->device.qualified_hardware_backend||sc->device.resource_only_backend)return ENOTSUP;
+ if(sc->closing||sc->refs!=1||sc->resource_cookie)return EBUSY;
+ sc->cpu_depth24_lab=true;set_capabilities(sc);return 0;
+}
 int remesa_resource_wait_writer(struct pipe_context *ctx,struct pipe_resource *res,uint64_t timeout)
 {
  if(!ctx || ctx->draw_vbo!=draw || !res || res->screen!=ctx->screen) return EINVAL;
@@ -1277,7 +1931,59 @@ int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve)
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->cpu_clears : 0; }
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->cpu_copies : 0; }
 int remesa_context_error(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->error : EINVAL; }
+int remesa_context_draw_rejections(struct pipe_context *p,struct remesa_draw_rejection_status *out)
+{
+ if(!p||p->draw_vbo!=draw||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ *out=c(p)->draw_rejections;return 0;
+}
+int remesa_drawable_buffers_replace(struct pipe_screen *p,uint32_t width,uint32_t height,
+ bool double_buffer,bool depth,struct remesa_drawable_buffers *out)
+{
+ if(!p||p->resource_create!=create_resource||!out)return EINVAL;
+ if(s(p)->closing)return ESHUTDOWN;
+ if((out->front&&out->front->screen!=p)||(out->back&&out->back->screen!=p)||
+    (!out->front&&out->back)||(out->front&&out->front==out->back))return EINVAL;
+ if(out->generation==UINT64_MAX)return EOVERFLOW;
+ /* Storage planning does not authorize new hardware surface state. */
+ if(width!=32||height!=32||depth)return ENOTSUP;
+ struct remesa_drawable_layout layout;
+ uint64_t budget=s(p)->device.resource_limits.max_resource_bytes;
+ if(!budget)budget=UINT64_C(64)*1024*1024;
+ int error=remesa_drawable_layout(&s(p)->device.resource_limits,width,height,
+  double_buffer,0,budget>SIZE_MAX?SIZE_MAX:(size_t)budget,&layout);
+ if(error)return error;
+ struct pipe_resource t={.target=PIPE_TEXTURE_2D,.format=PIPE_FORMAT_B8G8R8A8_UNORM,
+  .width0=width,.height0=height,.depth0=1,.array_size=1,.bind=PIPE_BIND_RENDER_TARGET};
+ struct pipe_resource *fresh[2]={0};
+ for(unsigned i=0;i<layout.count;i++) {
+  fresh[i]=p->resource_create(p,&t);
+  if(!fresh[i]){
+   for(unsigned j=0;j<i;j++)remesa_resource_reference(&fresh[j],NULL);
+   return ENOMEM;
+  }
+ }
+ struct remesa_drawable_buffers previous=*out;
+ *out=(struct remesa_drawable_buffers){.front=fresh[0],.back=fresh[1],
+  .width=width,.height=height,.generation=previous.generation+1};
+ remesa_drawable_buffers_release(&previous);return 0;
+}
+void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
+{
+ if(!out)return;
+ remesa_resource_reference(&out->front,NULL);remesa_resource_reference(&out->back,NULL);
+ memset(out,0,sizeof(*out));
+}
 #else
+int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}
+int remesa_context_gears_bottom_left(struct pipe_context *p,bool *b){(void)p;(void)b;return ENOTSUP;}
+int remesa_context_gears_geometry_snapshot(struct pipe_context *p,const struct pipe_draw_info *i,
+ const struct pipe_draw_start_count_bias *d,struct remesa_gears_geometry **o)
+{(void)p;(void)i;(void)d;(void)o;return ENOTSUP;}
+int remesa_context_vertex_parameter_source(struct pipe_context *p,const struct remesa_pds_parameter_source_request *r,void *o,size_t n,size_t *w)
+{(void)p;(void)r;(void)o;(void)n;(void)w;return ENOTSUP;}
+int remesa_drawable_buffers_replace(struct pipe_screen *p,uint32_t w,uint32_t h,bool b,bool z,struct remesa_drawable_buffers *o)
+{(void)p;(void)w;(void)h;(void)b;(void)z;(void)o;return ENOTSUP;}
+void remesa_drawable_buffers_release(struct remesa_drawable_buffers *o) {(void)o;}
 int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve) { (void)p;(void)preserve;return ENOTSUP; }
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { (void)p;return 0; }
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *p) { (void)p;return 0; }

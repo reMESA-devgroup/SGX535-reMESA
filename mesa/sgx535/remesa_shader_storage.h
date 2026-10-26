@@ -29,7 +29,10 @@ void remesa_shader_cookie_pool_finish(struct remesa_shader_cookie_pool *);
 enum remesa_shader_storage_format {
  REMESA_SHADER_STORAGE_HOST_CPU_RECORDS = 1,
  /* Original host DATA serialization; four-byte words, not instructions. */
- REMESA_SHADER_STORAGE_HOST_PDS_DATA = 2
+ REMESA_SHADER_STORAGE_HOST_PDS_DATA = 2,
+ /* Original CPU descriptor-class CODE fragments and their known-bit masks.
+  * Missing initial/final instructions prohibit executable qualification. */
+ REMESA_SHADER_STORAGE_HOST_PDS_STRUCTURE = 3
 };
 enum remesa_shader_storage_status {
  REMESA_SHADER_STORAGE_CANDIDATE = 1

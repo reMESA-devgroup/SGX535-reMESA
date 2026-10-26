@@ -1,0 +1,466 @@
+{
+  "GPU_operations": 0,
+  "remote_calls": 0,
+  "scope": "Actual input authentication and source lifetime code with fake provider/MMIO/task/lock callbacks; not GPU proof",
+  "tests": [
+    {
+      "name": "native-nohash-inputs-build",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_nohash_inputs.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_grammar.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-native"
+      ]
+    },
+    {
+      "name": "native-nohash-inputs",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-native",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile"
+      ]
+    },
+    {
+      "name": "native-nohash-source-build",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-Wno-unused-parameter",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_source.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_capsule.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_source_guard.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native"
+      ]
+    },
+    {
+      "name": "native-source-twoframes",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "twoframes"
+      ]
+    },
+    {
+      "name": "native-source-pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "pending"
+      ]
+    },
+    {
+      "name": "native-source-producer",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "producer"
+      ]
+    },
+    {
+      "name": "native-source-wrongtask",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "wrongtask"
+      ]
+    },
+    {
+      "name": "native-source-latepending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "latepending"
+      ]
+    },
+    {
+      "name": "native-source-overflow",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "overflow"
+      ]
+    },
+    {
+      "name": "native-source-wrongseq",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "wrongseq"
+      ]
+    },
+    {
+      "name": "native-source-terminalpending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "terminalpending"
+      ]
+    },
+    {
+      "name": "native-source-nohash",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "nohash"
+      ]
+    },
+    {
+      "name": "native-source-nohash_wrongledger",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "nohash_wrongledger"
+      ]
+    },
+    {
+      "name": "native-source-nohash_wrongphase",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "nohash_wrongphase"
+      ]
+    },
+    {
+      "name": "native-source-nohash_pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-native",
+        "nohash_pending"
+      ]
+    },
+    {
+      "name": "ubsan-nohash-inputs-build",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_nohash_inputs.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_grammar.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-ubsan"
+      ]
+    },
+    {
+      "name": "ubsan-nohash-inputs",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-ubsan",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile"
+      ]
+    },
+    {
+      "name": "ubsan-nohash-source-build",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "-Wno-unused-parameter",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_source.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_capsule.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_source_guard.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan"
+      ]
+    },
+    {
+      "name": "ubsan-source-twoframes",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "twoframes"
+      ]
+    },
+    {
+      "name": "ubsan-source-pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "pending"
+      ]
+    },
+    {
+      "name": "ubsan-source-producer",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "producer"
+      ]
+    },
+    {
+      "name": "ubsan-source-wrongtask",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "wrongtask"
+      ]
+    },
+    {
+      "name": "ubsan-source-latepending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "latepending"
+      ]
+    },
+    {
+      "name": "ubsan-source-overflow",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "overflow"
+      ]
+    },
+    {
+      "name": "ubsan-source-wrongseq",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "wrongseq"
+      ]
+    },
+    {
+      "name": "ubsan-source-terminalpending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "terminalpending"
+      ]
+    },
+    {
+      "name": "ubsan-source-nohash",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "nohash"
+      ]
+    },
+    {
+      "name": "ubsan-source-nohash_wrongledger",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "nohash_wrongledger"
+      ]
+    },
+    {
+      "name": "ubsan-source-nohash_wrongphase",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "nohash_wrongphase"
+      ]
+    },
+    {
+      "name": "ubsan-source-nohash_pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-ubsan",
+        "nohash_pending"
+      ]
+    },
+    {
+      "name": "i386-nohash-inputs-build",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_nohash_inputs.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_grammar.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-i386"
+      ]
+    },
+    {
+      "name": "i386-nohash-inputs",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-inputs-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile"
+      ]
+    },
+    {
+      "name": "i386-nohash-source-build",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "-Wno-unused-parameter",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_source.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_capsule.c",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_source_guard.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386"
+      ]
+    },
+    {
+      "name": "i386-source-twoframes",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "twoframes"
+      ]
+    },
+    {
+      "name": "i386-source-pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "pending"
+      ]
+    },
+    {
+      "name": "i386-source-producer",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "producer"
+      ]
+    },
+    {
+      "name": "i386-source-wrongtask",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "wrongtask"
+      ]
+    },
+    {
+      "name": "i386-source-latepending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "latepending"
+      ]
+    },
+    {
+      "name": "i386-source-overflow",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "overflow"
+      ]
+    },
+    {
+      "name": "i386-source-wrongseq",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "wrongseq"
+      ]
+    },
+    {
+      "name": "i386-source-terminalpending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "terminalpending"
+      ]
+    },
+    {
+      "name": "i386-source-nohash",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "nohash"
+      ]
+    },
+    {
+      "name": "i386-source-nohash_wrongledger",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "nohash_wrongledger"
+      ]
+    },
+    {
+      "name": "i386-source-nohash_wrongphase",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "nohash_wrongphase"
+      ]
+    },
+    {
+      "name": "i386-source-nohash_pending",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/test-nohash-source-i386",
+        "nohash_pending"
+      ]
+    }
+  ]
+}

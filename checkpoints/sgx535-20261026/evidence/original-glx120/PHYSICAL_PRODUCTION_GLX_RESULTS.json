@@ -1,0 +1,54 @@
+{
+  "status": "PRODUCTION_NOHASH_ORIGINAL_GLX_120_AGGREGATE_FRAMES_PHYSICAL_PASS",
+  "boot": "21c326de-c4c8-4607-ab26-9331fb358254",
+  "dimensions": [
+    1280,
+    800
+  ],
+  "client_sha256": "159aa90de37785038490ff51bb5d7de86f37d81c129fc8090e13f6687713dc37",
+  "manifest_sha256": "f51513d1b452d6d48a35ecba0cddf24959a1b9116ac0a2a8980745aa379aeb2a",
+  "notes": {
+    "gma500_gfx": "5d0636df89a43469b3737e61d7c89662186c5b2bf7dec720e6ffa0a7b41640c5",
+    "sgx535_provenance": "5fada73a6db16bd944cbdafc6e90fae7547eef2be66d26657dddc20b801aaec7"
+  },
+  "engine_final": {
+    "frames": 120,
+    "GPU_submissions": 120,
+    "queued": 0,
+    "maps": 1,
+    "host_bos": 4,
+    "fences": 1,
+    "legacy_submits": 0,
+    "error": 0,
+    "offline": 0
+  },
+  "original_glxgears_FPS_samples": [
+    {
+      "frames": 40,
+      "seconds": 5.1,
+      "FPS": 7.912
+    },
+    {
+      "frames": 45,
+      "seconds": 5.0,
+      "FPS": 8.982
+    }
+  ],
+  "archived_GPU_receipts": 0,
+  "archived_raw_frames": 0,
+  "capture_empty": true,
+  "evidence_scope": "Runtime aggregate120 GPU submissions and clean close; no per-frame receipt/raw/archive proof. Separate physically qualified S checks exact historical COLOR silhouette, COLOR/Z co-coverage and clear background over whole image, plus nearest-depth/visible-gear stable interiors. Old wrong Z-footprint gate remains failed/preserved; not full GL shading/precision conformance.",
+  "separate_single_clear_qualification": {
+    "path": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/PHYSICAL_SINGLE_CLEAR_RESULTS.json",
+    "offline_artifact_sha256": "29a53b1a5c48a1fad91ee9cc375bd1c505712ad0fbf8ea4d78ed38cd4d93751a",
+    "boot": "16e7d545-d940-4c91-8e80-f42d0fed873e",
+    "operations": 6,
+    "full_RAW_approval": false,
+    "raw_Z_byte_exact": false,
+    "old_Z_footprint_failure_preserved": true,
+    "scope": "Whole-image COLOR/Z co-coverage and stable-reference qualification; old raw/oracles unmodified, no full GL/LAB approval"
+  },
+  "LAB_approval": false,
+  "unbounded_continuity_qualified": false,
+  "fps_target_claim": "Only original stdout samples establish FPS; no10/20/30/60 target is inferred from count120."
+}

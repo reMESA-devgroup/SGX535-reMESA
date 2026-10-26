@@ -1,0 +1,5 @@
+GEARS_PROFILE FAST; FAST is not LAB approval
+GEARS_INSTALL error=0 CPU_RECORD_ONLY=0 GPU_submissions=0; full-frame physical qualification still required
+GEARS_PROFILE_BOUND_REACHED swaps=120 signal=0; inspect receipts/pixels before claiming success
+GEARS_ENGINE_FINAL frames=120 GPU_submissions=120 queued=0 maps=1 host_bos=4 fences=1 legacy_submits=0 error=0 offline=0
+GEARS_BOOTSTRAP_CLOSE error=0 offline=0

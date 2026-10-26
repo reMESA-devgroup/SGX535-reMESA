@@ -1,0 +1,7 @@
+from pathlib import Path
+import subprocess,json
+D=Path(__file__).resolve().parent;O=D.parent;M=O/'phase9-real-mesa-20261008';Q=O/'phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386';rows=[]
+for mode,cc,flags,runner in [('native','cc',['-O2'],[]),('ubsan','cc',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'],[]),('i386',str(M/'wrappers/cc'),['-O2','-static','-march=i486'],[str(Q)])]:
+ cmd=[cc,'-std=c99','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-misleading-indentation','-I'+str(D/'tests'),'-I/home/gama/sgx535-gfx/include',*flags,str(D/'tests/test_pte_provider.c'),'-o',str(D/('test-pte-provider-'+mode))];p=subprocess.run(cmd,capture_output=True);(D/(mode+'-pte-provider-build.log')).write_bytes(p.stdout+p.stderr);assert not p.returncode,p.stderr.decode()
+ p=subprocess.run([*runner,str(D/('test-pte-provider-'+mode))],capture_output=True);(D/(mode+'-pte-provider-run.log')).write_bytes(p.stdout+p.stderr);assert not p.returncode,p.stderr.decode();print(mode,p.stdout.decode().strip(),flush=True);rows.append({'mode':mode,'command':cmd,'exit':p.returncode,'stdout':p.stdout.decode()})
+(D/'PTE_PROVIDER_TEST_RESULTS.json').write_text(json.dumps({'status':'PASS','GPU_operations':0,'remote_calls':0,'scope':'Actual provider function routing/quarantine with synthetic MMU shim; actual MMU batch separately tested','tests':rows},indent=2)+'\n')

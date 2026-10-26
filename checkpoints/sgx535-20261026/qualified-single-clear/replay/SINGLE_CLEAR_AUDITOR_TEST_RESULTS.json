@@ -1,0 +1,24 @@
+{
+  "status": "CPU_SYNTHETIC_SINGLE_CLEAR_AUDITOR_PASS",
+  "GPU_operations": 0,
+  "fixture": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/synthetic-single-clear-wrqc0349",
+  "LESS_depth_and_gear_class_fixture_accepted_with_raw_FALSE": true,
+  "positive_FINISH": 6,
+  "positive_STAGE": 72,
+  "TA_EPERR_refusals": 4,
+  "static_EPERR_refusals": 4,
+  "PDS_EKEYREJECTED_with_unchanged_page": 1,
+  "tamper_rejected": [
+    "frame-000002-receipt.bin",
+    "frame-000003-input-role1.bin",
+    "frame-000001-color.bin",
+    "frame-000001-color.bin",
+    "frame-000001-z.bin",
+    "negative-pds-after.bin",
+    "ta-role7-after4-lazy.bin",
+    "ta-role8-after5-full-sync.bin",
+    "owned expected oracle"
+  ],
+  "synthetic_flag_mandatory": true,
+  "scope": "Fabricated journal and counters, synthetic nearest-depth stable interiors over historical coverage; no new GPU proof"
+}

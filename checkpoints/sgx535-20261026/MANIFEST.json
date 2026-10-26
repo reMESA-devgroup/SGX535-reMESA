@@ -1,0 +1,2117 @@
+{
+  "scope": "Source/data/verification checkpoint; generated host binaries and raw framebuffer archives remain at their recorded absolute artifact paths",
+  "files": [
+    {
+      "path": "qualified-single-clear/module/Makefile",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/Makefile",
+      "bytes": 3968,
+      "sha256": "6ab5c8c5819106db5894f2c0f81df55389bf2d3f3a45a0efa4cf0f8aabdbfd9e"
+    },
+    {
+      "path": "qualified-single-clear/module/Module.symvers",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/Module.symvers",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "qualified-single-clear/module/accel_2d.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/accel_2d.c",
+      "bytes": 9480,
+      "sha256": "2de5bef67e6813fa2f238a1792fab42bd5dbf8942273ba5a462bc24e3e7a5b7e"
+    },
+    {
+      "path": "qualified-single-clear/module/backlight.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/backlight.c",
+      "bytes": 2076,
+      "sha256": "995720191e06a74df2cdb80a1bf8d77fe49aa9dd38e60139dcd15f516be63e1d"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3.c",
+      "bytes": 27851,
+      "sha256": "ac0cb3022e1088f19170de394b2d2dd55e0f780f6c94c5538341ac2ff88834b7"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3.h",
+      "bytes": 2064,
+      "sha256": "053b06c0e36bdae388f0624f53aeece7e3e19b27c9ad12c81fc90d2281870ca9"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3_dispatch.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3_dispatch.c",
+      "bytes": 8392,
+      "sha256": "b12a4d539a8566cec121388e996ed519346ebfa25941d9dc3467a6e8bf3942c4"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3_impl.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3_impl.h",
+      "bytes": 10524,
+      "sha256": "e124120302a4ea334bca558e7cd168ac2ff9fefdbc7579a01ad1d6d915b6d7db"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3_portable.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3_portable.c",
+      "bytes": 5991,
+      "sha256": "4ec805d950c27f44d7454070b8632a252428d22d2ff8b6bb106ac8888a5020c7"
+    },
+    {
+      "path": "qualified-single-clear/module/blake3_sse2.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blake3_sse2.c",
+      "bytes": 21005,
+      "sha256": "51194fff1b0e9cb79f4db6fc148a3b34f683ca6ec3a260d66166e0f7d5b7012e"
+    },
+    {
+      "path": "qualified-single-clear/module/blitter.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blitter.c",
+      "bytes": 1004,
+      "sha256": "8a829ea614c78dee1bc5fc3995121974b281988372e85ac877e7c6979cc3ec6c"
+    },
+    {
+      "path": "qualified-single-clear/module/blitter.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/blitter.h",
+      "bytes": 317,
+      "sha256": "6012ad2f5f093d76a2d2e7252a30065d6a3d65e0cdb63c0dd70110e17a0d9f5a"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_device.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_device.c",
+      "bytes": 16219,
+      "sha256": "3559ff5b4a58d051a1ca9d51b8bc30942c94afb4c644312dfa31692bb3df8c5e"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_device.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_device.h",
+      "bytes": 876,
+      "sha256": "7b589e4244783323361330aaee7c856f9f853f8b70457b8f6a0bf4b29cbe058f"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_intel_crt.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_intel_crt.c",
+      "bytes": 8325,
+      "sha256": "71989796ad4d32c56b732db233e7adc45784cdaf50106972ada8d43d00d7cac0"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_intel_display.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_intel_display.c",
+      "bytes": 26076,
+      "sha256": "a356563c7378d2127fef40979aa022422c5bfff1d5f700cd6802520c859ce50d"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_intel_dp.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_intel_dp.c",
+      "bytes": 56879,
+      "sha256": "e0943a581f143894a9205619f71e2ec356f7c4882345001bfff7a462143929e0"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_intel_hdmi.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_intel_hdmi.c",
+      "bytes": 10292,
+      "sha256": "a691262f59c69a5aed8e37490035dc44f5942a5c2cb3b76876b8f8bbbda1078a"
+    },
+    {
+      "path": "qualified-single-clear/module/cdv_intel_lvds.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/cdv_intel_lvds.c",
+      "bytes": 18194,
+      "sha256": "68fcae5e139668dcb945739e95586c62439ddcb394043aa6ca149a8b94807c6b"
+    },
+    {
+      "path": "qualified-single-clear/module/color_mmap.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/color_mmap.inc",
+      "bytes": 3345,
+      "sha256": "5eb5a84631eb54897452451eb5789f012864baaac41a6764e1514c8e56ffdcb6"
+    },
+    {
+      "path": "qualified-single-clear/module/experimental_fragment_constant.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/experimental_fragment_constant.h",
+      "bytes": 1245,
+      "sha256": "8b1c0316f351c1624f151e3a1dfe46e237081d1862d9d4c7fa98413a32f440a7"
+    },
+    {
+      "path": "qualified-single-clear/module/experimental_vertex_position.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/experimental_vertex_position.h",
+      "bytes": 2685,
+      "sha256": "76b4b3b293793445fc1a383ad5b1ee3870726c227f3cd5cc9d4c7e5bdb7a2d63"
+    },
+    {
+      "path": "qualified-single-clear/module/framebuffer.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/framebuffer.c",
+      "bytes": 16950,
+      "sha256": "ec0a8e81d02e6246600e14ed112bd3224ec07db7ee440e78bcae53b4b01541b6"
+    },
+    {
+      "path": "qualified-single-clear/module/framebuffer.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/framebuffer.h",
+      "bytes": 303,
+      "sha256": "7518d4e7e8477ea4d112ee0693753ccb52069acfbd241dd0c32e46627424bd80"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_capsule.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_capsule.c",
+      "bytes": 5311,
+      "sha256": "4b0400f35e5674776d0a6ed92d87eb420f1db9f38a1f42dab07c9af3dc7127db"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_capsule.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_capsule.h",
+      "bytes": 2069,
+      "sha256": "f8cd44c2c2d5ad8f3a4af8d3b434f2dbfa2133b255fb03def98fbfad36692cac"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_fixed_io.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_fixed_io.c",
+      "bytes": 1782,
+      "sha256": "b6edb5e886b48ba9054f9c008283e7862510809b82f4e85cca6dade56ce06343"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_fixed_io.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_fixed_io.h",
+      "bytes": 788,
+      "sha256": "5189a82db12c20f9a6d243a03c7819636a8e9dbd7acf03baf1f2d12fdc446718"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_fixed_service.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_fixed_service.c",
+      "bytes": 16979,
+      "sha256": "ac4acc665ccd46b27dbf61fc1ccf07ba56fba2153dc0ce3820f0e2361880dd2e"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_fixed_service.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_fixed_service.h",
+      "bytes": 6206,
+      "sha256": "ece30da13bb6e18cac84661988ea86280cfcbec8062a029f10e8aa0968b76576"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_kernel_contract.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_kernel_contract.c",
+      "bytes": 46670,
+      "sha256": "b2c69c09ac0180e906b3a0b7e035a0e85ce41452f7fe5af5a99fe6ab4b6786e5"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_kernel_contract.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_kernel_contract.h",
+      "bytes": 13553,
+      "sha256": "743de8e634d9cba0e47d331374d71585841997d95834b91cbff860342e199a97"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_kernel_initial.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_kernel_initial.inc",
+      "bytes": 7162,
+      "sha256": "bea8ffb63a0635cbb44363ad8d500ead22fba6fd11d21eeaf3a217439c0f6d2c"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_kernel_relocations.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_kernel_relocations.inc",
+      "bytes": 5017,
+      "sha256": "9dcb3b5166429b38527cd611680892eef11f05b6670dba4358f2659c20b9f123"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_source_guard.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_source_guard.c",
+      "bytes": 5518,
+      "sha256": "ea7a096e1770ddc06f5252a15df395a0087b03e4822d52ed3def61224e39df1c"
+    },
+    {
+      "path": "qualified-single-clear/module/frozen_source_guard.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/frozen_source_guard.h",
+      "bytes": 2975,
+      "sha256": "dac28a74cd025457d7cec1849301c6012ce218ecfc4feb09cbb4c51f36544322"
+    },
+    {
+      "path": "qualified-single-clear/module/gears_visible_gate.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gears_visible_gate.h",
+      "bytes": 537,
+      "sha256": "c988bcfe7107f86c44f2dbe68cc611121e1a1f7b67f284475a8f2c822022ee91"
+    },
+    {
+      "path": "qualified-single-clear/module/gem.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gem.c",
+      "bytes": 5097,
+      "sha256": "2e47b9c3df078c49693dbee1f82e6660cb76a876db0ad3156ee4091c999eca43"
+    },
+    {
+      "path": "qualified-single-clear/module/gem.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gem.h",
+      "bytes": 428,
+      "sha256": "bf4eed56193a4324709b2bf590bedaa05cf36f69eabb1890b67c862365d2d36c"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_bo_owner.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_bo_owner.c",
+      "bytes": 16216,
+      "sha256": "75f3b845028d37aba45c6efb2ecc38bbe15031d13ddf2c4890ced9f10e108674"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_bo_owner.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_bo_owner.h",
+      "bytes": 2352,
+      "sha256": "aa7bc000035edfc8eac4038be179cd8da7e0bd523552678c18df93451f110e59"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_capsule_observer.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_capsule_observer.c",
+      "bytes": 19375,
+      "sha256": "7dbe357b5e5e564b6133dcd73a09d96c6df33fce7c8716efec11eac3cfa6bb68"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_capsule_observer.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_capsule_observer.h",
+      "bytes": 3031,
+      "sha256": "72ce616c69c08d64fbf72ef12c13c854bb284b3eb248efe3cb404d50a732d04c"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_fixed_backend.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_fixed_backend.c",
+      "bytes": 19745,
+      "sha256": "12d908c2b99c6f89eff92b9b1c69b7d0779ca7c430bfc14347c5cc67e476afd7"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_fixed_backend.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_fixed_backend.h",
+      "bytes": 1557,
+      "sha256": "97c2f97e00d61970195b79cb7ddb4acc1a5c4b314c739f707ded12df3cc1260f"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_fixed_uapi.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_fixed_uapi.h",
+      "bytes": 760,
+      "sha256": "04dd2080deeb0056a366546fe27faddbdeff6c1657a2471c96e39749dc080420"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_native_admission.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_native_admission.h",
+      "bytes": 761,
+      "sha256": "0f6071a8f7e87c3ce175289bd726252232a649a816b804208747bb49b0361a4b"
+    },
+    {
+      "path": "qualified-single-clear/module/gma500_source_snapshot.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma500_source_snapshot.h",
+      "bytes": 1443,
+      "sha256": "61a0043559ea92961319949e59eba75d880b8c94221f9e48c014292217b7cc70"
+    },
+    {
+      "path": "qualified-single-clear/module/gma_device.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma_device.c",
+      "bytes": 1120,
+      "sha256": "18c0183ba2cc3e2eed7aeea19be481ee375ae03b4ee3d7536ba5837101628bd1"
+    },
+    {
+      "path": "qualified-single-clear/module/gma_device.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma_device.h",
+      "bytes": 394,
+      "sha256": "5d6bc147e1fcc15a7e72d4d6d25b4d9555db1336fc29347bdb8773c721dec085"
+    },
+    {
+      "path": "qualified-single-clear/module/gma_display.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma_display.c",
+      "bytes": 21281,
+      "sha256": "877140046fcea01a5e8f0face75384a3dfe2d34983539de76bcfa94ef9f5f2c4"
+    },
+    {
+      "path": "qualified-single-clear/module/gma_display.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gma_display.h",
+      "bytes": 3154,
+      "sha256": "ab42d3126641f5438385b946fda76ee86466cdd48c6fc0ddb4b605f894a257c8"
+    },
+    {
+      "path": "qualified-single-clear/module/gtt.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gtt.c",
+      "bytes": 15301,
+      "sha256": "388c5b251cfa17545031c1841a4ef6afcf1bc7385a424e34221948959e15818d"
+    },
+    {
+      "path": "qualified-single-clear/module/gtt.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/gtt.h",
+      "bytes": 1908,
+      "sha256": "2407ff8bdbdba056e0583982e94b77da8c665bdd797d3fb3444918566abdc72f"
+    },
+    {
+      "path": "qualified-single-clear/module/intel_bios.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/intel_bios.c",
+      "bytes": 16160,
+      "sha256": "257b1366608c811cdd10d1961ea08347dbd5d4bff456ec8c49d37c980cb3d261"
+    },
+    {
+      "path": "qualified-single-clear/module/intel_bios.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/intel_bios.h",
+      "bytes": 15975,
+      "sha256": "d3259ed7618d6c994323a07fbbbbb7cfc83d19412f3047d75c71117308c89520"
+    },
+    {
+      "path": "qualified-single-clear/module/intel_gmbus.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/intel_gmbus.c",
+      "bytes": 12863,
+      "sha256": "7f7ba6e1660b67500f001da9d0103b4b1c5213975f535f11dd81d7a92bc483c6"
+    },
+    {
+      "path": "qualified-single-clear/module/intel_i2c.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/intel_i2c.c",
+      "bytes": 3788,
+      "sha256": "19f063e36fa2046008f1c2df2b30f907446f81d83762b5578bf620383a0d8d82"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_device.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_device.c",
+      "bytes": 13899,
+      "sha256": "5cf5df83811d4574f3f0f1d64dedc20a7383acbf390e77018bc941b6d2d6fba4"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_dpi.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_dpi.c",
+      "bytes": 31984,
+      "sha256": "92d995a9cf2fe0abfd3d08710a435fab7c1e1e84a9f302d4fe99c104d4940a3e"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_dpi.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_dpi.h",
+      "bytes": 2846,
+      "sha256": "a2947881b7d2b2e634a08b25e1902a90ac4ea68533403804ff1c7c8b8edd3635"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_output.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_output.c",
+      "bytes": 16350,
+      "sha256": "2ae5bd4046e0859772cb98c53d68ea823cf077aff08e1bb94256ab1aeb2b0ba9"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_output.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_output.h",
+      "bytes": 11953,
+      "sha256": "205c39169c55356de0d6cbc714a88b5a47ed6f3302833d394cb7f4ea7868850a"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_pkg_sender.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_pkg_sender.c",
+      "bytes": 16106,
+      "sha256": "0b33da2d4bde2d833cc598f5c6e3d7c5896390ac71875cffef5c039c06deb45c"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_dsi_pkg_sender.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_dsi_pkg_sender.h",
+      "bytes": 2634,
+      "sha256": "973dae891c36f2ab8794d6a0b948c961913dcd489080d521db350d735d50af26"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_intel_display.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_intel_display.c",
+      "bytes": 27246,
+      "sha256": "37a530d3a4bbdf1de2910717213d0a2beedbb589f93451431d6a047f27db42cd"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_output.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_output.c",
+      "bytes": 2343,
+      "sha256": "aba87d0ee44e4f4b897d837f8025d6c77dc18f7dafc374247dffc7f16c595118"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_output.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_output.h",
+      "bytes": 2540,
+      "sha256": "5a0adbb0ee0616276a19d7825d85f8f33354d810beec6d98407b7aaca5c466c8"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_tmd_vid.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_tmd_vid.c",
+      "bytes": 7081,
+      "sha256": "aaf0d10e06a918b4b4956d80a77fad7663d978d38309ecf251c3799ee71eb2d7"
+    },
+    {
+      "path": "qualified-single-clear/module/mdfld_tpo_vid.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mdfld_tpo_vid.c",
+      "bytes": 2506,
+      "sha256": "0e14c52ededb91e398b1082531e91674907897214b43e857301501654765bd6a"
+    },
+    {
+      "path": "qualified-single-clear/module/mid_bios.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mid_bios.c",
+      "bytes": 8227,
+      "sha256": "8dac9ca7a2c9cfadb0851383524e7943326fc9c454ba231ba8eceae14695181a"
+    },
+    {
+      "path": "qualified-single-clear/module/mid_bios.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mid_bios.h",
+      "bytes": 338,
+      "sha256": "6c3086d48b8fc131822e4d51cb8b6c1dece5e9237390c20e9d7d2b191a54f697"
+    },
+    {
+      "path": "qualified-single-clear/module/mmu.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mmu.c",
+      "bytes": 18165,
+      "sha256": "cc722d7566ea3b2fa77252d96bc6eaff7166bd4331592f59d5d3bbc290c1a596"
+    },
+    {
+      "path": "qualified-single-clear/module/mmu.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/mmu.h",
+      "bytes": 2756,
+      "sha256": "2f5a6b3edde79741234fa08fbc0b1e14045e42ae472a6e90ea6cb64f1c8b9514"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail.h",
+      "bytes": 7616,
+      "sha256": "19d8c7ddc224958b63529ff4246ae33f5ffa4b3d1cef5c74758e7917de259891"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_crtc.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_crtc.c",
+      "bytes": 18476,
+      "sha256": "fd91631c06a8b6c079bdd6d62b822eea212054d7551fd5545d4d7f356a3affbc"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_device.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_device.c",
+      "bytes": 15314,
+      "sha256": "e881eb254e7ad8d925c67ed01271dbd3bbc5e4d17ec6e8fe7daedbfa3ac47c9b"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_hdmi.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_hdmi.c",
+      "bytes": 24320,
+      "sha256": "7b6776cfad1c69bb77c3e6aef0c963d929690caf2955077c0c577d0944c6edb0"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_hdmi_i2c.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_hdmi_i2c.c",
+      "bytes": 8388,
+      "sha256": "a72828571cadb57ea6df499187af7f954ac1b8bb7c931e4e72310ec81c538a69"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_lvds.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_lvds.c",
+      "bytes": 12512,
+      "sha256": "f7d360a68693d29e5855520b1de3125ae3afa6ab25bb4a39c25cce933733a547"
+    },
+    {
+      "path": "qualified-single-clear/module/oaktrail_lvds_i2c.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/oaktrail_lvds_i2c.c",
+      "bytes": 4635,
+      "sha256": "4d821946c38b27044b35ffb7b3a8f689572d67799cd2336d442af766b28c5d5b"
+    },
+    {
+      "path": "qualified-single-clear/module/opregion.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/opregion.c",
+      "bytes": 10204,
+      "sha256": "a6fd11464b3972d456dea55919cf97c3ccb26f9d5a1a690139cdf1c4c09d35d0"
+    },
+    {
+      "path": "qualified-single-clear/module/opregion.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/opregion.h",
+      "bytes": 1896,
+      "sha256": "6261ac8ebc13bdf48deaac006132df2f68bf728276c651165b95adc345a304ed"
+    },
+    {
+      "path": "qualified-single-clear/module/power.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/power.c",
+      "bytes": 9211,
+      "sha256": "8d16ef8434418afe6a286f8f978f0ee1cc4a369874198c15311e685e581e16a6"
+    },
+    {
+      "path": "qualified-single-clear/module/power.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/power.h",
+      "bytes": 2658,
+      "sha256": "c490f651d21d5af0bcd41106ed000ed80705a7fe056e3b89a4650ddd49bb4889"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_device.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_device.c",
+      "bytes": 8871,
+      "sha256": "c02f8c825350ed89675d7618e158d503fbb92169a7f2f8aba4255b353de9a493"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_device.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_device.h",
+      "bytes": 237,
+      "sha256": "b549d59a0a9195f6ede0d96634c5fa49d3ae2d48bbcdf24e75aa34c1a331e06a"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_drv.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_drv.c",
+      "bytes": 17485,
+      "sha256": "e9ce11abe31c5adf0d0134e0d4b520455661a0a7b490bb2ed9b02e1ac62488da"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_drv.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_drv.h",
+      "bytes": 24752,
+      "sha256": "6dce38176eccc8d7037783ec6c41d101c3c614068a3b7b11f40b06e1d1ca6261"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_display.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_display.c",
+      "bytes": 15362,
+      "sha256": "6c3e1720849665df26ae64a3f93af4ec2a99fa5f46a0bf6d9f023ee5aa71d0b8"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_drv.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_drv.h",
+      "bytes": 8357,
+      "sha256": "deafad565f84f1db62eb79131c8c662f9992482e79c7d3431d753538907b3d17"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_lvds.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_lvds.c",
+      "bytes": 22834,
+      "sha256": "f74be00054701ec6297b03824f34994eb77541b9341b5ce4f266351ae8438e12"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_modes.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_modes.c",
+      "bytes": 1102,
+      "sha256": "aa1b9b96b24f5db1a66acf649bfb21cf089810889bdac0bb45f6b9541498c339"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_reg.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_reg.h",
+      "bytes": 50512,
+      "sha256": "2b99f026da46b8db3ef4d09978c3b794c32e2580ec90ea556068573a7804e0f7"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_sdvo.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_sdvo.c",
+      "bytes": 79841,
+      "sha256": "c69f7f7256edab612f8881f5343385e43210679dd11956c6a1fc3ac6eb221206"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_intel_sdvo_regs.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_intel_sdvo_regs.h",
+      "bytes": 24416,
+      "sha256": "4e02101a042d248f34fb910534d74b704cde5a721e3a1993b5359d1085d341be"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_irq.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_irq.c",
+      "bytes": 17957,
+      "sha256": "5b9962aa29ec24f844297bb2d0e4fa9b00fc3021ed46d00afbeaa26b326b3025"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_irq.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_irq.h",
+      "bytes": 1250,
+      "sha256": "1069e3033a5086c8cd9e35a9cf986e8be1112389272f91e03404c5b28d2cd436"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_lid.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_lid.c",
+      "bytes": 2282,
+      "sha256": "cc5660e14990d1ab7adfe69880c37125becda71927cd9e6ef7d508343dbf5bf7"
+    },
+    {
+      "path": "qualified-single-clear/module/psb_reg.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/psb_reg.h",
+      "bytes": 18355,
+      "sha256": "a340d4fb7bb9df2403eb196639d930b8c56463ddc7a3754d152e6ed7ab1daef7"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_bif_debug.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_bif_debug.h",
+      "bytes": 3202,
+      "sha256": "ee0cc48cc8c9f622aba894fd4c552eda12e4d92a2c94562adcedf679df831d3c"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_bif_debug.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_bif_debug.inc",
+      "bytes": 3177,
+      "sha256": "61fd75e873cdad9b126c1bb2467ef3ce71ecb31abff6cfab944afd41e2938a16"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_blake3_compat.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_blake3_compat.h",
+      "bytes": 403,
+      "sha256": "ea7aeb31bf588dcca12cb475f8113ffe71988d880d225c29bf2f1ebd58c3109f"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_blake3_namespace.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_blake3_namespace.h",
+      "bytes": 1790,
+      "sha256": "51068c98d479ef902d14e6e9b46fdeba76f51415ecea88c0b32dfc6d9144d783"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_blake3_output.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_blake3_output.h",
+      "bytes": 554,
+      "sha256": "f88eea7e8f9de3180c7102702f2662d938bc28b4ab91e773237262146a20a508"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_blake3_portable_dispatch.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_blake3_portable_dispatch.c",
+      "bytes": 713,
+      "sha256": "8813a7597f8b541f6630af1cafed8a3592725771a5d9b98756487d8891fc479f"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_borrowed_owner.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_borrowed_owner.c",
+      "bytes": 5682,
+      "sha256": "6326201a7f12a3514828df8f1cfe7abd865cb07a4078e392ed61412395370a53"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_borrowed_owner.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_borrowed_owner.h",
+      "bytes": 1579,
+      "sha256": "7dbca749d945979fcc65531c541389daa78cce77be5f50112bea4d4bba4c0b84"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_canonical_inputs.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_canonical_inputs.h",
+      "bytes": 1528908,
+      "sha256": "4d8c7d7dfc8feebcfb9344eae7473cde42027e1fbd6226c228a778f040847494"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_color_view.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_color_view.h",
+      "bytes": 538,
+      "sha256": "4e40161c4500b0dc350d9ad6193a30cdc5770e54ef67a4d751ddd423a54bdee1"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_depth1280_capture.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_depth1280_capture.h",
+      "bytes": 411,
+      "sha256": "9511dd79e865b19bedd7b4192e11c3e7142e303a0d27c78380493b20c090d0db"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_depth1280_capture.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_depth1280_capture.inc",
+      "bytes": 4849,
+      "sha256": "e091e387c591be34ee996a7089b23632ae7108cf0b9d1625b0ab71bbbf19f7ae"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_depth1280_profile.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_depth1280_profile.c",
+      "bytes": 3278,
+      "sha256": "14bac345f2094897e5395fd90e4030bda90451f1e2417e9172e473483d0e5596"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_depth1280_profile.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_depth1280_profile.h",
+      "bytes": 321,
+      "sha256": "3c3098c1b30eac64ffe53b57ce349d81eb2ae304e347ef346106e2f8ccd26ffe"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_executor_adapter.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_executor_adapter.c",
+      "bytes": 19753,
+      "sha256": "ba3c68a14b6e2adb7787fdd20267e912fc645621364ea5f9b1d93579980ad14d"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_executor_adapter.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_executor_adapter.h",
+      "bytes": 3567,
+      "sha256": "2d1e4579716ffee8d26c3e86c39e83fe6bcd8a4630c2e48d3415282e5991ca92"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_memory.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_memory.c",
+      "bytes": 48403,
+      "sha256": "0569fb6831a33ccef68fa6ba20995688ae2891a6bf22486ec9d3adb9573216c6"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_memory.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_memory.h",
+      "bytes": 6636,
+      "sha256": "c205d6a54962aab65f9f1cfa60a38c48eb04eb2f3c46f15bc5f70d25b7c3461b"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_publish_inputs.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_publish_inputs.h",
+      "bytes": 938,
+      "sha256": "d7e0cdb9b86554aed938db97af014b4e46e32cf5f6fa081724ab2966359ff18b"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_gem_publish_inputs.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_gem_publish_inputs.inc",
+      "bytes": 1197,
+      "sha256": "549147ab76614541670ee0b182ad8ba5fc67b9cbd83f91681611982a4d70bc0e"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_mmu_verify_pages.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_mmu_verify_pages.inc",
+      "bytes": 1594,
+      "sha256": "be8557f28cdad979380e3dac15387f8dfd767fa832cfa8543fc9591496e14fa9"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_native_bridge.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_native_bridge.c",
+      "bytes": 6242,
+      "sha256": "2ad5e103e761da5d57035d89ba49b2cbf3a59f4081c0c5ef59e1e3db2060763f"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_native_bridge.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_native_bridge.h",
+      "bytes": 1127,
+      "sha256": "3f78992deb4e9076827a67cdc797f086a5bced3b27b3049b8417bcb12948ad9c"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_owner_abi_baseline.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_owner_abi_baseline.h",
+      "bytes": 1351,
+      "sha256": "cc39cb2775106681aa90252ce3cf933a531f3f4a2528e748bcdf6e2ff22b557d"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_owner_abi_check.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_owner_abi_check.c",
+      "bytes": 2910,
+      "sha256": "ff028501c00a3af22984425ac2f69f341639f134fe81e8683b91675672232226"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_pds_write_guard.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_pds_write_guard.h",
+      "bytes": 1120,
+      "sha256": "efe54b76e8174cb8581ac17277f07d7b11b9d817fb74885880b7a2ca9d1550e9"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_profile.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_profile.c",
+      "bytes": 4235,
+      "sha256": "0bba6fd04d1c6d787eae6488aed06fccf5ec3ad8eeadee73aebd2dabf1968fe0"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_profile.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_profile.h",
+      "bytes": 382,
+      "sha256": "b66db9ff977417ff019eb845f86edb4412fbbd948c9eb389bd2582ae1e640bd8"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_session.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_session.h",
+      "bytes": 1100,
+      "sha256": "012f8cd71294efa003d2ae7bccfaaef2aa5c18f739eb2cd4ff32db04fde72846"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_submit.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_submit.c",
+      "bytes": 5251,
+      "sha256": "6087bbdfd776b13668648a947890c2b0e2ab1694aca8353f8cbbb18559cd71cf"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_submit.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_submit.h",
+      "bytes": 1666,
+      "sha256": "2dcce2824d32e037aa41265c251a9b71c7d7eb809c2e672e5488850a8ad0157d"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_retained_uapi.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_retained_uapi.h",
+      "bytes": 1181,
+      "sha256": "636fade3ebb382fc2dd52efeb9bb8db34613df3cad2d4d4204fee7816e0407c4"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_sequence.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_sequence.c",
+      "bytes": 7471,
+      "sha256": "b237397733133599312666c854ad08767c4a41b3e5c7fb340b5e50e9cc950ae9"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_sequence.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_sequence.h",
+      "bytes": 3250,
+      "sha256": "255b818a418ac67c5aeb1a8a7e941d6c3f2b3566d26bdd789f75e58399fa15f2"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_borrowed_owner.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_borrowed_owner.c",
+      "bytes": 79,
+      "sha256": "3056437767ff5e2bebcee93ccef2e6beab501cdc2c2a927fa032cee7c26c14a4"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_bridge.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_bridge.c",
+      "bytes": 2958,
+      "sha256": "4d0a1accdfc65caa28892facc2a2149cfc35c42360ebb7333027aa9d07ad8f4d"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_bridge.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_bridge.h",
+      "bytes": 472,
+      "sha256": "3181eb7a3c0ec908db0bc0d12d3912ba56b6bfaa020a9c7cf73c47813dfd73ea"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_contract.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_contract.c",
+      "bytes": 46715,
+      "sha256": "23fd4096effa7130d6aa6e3ac97e5beb769a3b0dee4652b5b26b86349580be6e"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_contract_aliases.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_contract_aliases.h",
+      "bytes": 4498,
+      "sha256": "86eb5c1059e920f71dd355ef92e0e15a1fe201132f7db405fa389921a676bcd0"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_contract_api.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_contract_api.h",
+      "bytes": 8458,
+      "sha256": "d6f9cd5d5fd49424b5031d4f5ec24c9068e483d53d4257d198e02492454bf2c0"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_fixed_service.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_fixed_service.c",
+      "bytes": 78,
+      "sha256": "244a099f83d6b56cc580c8a30efc2efe55472ebe24521122edc21fb1127a7f98"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_grammar.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_grammar.c",
+      "bytes": 2806,
+      "sha256": "aa9415c94cf2f9d5832225898fe8a038824e709ae11b6a952e7aecfc0a328a70"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_grammar.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_grammar.h",
+      "bytes": 498,
+      "sha256": "cdd52649703d2ae81e5ab0cda326dfbf7af9b80df70885f9c4e6fd4647a362d6"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_owner_flush.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_owner_flush.c",
+      "bytes": 2268,
+      "sha256": "09ee0f33ee36bd71a171131d8ba4439757d7192f30566a8ae1c22c68192e2cf7"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_source.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_source.c",
+      "bytes": 14821,
+      "sha256": "45fbe31cfdf36c96433ffaef97167477a5f7ad090fa2f5040943aa64ac600bca"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_source.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_source.h",
+      "bytes": 3021,
+      "sha256": "94e399d93c45ce9d7226696e18cd9262d7f7f64abd3893105bf333d304268964"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_trusted.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_trusted.c",
+      "bytes": 23018,
+      "sha256": "66ee297420a35c44a130f9af6925ffa17d32bf0c85371635d5cb38c10f68d53a"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_stream_trusted.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_trusted.h",
+      "bytes": 1118,
+      "sha256": "9ec9be567e9963c4fd67e564adc2edad52e8a70a5de125386bcbf73df6f9f77c"
+    },
+    {
+      "path": "qualified-single-clear/module/remesa_triangle_profile.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_triangle_profile.c",
+      "bytes": 3028,
+      "sha256": "546fcc8450a7715ed0b88909e773d544bde03df79c16359789016b14e3bafb99"
+    },
+    {
+      "path": "qualified-single-clear/module/stream_lifecycle.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/stream_lifecycle.c",
+      "bytes": 5240,
+      "sha256": "5dc6709cb625d49dc61a8e903276abb217311591d578c52d23e2d22f4f3ed56f"
+    },
+    {
+      "path": "qualified-single-clear/module/stream_lifecycle.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/stream_lifecycle.h",
+      "bytes": 1842,
+      "sha256": "7910c8abaef7ba27eb4b41d27372bf1bb4ac8333fc7dc5a1d673d59f70f5eadc"
+    },
+    {
+      "path": "qualified-single-clear/module/stream_profile_asset.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/stream_profile_asset.h",
+      "bytes": 5260,
+      "sha256": "e21ceda020131e56c93271b995af0df590c8eecbe87e18d97579fa25bf8edf6e"
+    },
+    {
+      "path": "qualified-single-clear/module/stream_uapi.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/stream_uapi.h",
+      "bytes": 3281,
+      "sha256": "ed48f7ff20957f6e4efddf5b325456b711f763b1cb9cd90a2ea98257280364b4"
+    },
+    {
+      "path": "qualified-single-clear/module/tc35876x-dsi-lvds.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/tc35876x-dsi-lvds.c",
+      "bytes": 21491,
+      "sha256": "b301703f75a72dbf9e10f9e0ad3a28a9ca66b164da0f8e8fc9e5a0a1eee4b2d8"
+    },
+    {
+      "path": "qualified-single-clear/module/tc35876x-dsi-lvds.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/tc35876x-dsi-lvds.h",
+      "bytes": 1728,
+      "sha256": "00ed39446b5ba990f51c37d4ee2df6af264de426c70b1d91fb3bb1f4017beb55"
+    },
+    {
+      "path": "qualified-single-clear/observer/Module.symvers",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/observer/Module.symvers",
+      "bytes": 3706,
+      "sha256": "b1748c5cfddc8360be692de39ef728faac2d72103ad2f3d66a51ffe30ce7d95d"
+    },
+    {
+      "path": "qualified-single-clear/tests/actual_mmu_reference.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/actual_mmu_reference.inc",
+      "bytes": 1886,
+      "sha256": "3f6f363a6f751be3c7666f5218c5e8aef8728c25af8edb6204e3d1218a3b13b8"
+    },
+    {
+      "path": "qualified-single-clear/tests/check_images_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/check_images_actual.inc",
+      "bytes": 3139,
+      "sha256": "4894566c83694e8258ade5d2f3e977ec3eb249e2307b7e7726268093b5b7a9bc"
+    },
+    {
+      "path": "qualified-single-clear/tests/nohash_output_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/nohash_output_actual.inc",
+      "bytes": 2756,
+      "sha256": "0fe8d1bda548da9c6c001486a7b41d12865ed5f1557694364e35a75094e6d8f2"
+    },
+    {
+      "path": "qualified-single-clear/tests/owner_flush_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/owner_flush_actual.inc",
+      "bytes": 2082,
+      "sha256": "acd5aa26413fd7d4f60caa1403766733615dd579e210f63814a8e688f8980560"
+    },
+    {
+      "path": "qualified-single-clear/tests/source_test_shim.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/source_test_shim.h",
+      "bytes": 3253,
+      "sha256": "540af3cedcd5fbbaa03f363e7e11c87835e49840c23cd44ca757ff30594bb289"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_cached_views.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_cached_views.c",
+      "bytes": 2565,
+      "sha256": "3294e5ac9434c655a8f7ff916801fd55e2925988774122330a173a64e2461dd1"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_combined_cache_pte.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_combined_cache_pte.c",
+      "bytes": 11626,
+      "sha256": "61b3d112bf6eb7f903e563e7a96532c926abe895b7873bd3285173faa5c5a013"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_frozen_input_cache.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_frozen_input_cache.c",
+      "bytes": 4158,
+      "sha256": "28a4fba5c3f480a5ba7dd0669f79335a36dc81b1391bf15d75143644030f97f0"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_gem_regression.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_gem_regression.c",
+      "bytes": 7486,
+      "sha256": "24b20b1ec82c4bd4137d8b6ba5f01c7610b27af601720ba1612d6815bfc0050a"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_gem_shim.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_gem_shim.h",
+      "bytes": 7211,
+      "sha256": "e5092126873196622ca18162dbd19d41133b76783381f0cecc434404990adb37"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_mmu_verify_pages.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_mmu_verify_pages.c",
+      "bytes": 7059,
+      "sha256": "751e15aeba46b68b0592ddaf0aeba0c336489e88ac9cb0025da4c6d080736986"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_nohash_inputs.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_nohash_inputs.c",
+      "bytes": 5625,
+      "sha256": "be6e01500d67104ebc654e5ccb676a779081f4ce0fe79106458501bce16a37fa"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_nohash_output_paths.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_nohash_output_paths.c",
+      "bytes": 3424,
+      "sha256": "dbc3899f922d75a4335068f382191face194768f892f85814ef05cfe9299eeb7"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_production_input_seal.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_production_input_seal.c",
+      "bytes": 4460,
+      "sha256": "228c1b41270a03adfec5cee2553f16a954cbee34f44b5af047c314611d71fc2e"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_pte_provider.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_pte_provider.c",
+      "bytes": 2714,
+      "sha256": "dbb88356368b65d7772c6fa0acf411bfa74df90a7473c43224425a0aa96dc75d"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_source.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_source.c",
+      "bytes": 6372,
+      "sha256": "26d6bda8f3206b5d24341d124177f4f5108627f8f9e69786c267df9e8f2a9078"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_stream_memory.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_stream_memory.c",
+      "bytes": 4065,
+      "sha256": "5b25d494da85293779c8ee961ca70ee892e17f4131707665aeccae5056e343d8"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_ta_borrowed_lease.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_ta_borrowed_lease.c",
+      "bytes": 5332,
+      "sha256": "60462bb84737af4f7d33eb0a50d24fd293cb3e7d8ee166cd23e340c6484500b5"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_ta_cache_domains.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_ta_cache_domains.c",
+      "bytes": 10944,
+      "sha256": "8ff6ce2e933938d2cc01ea35dcef02a89238d8f13c36e294d270e9a2c68707d5"
+    },
+    {
+      "path": "qualified-single-clear/tests/test_ta_seal.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/test_ta_seal.c",
+      "bytes": 2826,
+      "sha256": "ad0a5b459eed9605bfa843c9e3ff6aff40eda54bf1ed93295bb5c0ba5f691a12"
+    },
+    {
+      "path": "qualified-single-clear/tests/trusted_prefire_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/tests/trusted_prefire_actual.inc",
+      "bytes": 375,
+      "sha256": "4fa1fe3db72254912db51c090c80d4039117c9ae3c86d4bcd825c429a5238ad5"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/role0.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/role0.bin",
+      "bytes": 131072,
+      "sha256": "cd0ccee4a29015b7189ce9b65c13ba948f757803a640b6e7501069f38ec3461c"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/role1.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/role1.bin",
+      "bytes": 32768,
+      "sha256": "61a6d4bc83f820c8f344b8144d94bb08f6dd4688fb5c8dc10cbba87f6d3d5144"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/role2.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/role2.bin",
+      "bytes": 131072,
+      "sha256": "cdd783d09bd573a9ecef68d470e414b4796a70d587e2f20647f0ad415032bf0b"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/role3.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/role3.bin",
+      "bytes": 4096,
+      "sha256": "d0d2892baa65bd543d9b7f923cd5364390e989e3b9c1d04881311392f617c539"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/role4.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/role4.bin",
+      "bytes": 4096,
+      "sha256": "727e4543140fa02c395c5cd1194406bc795561db01f5ce25af2d11329d00fa65"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/stream-profile.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/stream-profile.bin",
+      "bytes": 5592,
+      "sha256": "e0fd2212a1fb97d5c75c3eaff021c0777b303d4f209a8b6bb77bfd1d6bc7b9c1"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/stream_profile_asset.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/stream_profile_asset.h",
+      "bytes": 5260,
+      "sha256": "e21ceda020131e56c93271b995af0df590c8eecbe87e18d97579fa25bf8edf6e"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/vs-attribute-clamped.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/vs-attribute-clamped.bin",
+      "bytes": 336,
+      "sha256": "2daa6acf0621f9823d2dc836594fa1ced5aedf1b17c57222564f798d5f746d4b"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/vs-attribute-original.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/vs-attribute-original.bin",
+      "bytes": 320,
+      "sha256": "b60249a06a8fbed9f8d235a06cac8f7511cbafd9f1344a076a24535859d713fd"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/vs-state-clamped.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/vs-state-clamped.bin",
+      "bytes": 336,
+      "sha256": "76f6b7577f69041564ac3b05f109374655c8f5014e5ec511e3d81604a423d2d9"
+    },
+    {
+      "path": "qualified-single-clear/stream-profile/vs-state-original.bin",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/stream-profile/vs-state-original.bin",
+      "bytes": 320,
+      "sha256": "8ecce78a17bc4ae7beacd1a07590001e032586611fc599d247892df88bf697bc"
+    },
+    {
+      "path": "qualified-single-clear/AUDIT_PHYSICAL_LESS_DIAGNOSTIC.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/AUDIT_PHYSICAL_LESS_DIAGNOSTIC.py",
+      "bytes": 2211,
+      "sha256": "8c7cbe20615c45b385ea2da1642fcf1ed23f245cf101b0991e61c6177c1580bf"
+    },
+    {
+      "path": "qualified-single-clear/BUILD_INITRD.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/BUILD_INITRD.py",
+      "bytes": 3129,
+      "sha256": "71a141b6b6e77ee1c95948a49c07a63eb48a038d1796915247f0f6d3703d3954"
+    },
+    {
+      "path": "qualified-single-clear/BUILD_MODULE.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/BUILD_MODULE.py",
+      "bytes": 1132,
+      "sha256": "6b7085787a9b9e5e74957f801ee4243c5a19e41f502aef1116eddcfa3647a7ee"
+    },
+    {
+      "path": "qualified-single-clear/BUILD_SINGLE_CLEAR_PROFILE.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/BUILD_SINGLE_CLEAR_PROFILE.py",
+      "bytes": 4978,
+      "sha256": "856657e27c1875dfc6dc01fecb2454c8ca30e0b2ea0f215a296f33520fa80623"
+    },
+    {
+      "path": "qualified-single-clear/CANONICAL_INPUTS_GENERATION.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/CANONICAL_INPUTS_GENERATION.json",
+      "bytes": 906,
+      "sha256": "42160f4be716b8473cd39bcfceb0df58d0041f49ce2bd6dacf9f99419eec8416"
+    },
+    {
+      "path": "qualified-single-clear/CHECK_COMPOSITION.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/CHECK_COMPOSITION.py",
+      "bytes": 1738,
+      "sha256": "5e6ce89016c3bb3e93186caf7fd4f15d50e7dd1de170ae00b1983989767ba241"
+    },
+    {
+      "path": "qualified-single-clear/COMPOSITION_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/COMPOSITION_RESULTS.json",
+      "bytes": 5584,
+      "sha256": "4337145ca3983f5e70958cd445f8e32923fd359bd646d0f878b8ec9142eecb70"
+    },
+    {
+      "path": "qualified-single-clear/GENERATE_CANONICAL_INPUTS.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/GENERATE_CANONICAL_INPUTS.py",
+      "bytes": 2329,
+      "sha256": "cbc53dd592b9069f1f041a91b43bea69a58e96011dd9ba77f216dc8207da1ddc"
+    },
+    {
+      "path": "qualified-single-clear/INITRD_BUILD.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/INITRD_BUILD.json",
+      "bytes": 1056,
+      "sha256": "5ebf37d0fb74e2ac4af4ddb1a7f07816180f0311ec01fe2c40f2772a26dd00f3"
+    },
+    {
+      "path": "qualified-single-clear/INIT_CHAIN_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/INIT_CHAIN_TEST_RESULTS.json",
+      "bytes": 690,
+      "sha256": "8b5663efc493a91d6728838f05581c99bc590347d98201f8987cc84f585d1c2e"
+    },
+    {
+      "path": "qualified-single-clear/KERNEL_BUILD.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/KERNEL_BUILD.json",
+      "bytes": 1647,
+      "sha256": "642db68fc9209c022d2c7cf51e53eca0a561c770eab30f4534a06f0c5c1f121a"
+    },
+    {
+      "path": "qualified-single-clear/LESS_PROFILE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/LESS_PROFILE_RESULTS.json",
+      "bytes": 6966,
+      "sha256": "510843a028491b837177def4fc88ce886dd48da8ddacba5f4bda1b2e5c810abe"
+    },
+    {
+      "path": "qualified-single-clear/LINUX_COLOR_PHYSICAL_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/LINUX_COLOR_PHYSICAL_RESULTS.json",
+      "bytes": 1443,
+      "sha256": "30b7c8ddebe2eeefead4cc21949c049ae9786f72af890af8f00793417e7b1fdd"
+    },
+    {
+      "path": "qualified-single-clear/MODULE_PROFILE_VERIFICATION.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/MODULE_PROFILE_VERIFICATION.json",
+      "bytes": 530,
+      "sha256": "e91289d485f23d9509d1e06f31dc496f408431816f98179a5c62903c7fc90021"
+    },
+    {
+      "path": "qualified-single-clear/NOHASH_TRUSTED_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/NOHASH_TRUSTED_TEST_RESULTS.json",
+      "bytes": 16202,
+      "sha256": "f87c8b287a9536e44653f271ad97c1c05369da7fd3de4567c2e6de67adb002b3"
+    },
+    {
+      "path": "qualified-single-clear/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "bytes": 1644,
+      "sha256": "7af50bef89462736d4f02ad6b03a10091d1be92655123e45eb8ef6ede959fa59"
+    },
+    {
+      "path": "qualified-single-clear/PREPARE_BOOT.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PREPARE_BOOT.py",
+      "bytes": 3173,
+      "sha256": "96e5aed71472d43b61c8bf3d0e4c9337b78fabfba2f2fb330acc4743b4c90fbe"
+    },
+    {
+      "path": "qualified-single-clear/PREPARE_ORIGINAL_GLX_AFTER_QUALIFICATION.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PREPARE_ORIGINAL_GLX_AFTER_QUALIFICATION.py",
+      "bytes": 6483,
+      "sha256": "1b725243a17b0f97458159f89670551b3dcd29fa23a00009cfb21b53d81f91ef"
+    },
+    {
+      "path": "qualified-single-clear/PREPARE_REPLAY.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PREPARE_REPLAY.py",
+      "bytes": 2616,
+      "sha256": "f0d4522215b698f325d1018b3362bca1c6c8d2230461717a6e8fc7d830c25f3c"
+    },
+    {
+      "path": "qualified-single-clear/RUN_LINUX_COLOR_CPU.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/RUN_LINUX_COLOR_CPU.py",
+      "bytes": 3750,
+      "sha256": "7df881f7df4bdd9348459681771af8ea87017e522cd077fec499f6cad6573a10"
+    },
+    {
+      "path": "qualified-single-clear/SINGLE_CLEAR_PROFILE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/SINGLE_CLEAR_PROFILE_RESULTS.json",
+      "bytes": 5291,
+      "sha256": "57680f2ee6cdae6c60845eb9816f8546ad1905b13a4d7d5d14bb24d138a6802b"
+    },
+    {
+      "path": "qualified-single-clear/TEST_INIT_IDENTITY.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/TEST_INIT_IDENTITY.py",
+      "bytes": 2386,
+      "sha256": "11763312b01d038d2b216ad1be15f2fdbeab18cdf0936693cfa9bb25e8f01799"
+    },
+    {
+      "path": "qualified-single-clear/TEST_NOHASH_TRUSTED.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/TEST_NOHASH_TRUSTED.py",
+      "bytes": 1953,
+      "sha256": "04f56ac08c7902c076bbf57da32b303c87ac7d6a1f2a49760779b9ce5b7a5ba0"
+    },
+    {
+      "path": "qualified-single-clear/sha256.h",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/sha256.h",
+      "bytes": 2805,
+      "sha256": "d01760d9e688117ef9a4306be7f85d09d234f74141aa3acfe8b3d2a7d0e86be7"
+    },
+    {
+      "path": "qualified-single-clear/typed_single_clear.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/typed_single_clear.c",
+      "bytes": 1561,
+      "sha256": "1a5a4af5c81e8c97e070b43da79421fdd2e9668a0b499a1023993601e7a10ff7"
+    },
+    {
+      "path": "qualified-single-clear/replay/VERIFY_SINGLE_CLEAR_OUTPUTS.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/VERIFY_SINGLE_CLEAR_OUTPUTS.py",
+      "bytes": 14247,
+      "sha256": "89162182dce810f8e5c8ec4716aa5d66510b8a939196f6c4eed084754ade8c57"
+    },
+    {
+      "path": "qualified-single-clear/replay/single_clear_output_contract.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/single_clear_output_contract.py",
+      "bytes": 3005,
+      "sha256": "8c5d94ed37449a01dfe1fb746f40dfdf211b281f8a8b59ae56e11e65965e90ce"
+    },
+    {
+      "path": "qualified-single-clear/replay/TEST_SINGLE_CLEAR_CONTRACT.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/TEST_SINGLE_CLEAR_CONTRACT.py",
+      "bytes": 1764,
+      "sha256": "a605d3104f3ccb7c39ca9985b4589feca50ccdef9d0db0aefec9ff08f6c5594f"
+    },
+    {
+      "path": "qualified-single-clear/replay/TEST_SINGLE_CLEAR_VERIFIER.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/TEST_SINGLE_CLEAR_VERIFIER.py",
+      "bytes": 6894,
+      "sha256": "17999eb3ed2daa01a0dab0c6af69f56609f3ec253fa44c9e5b1390d6bfa29aa3"
+    },
+    {
+      "path": "qualified-single-clear/replay/VERIFY_LESS_OUTPUTS.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/VERIFY_LESS_OUTPUTS.py",
+      "bytes": 14220,
+      "sha256": "2ff94df84eaeddd0244c8458605208b64678b2c7ac97f2d0c812ff1e136070b9"
+    },
+    {
+      "path": "qualified-single-clear/replay/less_depth_contract.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/less_depth_contract.py",
+      "bytes": 2478,
+      "sha256": "336ad8dbc3baac0b1b9fe610b2fbabfbf7617997a0be381156b9e4d78735ed8a"
+    },
+    {
+      "path": "qualified-single-clear/replay/defined_output_contract.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/defined_output_contract.py",
+      "bytes": 1512,
+      "sha256": "97208a1b1b44e051d82ac1f7c1d4e11e5a675eaffb5c99186fbce9893c3287e9"
+    },
+    {
+      "path": "qualified-single-clear/replay/DEFINED_CHANNEL_FORMAT_SOURCES.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/DEFINED_CHANNEL_FORMAT_SOURCES.json",
+      "bytes": 1674,
+      "sha256": "1e40b80a30b4da97bcdc258ac1cd9ad4ad8953e9a0cc24b236c148c7ee38f2eb"
+    },
+    {
+      "path": "qualified-single-clear/replay/stream_probe.c",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/stream_probe.c",
+      "bytes": 15816,
+      "sha256": "a339946623f4fed4e0c1dff1d6a269b3186dfd0b2e99815bed2d1be77cac1467"
+    },
+    {
+      "path": "qualified-single-clear/replay/BUILD_CLIENT.py",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/BUILD_CLIENT.py",
+      "bytes": 1508,
+      "sha256": "94430e0f9fb62359862273383416365b65267f7d639c5ff764da74459d8cf194"
+    },
+    {
+      "path": "qualified-single-clear/replay/SINGLE_CLEAR_CONTRACT_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/SINGLE_CLEAR_CONTRACT_TEST_RESULTS.json",
+      "bytes": 459,
+      "sha256": "d9589d6e98a149fc81b4914ec9780e45d30ae778742d20763f020a49a16dcb4a"
+    },
+    {
+      "path": "qualified-single-clear/replay/SINGLE_CLEAR_AUDITOR_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/replay/SINGLE_CLEAR_AUDITOR_TEST_RESULTS.json",
+      "bytes": 903,
+      "sha256": "22e337c3abb1a70d710ff6811a08bdda6c8dcd64e5fb4827f6e7a57bc5b8b300"
+    },
+    {
+      "path": "evidence/single-clear/PHYSICAL_SINGLE_CLEAR_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/PHYSICAL_SINGLE_CLEAR_RESULTS.json",
+      "bytes": 9808,
+      "sha256": "29a53b1a5c48a1fad91ee9cc375bd1c505712ad0fbf8ea4d78ed38cd4d93751a"
+    },
+    {
+      "path": "evidence/single-clear/SINGLE_CLEAR_QUALIFICATION_FAILURE.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/SINGLE_CLEAR_QUALIFICATION_FAILURE.json",
+      "bytes": 254,
+      "sha256": "1d5e3df6a4687f817b0faeac772c1352fa7d781e7d30c6f2f7afcbcd72f404a4"
+    },
+    {
+      "path": "evidence/single-clear/FINAL_REMOTE_STATE.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/FINAL_REMOTE_STATE.json",
+      "bytes": 725,
+      "sha256": "68dadbf095ddebc633c03e760971f2f789a861e69aea6e0b9d208c39ccdc535e"
+    },
+    {
+      "path": "evidence/single-clear/REPLAY_EVIDENCE_MANIFEST.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/REPLAY_EVIDENCE_MANIFEST.json",
+      "bytes": 12694,
+      "sha256": "f36f5f5c871893d5184b150e75d83a6827a711c07428339ad96152a53969a642"
+    },
+    {
+      "path": "evidence/single-clear/single-clear-qualification.stderr",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/single-clear-qualification.stderr",
+      "bytes": 972,
+      "sha256": "17572fab01204e4ac8fe46d66b237d4d7db5d0595274df279e8b72a59856ba17"
+    },
+    {
+      "path": "evidence/single-clear/new-single-clear-qualification.stdout",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/hardware/new-single-clear-qualification.stdout",
+      "bytes": 9808,
+      "sha256": "29a53b1a5c48a1fad91ee9cc375bd1c505712ad0fbf8ea4d78ed38cd4d93751a"
+    },
+    {
+      "path": "evidence/original-glx120/PHYSICAL_PRODUCTION_GLX_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/PHYSICAL_PRODUCTION_GLX_RESULTS.json",
+      "bytes": 2195,
+      "sha256": "ec4b94fbbe73b28208d2b2caa6bd855bceae8a892cb08fc138d923fa7ae6e7ad"
+    },
+    {
+      "path": "evidence/original-glx120/FINAL_REMOTE_STATE.json",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/FINAL_REMOTE_STATE.json",
+      "bytes": 791,
+      "sha256": "b826494acfe414c111e7acf062b9395754573969ea945b9dc441a59283658475"
+    },
+    {
+      "path": "evidence/original-glx120/STAGED_NATIVE.json",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/STAGED_NATIVE.json",
+      "bytes": 2135,
+      "sha256": "58e92786d1c17b2c4873ea7b2b1c9e174b454e544056e0553933e5aca7251539"
+    },
+    {
+      "path": "evidence/original-glx120/original.stdout",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/ended/original.stdout",
+      "bytes": 3376,
+      "sha256": "e9b67bda5b4b1946c6bc606b51001c3dc27a07a5b00730301f1788953df5376a"
+    },
+    {
+      "path": "evidence/original-glx120/original.stderr",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/ended/original.stderr",
+      "bytes": 410,
+      "sha256": "4d042d1cf614be5e7404fa757d0f5a691dae19170500fd53efec035393fcca59"
+    },
+    {
+      "path": "evidence/original-glx120/RESULT.json",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/hardware-glx/ended/RESULT.json",
+      "bytes": 4790,
+      "sha256": "f7ea4888646dcf36a6cc4d6d0280ceb7922a44802cfd3b44a17f4a36dfb22d68"
+    },
+    {
+      "path": "original-glx120-tools/VERIFY_PRODUCTION_GLX.py",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/VERIFY_PRODUCTION_GLX.py",
+      "bytes": 4754,
+      "sha256": "c0bd8a33064b42d4531337c149d2e37e5f696bae4bf4b5146932f133471fc5f6"
+    },
+    {
+      "path": "original-glx120-tools/production_glx_contract.py",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/production_glx_contract.py",
+      "bytes": 2250,
+      "sha256": "8ff7d2bea9a41599fb40a234ac4fe7052c366691c5b556152507131c06fefa33"
+    },
+    {
+      "path": "original-glx120-tools/STAGE_PRODUCTION_GLX.py",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/STAGE_PRODUCTION_GLX.py",
+      "bytes": 6918,
+      "sha256": "bddafff9891060bc7110a88b22e9a245fbe7dde5339502ff69a5224fab5245ea"
+    },
+    {
+      "path": "original-glx120-tools/stage_glx_bundle_helpers.py",
+      "source": "/home/gama/sgx535-offline/gears-less-single-original-glx-20261026T162000Z/stage_glx_bundle_helpers.py",
+      "bytes": 2658,
+      "sha256": "70095ded8cf32c15b8d3056da1f90ce73753dba1da0c18e8d9bf283c37ce80be"
+    },
+    {
+      "path": "evidence/single-clear/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "bytes": 1644,
+      "sha256": "7af50bef89462736d4f02ad6b03a10091d1be92655123e45eb8ef6ede959fa59"
+    },
+    {
+      "path": "evidence/single-clear/PHYSICAL-LESS-frame-000001.png",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PHYSICAL-LESS-frame-000001.png",
+      "bytes": 23283,
+      "sha256": "2c5df8b97e560a9da492dd4a096fca9cd9439382a806a85e90f43543dfbeb13e"
+    },
+    {
+      "path": "evidence/single-clear/PHYSICAL-LESS-frame-000002.png",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PHYSICAL-LESS-frame-000002.png",
+      "bytes": 23895,
+      "sha256": "c30d2776c912f6bab99c1830c98baa281a66a565e79f5aca9e96f714cf8451d8"
+    },
+    {
+      "path": "evidence/single-clear/PHYSICAL-LESS-frame-000003.png",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/PHYSICAL-LESS-frame-000003.png",
+      "bytes": 23844,
+      "sha256": "eda78d2ddd0bb304005fd1b64e48ed5bd891987ebad346c231afeec6fb472bd6"
+    },
+    {
+      "path": "evidence/less-with-quad-clear/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "bytes": 7644,
+      "sha256": "be705ca8304276c9afb01fdc96ae0878dec45d8c84d2fd88b9f5e9062deaa53f"
+    },
+    {
+      "path": "evidence/less-with-quad-clear/LESS_PROFILE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/LESS_PROFILE_RESULTS.json",
+      "bytes": 6966,
+      "sha256": "510843a028491b837177def4fc88ce886dd48da8ddacba5f4bda1b2e5c810abe"
+    },
+    {
+      "path": "evidence/less-with-quad-clear/LESS_QUALIFICATION_FAILURE.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-correction-20261026T050000Z/hardware/LESS_QUALIFICATION_FAILURE.json",
+      "bytes": 233,
+      "sha256": "1eedcaa5ffe54062d8786e0304e54aa1ba6362838279400032c9eb6e06b2ebce"
+    },
+    {
+      "path": "evidence/rejected-background-2048/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/PHYSICAL_LESS_DIAGNOSTIC.json",
+      "bytes": 7644,
+      "sha256": "f14875c62c161e8d655365506c53b04e2b6b327f5dd217f0b2db58ae0f9717b0"
+    },
+    {
+      "path": "evidence/rejected-background-2048/BACKGROUND_PROFILE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/BACKGROUND_PROFILE_RESULTS.json",
+      "bytes": 4496,
+      "sha256": "db6617a2f5fd61280cc1c1a4eddc7be6d1845b563def76b099996922b2e0ca19"
+    },
+    {
+      "path": "evidence/rejected-background-2048/LESS_PROFILE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/LESS_PROFILE_RESULTS.json",
+      "bytes": 6966,
+      "sha256": "510843a028491b837177def4fc88ce886dd48da8ddacba5f4bda1b2e5c810abe"
+    },
+    {
+      "path": "evidence/rejected-background-2048/LESS_BG_QUALIFICATION_FAILURE.json",
+      "source": "/home/gama/sgx535-offline/gears-depth-less-background-plane-20261026T124000Z/hardware/LESS_BG_QUALIFICATION_FAILURE.json",
+      "bytes": 211,
+      "sha256": "2f8c230e3b7aa31f2596ea11342db5763bc8f14a28912ae745be98f52f2c219a"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/BUILD_AND_TEST.py",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/BUILD_AND_TEST.py",
+      "bytes": 3534,
+      "sha256": "f8f6a1f4ed533a4592cb1f69a7a224e5a5b6d25553032088c1c4283495d0fc1a"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/DELIVERY_MANIFEST.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/DELIVERY_MANIFEST.json",
+      "bytes": 5649,
+      "sha256": "1e88e9d545a7c2de3a753141aaea482e44191175d48c92840079426ee66a1055"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/PRIMARY_RESEARCH.md",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/PRIMARY_RESEARCH.md",
+      "bytes": 1108,
+      "sha256": "6f5ca7eea93687128a455699343ad703c483dc4c7ef0cea1523a69f9f638f6d3"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/PRINCIPAL_REVIEW.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/PRINCIPAL_REVIEW.json",
+      "bytes": 754,
+      "sha256": "728c2327fa3e7db68a865c28d2148c6cab2351a12893b0d32fe6a96862de68b6"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/README.md",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/README.md",
+      "bytes": 2948,
+      "sha256": "7e9daaba121f73fc0448f8b180677dc8c0975d426044ca2bc5df5e0f0dd71b56"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/RESULTS.json",
+      "bytes": 29702,
+      "sha256": "f4fe02ce926e6d874546ac89a2ddaea2a28088e593d6f2856d13f0ac83a34661"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/SEAL_DELIVERY.py",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/SEAL_DELIVERY.py",
+      "bytes": 3205,
+      "sha256": "21d309a11d8e6e8015cecc9bf9731416a229fcb54300390242144734a29c58f2"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/remesa_fast_shm.h",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/remesa_fast_shm.h",
+      "bytes": 352,
+      "sha256": "f63d439910c3918271ce71f22496e23be8996bd4c5ea79052e763e93d96d49e6"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/remesa_xcb.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/remesa_xcb.c",
+      "bytes": 20048,
+      "sha256": "2010a8a16e95c1e9ad05b6170f23dcec5c8c3e2362d7c7fced6553136a88c43f"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/remesa_xcb.c.patch",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/remesa_xcb.c.patch",
+      "bytes": 6103,
+      "sha256": "3658da616f6af47c668707eaaefe30a49c4175009008c71dc17dbb02e6f57942"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/remesa_xcb_staging.h",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/remesa_xcb_staging.h",
+      "bytes": 723,
+      "sha256": "27d85c1619478827acb530d0f43581b61eb93b6d3ef327b3585f4b095cac94f0"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/test_staging.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/test_staging.c",
+      "bytes": 13539,
+      "sha256": "7e7ddfd81e43b06c4aec957438b0ce0d60dc005c019dde728556abe0d26a7ac7"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/test_staging_base.inc",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/test_staging_base.inc",
+      "bytes": 5465,
+      "sha256": "85c939991075bcc7f66f46f2dd8c58f9dbcd6c4c5ce34c3e6ae34994affc7ef1"
+    },
+    {
+      "path": "fps-candidates/x11-pipeline/test_xcb.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/test_xcb.c",
+      "bytes": 19858,
+      "sha256": "8d36453f4c76188234d51b3eba2aff86f130862a6bebae503389a92a84270a82"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/BORROWED_TA_LEASE_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/BORROWED_TA_LEASE_TEST_RESULTS.json",
+      "bytes": 3064,
+      "sha256": "e1eb0d3df2cc8c77783b397b5b42f4257b266ba8e85e086b5af6f7ed5ced7767"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/BUILD_INITRD.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/BUILD_INITRD.py",
+      "bytes": 3129,
+      "sha256": "71a141b6b6e77ee1c95948a49c07a63eb48a038d1796915247f0f6d3703d3954"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/BUILD_MODULE.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/BUILD_MODULE.py",
+      "bytes": 1132,
+      "sha256": "6b7085787a9b9e5e74957f801ee4243c5a19e41f502aef1116eddcfa3647a7ee"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/CACHE_DOMAINS_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/CACHE_DOMAINS_TEST_RESULTS.json",
+      "bytes": 3240,
+      "sha256": "6926ae05dfe7d575b1ade806f19963a56ace60fd4725bfd632a3690c1c8fb338"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/CACHE_REGRESSION_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/CACHE_REGRESSION_TEST_RESULTS.json",
+      "bytes": 15340,
+      "sha256": "ea44be257604808a7bdc9166e0db16c1f43d407a62e4ab8b11185bb84fdaf0d8"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/COMBINED_CACHE_PTE_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/COMBINED_CACHE_PTE_TEST_RESULTS.json",
+      "bytes": 3971,
+      "sha256": "05c8b6b70c8fd5c0064b9033eb6614c1686a3fc9218f44fe5a7cfcbe5bbd9bc9"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/COMPOSITION_INPUTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/COMPOSITION_INPUTS.json",
+      "bytes": 17574,
+      "sha256": "0ec2392362613eccfe5f183228bd45d65c26049de85a17e8d2fe5328806fd546"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/COMPOSITION_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/COMPOSITION_RESULTS.json",
+      "bytes": 8103,
+      "sha256": "3813b2a35793308969ec6f315236f6241d3f92f56967e47a971f2a60c51e1377"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/DELIVERY_MANIFEST.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/DELIVERY_MANIFEST.json",
+      "bytes": 30474,
+      "sha256": "79a6d1c889434de2d5b6afddcfea2f642ee581e1e1ed7063a5842be77c40b177"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/FROZEN_INPUT_CACHE_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/FROZEN_INPUT_CACHE_TEST_RESULTS.json",
+      "bytes": 2707,
+      "sha256": "4cf74a29c48fb31a1c7b924b402e223123e3e79739bc3d0a8ac243beb2b059fb"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/INITRD_BUILD.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/INITRD_BUILD.json",
+      "bytes": 1056,
+      "sha256": "365511a2ad3bb5f73b1da1c60b49ed4643f9692d8969ca061857b940264c1bb0"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/INITRD_OFFLINE_SUITE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/INITRD_OFFLINE_SUITE_RESULTS.json",
+      "bytes": 242,
+      "sha256": "1fa2bfa9b7b13d33756b95404672806b13c19ee447ea4444f4947e34f3825efa"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/INIT_CHAIN_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/INIT_CHAIN_TEST_RESULTS.json",
+      "bytes": 690,
+      "sha256": "8b5663efc493a91d6728838f05581c99bc590347d98201f8987cc84f585d1c2e"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/KERNEL_BUILD.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/KERNEL_BUILD.json",
+      "bytes": 1663,
+      "sha256": "5ec6c4ed04e6835ead2107a42bf04b68891a4792a077e9333ea884cd8b15c0c2"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/MODULE_PROFILE_VERIFICATION.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/MODULE_PROFILE_VERIFICATION.json",
+      "bytes": 530,
+      "sha256": "65ba79160799b3d12a7354ee8531e63dc3de9bc877538b2bfb47083a629a113d"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/NOHASH_OUTPUT_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/NOHASH_OUTPUT_TEST_RESULTS.json",
+      "bytes": 2214,
+      "sha256": "a60aa7dfba6878fb1c7a3b7e04331df0bae3ef1454ef716b38768176086296a0"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/NOHASH_TRUSTED_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/NOHASH_TRUSTED_TEST_RESULTS.json",
+      "bytes": 16754,
+      "sha256": "68b77faa0bf0a3b72e945ccf34b3ca6d63ebe4e3334a8f0d09d946cde57b498d"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/PTE_BATCH_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/PTE_BATCH_TEST_RESULTS.json",
+      "bytes": 2692,
+      "sha256": "54fdf39665199defc9daa235a4a2af1401b34b9425f9d0919def01cb1850beef"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/PTE_PROVIDER_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/PTE_PROVIDER_TEST_RESULTS.json",
+      "bytes": 2981,
+      "sha256": "dfe5211f57297cf67e610d166e6f58e76bf329c5dada6aa9722b3146d36abdb7"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/PUBLISHER_VIEWS_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/PUBLISHER_VIEWS_TEST_RESULTS.json",
+      "bytes": 2513,
+      "sha256": "2c567f197c6d139c0eb1442939e8eb3a14e44916db7fc895a9f7b7481c19fff9"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/README.md",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/README.md",
+      "bytes": 2680,
+      "sha256": "9138985537689252fa848b23928875d5bb8abd0dc44de72f4c1e6892a4699a8b"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/REGRESSION_SUITE_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/REGRESSION_SUITE_RESULTS.json",
+      "bytes": 707,
+      "sha256": "8c2f7b2f0b02d2ac8bc6e6b26cefef7a3c177da7580ce03b2e8cf685e83d1fa9"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/RUN_REGRESSIONS.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/RUN_REGRESSIONS.py",
+      "bytes": 684,
+      "sha256": "39dd1d19cd566429b4d9f33c86efeeb70399ff5aecfa5004fc8cd2486a62e320"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/SEAL_DELIVERY.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/SEAL_DELIVERY.py",
+      "bytes": 4774,
+      "sha256": "90327dfba58fcc8629de8e7573babf4dc1f7db1fa8148ceb66dd9c295e1cc03d"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/S_GOLDEN_INPUT_IDENTITIES.json",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/S_GOLDEN_INPUT_IDENTITIES.json",
+      "bytes": 3950,
+      "sha256": "059c210df1df59204636843ed6e06dfa9326e1be179d7f06f3ce11a91e2b48f3"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_BORROWED_TA_LEASE.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_BORROWED_TA_LEASE.py",
+      "bytes": 1379,
+      "sha256": "15671c7338fb35a36586a9e5b7c25131305dcdcc74aee5043ca648cf3bc3645f"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_CACHE_DOMAINS.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_CACHE_DOMAINS.py",
+      "bytes": 1904,
+      "sha256": "b3a9c9c28af7d124ac22ca88691fe3eda52378d9b199ce9481f59f6c97235db7"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_CACHE_REGRESSIONS.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_CACHE_REGRESSIONS.py",
+      "bytes": 1462,
+      "sha256": "c0f97ad41de931daf7491f4d93038a2d4949bd3b930e3054d567da97f69da321"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_COMBINED_CACHE_PTE.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_COMBINED_CACHE_PTE.py",
+      "bytes": 3034,
+      "sha256": "4404bc87cfd6b5a4823dd81cfe4c9c7a0a9e2d3808bae95a5591c5a0e6632498"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_FROZEN_INPUT_CACHE.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_FROZEN_INPUT_CACHE.py",
+      "bytes": 1600,
+      "sha256": "a0a869a9a9691e807d222c0be5aae9257fd9e7fd12d79a11d79d79ebe914568e"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_INIT_IDENTITY.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_INIT_IDENTITY.py",
+      "bytes": 2386,
+      "sha256": "11763312b01d038d2b216ad1be15f2fdbeab18cdf0936693cfa9bb25e8f01799"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_NOHASH_OUTPUT.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_NOHASH_OUTPUT.py",
+      "bytes": 1493,
+      "sha256": "5775079dd6d63af6aa092708f499563d79e836a05b66897a012f24fa95328a51"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_NOHASH_TRUSTED.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_NOHASH_TRUSTED.py",
+      "bytes": 1953,
+      "sha256": "04f56ac08c7902c076bbf57da32b303c87ac7d6a1f2a49760779b9ce5b7a5ba0"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_PTE_BATCH.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_PTE_BATCH.py",
+      "bytes": 2098,
+      "sha256": "cd11e0acfb6bcc4dd0d79a10980ecb1d2702d333c099f62c0246cefa27fc3603"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_PTE_PROVIDER.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_PTE_PROVIDER.py",
+      "bytes": 1402,
+      "sha256": "1cb5f546376f463febdd95b2970acf61fa0740a112f74d27d2abbd573da525dc"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/TEST_PUBLISHER_VIEWS.py",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/TEST_PUBLISHER_VIEWS.py",
+      "bytes": 1893,
+      "sha256": "ca6b520eabab93d2caec3ff91c7ab03e0816c148bd371b973e05e04e483eced9"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/remesa_stream_owner_flush.c.patch",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/remesa_stream_owner_flush.c.patch",
+      "bytes": 1093,
+      "sha256": "0d4c54b8f6ac4f4ce08e6cb5302da79350c24051b188b862620a1fff78743676"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/remesa_stream_trusted.c.patch",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/remesa_stream_trusted.c.patch",
+      "bytes": 4914,
+      "sha256": "0a790b7779fdbefea168f3acfc7b02b2871003f531ac01de25e5d358dac6b8a3"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/remesa_stream_trusted.h.patch",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/remesa_stream_trusted.h.patch",
+      "bytes": 627,
+      "sha256": "cacb8f05db8815f9aed55fd48dcc2497667de12c94d3df33fe23eae817c496b2"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/sha256.h",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/sha256.h",
+      "bytes": 2805,
+      "sha256": "d01760d9e688117ef9a4306be7f85d09d234f74141aa3acfe8b3d2a7d0e86be7"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/module/remesa_stream_trusted.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_trusted.c",
+      "bytes": 25780,
+      "sha256": "ffcb8c7d5a38ca474ae22b20886363c5b270cabb919207b715e56345c7253367"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/module/remesa_stream_trusted.h",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_trusted.h",
+      "bytes": 1197,
+      "sha256": "533ec15d4ea95b2f889693ff61cef2c21a352ed83d5016de8d9b583737b62683"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/module/remesa_stream_owner_flush.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_owner_flush.c",
+      "bytes": 2292,
+      "sha256": "22b971be3e244f38d896566da1adac9469bb02af58421844e2defbb71021bd47"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_gem_shim.h",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_gem_shim.h",
+      "bytes": 7211,
+      "sha256": "e5092126873196622ca18162dbd19d41133b76783381f0cecc434404990adb37"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_ta_seal.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_seal.c",
+      "bytes": 2826,
+      "sha256": "ad0a5b459eed9605bfa843c9e3ff6aff40eda54bf1ed93295bb5c0ba5f691a12"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_cached_views.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_cached_views.c",
+      "bytes": 2565,
+      "sha256": "3294e5ac9434c655a8f7ff916801fd55e2925988774122330a173a64e2461dd1"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_stream_memory.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_stream_memory.c",
+      "bytes": 4065,
+      "sha256": "5b25d494da85293779c8ee961ca70ee892e17f4131707665aeccae5056e343d8"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_gem_regression.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_gem_regression.c",
+      "bytes": 7486,
+      "sha256": "24b20b1ec82c4bd4137d8b6ba5f01c7610b27af601720ba1612d6815bfc0050a"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_production_input_seal.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_production_input_seal.c",
+      "bytes": 4460,
+      "sha256": "228c1b41270a03adfec5cee2553f16a954cbee34f44b5af047c314611d71fc2e"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/trusted_prefire_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/trusted_prefire_actual.inc",
+      "bytes": 375,
+      "sha256": "4fa1fe3db72254912db51c090c80d4039117c9ae3c86d4bcd825c429a5238ad5"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/owner_flush_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/owner_flush_actual.inc",
+      "bytes": 2106,
+      "sha256": "f2e302eb0962751b47eb809dc584bed1adcd12887aa54b7434e4b71cec1962c9"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_ta_cache_domains.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_cache_domains.c",
+      "bytes": 12452,
+      "sha256": "43bcfd601fbd820df7856dd8b718b2d836fb66c215d06476bc0b68d497908379"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_ta_borrowed_lease.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_borrowed_lease.c",
+      "bytes": 5332,
+      "sha256": "60462bb84737af4f7d33eb0a50d24fd293cb3e7d8ee166cd23e340c6484500b5"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_mmu_verify_pages.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_mmu_verify_pages.c",
+      "bytes": 7059,
+      "sha256": "751e15aeba46b68b0592ddaf0aeba0c336489e88ac9cb0025da4c6d080736986"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/actual_mmu_reference.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/actual_mmu_reference.inc",
+      "bytes": 1886,
+      "sha256": "3f6f363a6f751be3c7666f5218c5e8aef8728c25af8edb6204e3d1218a3b13b8"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_pte_provider.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_pte_provider.c",
+      "bytes": 2714,
+      "sha256": "dbb88356368b65d7772c6fa0acf411bfa74df90a7473c43224425a0aa96dc75d"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_combined_cache_pte.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_combined_cache_pte.c",
+      "bytes": 13134,
+      "sha256": "04722adeb4befea4bdfb449bca78c234721a131d1bdab29456af399ea769eac5"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/check_images_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/check_images_actual.inc",
+      "bytes": 3139,
+      "sha256": "4894566c83694e8258ade5d2f3e977ec3eb249e2307b7e7726268093b5b7a9bc"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_frozen_input_cache.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_frozen_input_cache.c",
+      "bytes": 4158,
+      "sha256": "28a4fba5c3f480a5ba7dd0669f79335a36dc81b1391bf15d75143644030f97f0"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_nohash_inputs.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_nohash_inputs.c",
+      "bytes": 5625,
+      "sha256": "be6e01500d67104ebc654e5ccb676a779081f4ce0fe79106458501bce16a37fa"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_source.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_source.c",
+      "bytes": 6372,
+      "sha256": "26d6bda8f3206b5d24341d124177f4f5108627f8f9e69786c267df9e8f2a9078"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/source_test_shim.h",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/source_test_shim.h",
+      "bytes": 3253,
+      "sha256": "540af3cedcd5fbbaa03f363e7e11c87835e49840c23cd44ca757ff30594bb289"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_nohash_output_paths.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_nohash_output_paths.c",
+      "bytes": 3424,
+      "sha256": "dbc3899f922d75a4335068f382191face194768f892f85814ef05cfe9299eeb7"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/nohash_output_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/nohash_output_actual.inc",
+      "bytes": 2756,
+      "sha256": "0fe8d1bda548da9c6c001486a7b41d12865ed5f1557694364e35a75094e6d8f2"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/test_publisher_views.c",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_publisher_views.c",
+      "bytes": 9907,
+      "sha256": "82c745559b80b45082e821efdb5a04a1765a188732a5fe4319e6dd807e356881"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/publisher_views_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/publisher_views_actual.inc",
+      "bytes": 2656,
+      "sha256": "7c0fb75dcd81151fd87a1a9971fae4de71f7f8d305b4a2c3145e55c04c2cbc36"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/publisher_failure_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/publisher_failure_actual.inc",
+      "bytes": 593,
+      "sha256": "b705d936decd8e80137ca80edbcac772dd6a03c01b134ba5f3f8f6765d84c941"
+    },
+    {
+      "path": "fps-candidates/borrowed-publisher-S/tests/publisher_flush_actual.inc",
+      "source": "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/publisher_flush_actual.inc",
+      "bytes": 2106,
+      "sha256": "f2e302eb0962751b47eb809dc584bed1adcd12887aa54b7434e4b71cec1962c9"
+    },
+    {
+      "path": "fps-candidates/shm-completion/BUILD_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/BUILD_RESULTS.json",
+      "bytes": 26549,
+      "sha256": "b9f58fd941f2cf2680f4f4a777eb0b5dab4c14449370f79f80cdabebd3bb8317"
+    },
+    {
+      "path": "fps-candidates/shm-completion/BUILD_SHM.py",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/BUILD_SHM.py",
+      "bytes": 3136,
+      "sha256": "70d54111939a445d5e2886d7b9ee243be54038ee273c1e2c1adce8bceef77d9e"
+    },
+    {
+      "path": "fps-candidates/shm-completion/COMPOSITION_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/COMPOSITION_RESULTS.json",
+      "bytes": 1267,
+      "sha256": "f4d01bf848226bdaa9534eef0a861a9bdc0dfc71aa5a37377c7fc6d197d6618b"
+    },
+    {
+      "path": "fps-candidates/shm-completion/DELIVERY_MANIFEST.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/DELIVERY_MANIFEST.json",
+      "bytes": 5733,
+      "sha256": "981b5a04cd47abf646090ed6d30312c3aac8dc8a9aa3a9213b863de43ae8315f"
+    },
+    {
+      "path": "fps-candidates/shm-completion/PRIMARY_RESEARCH.md",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/PRIMARY_RESEARCH.md",
+      "bytes": 1227,
+      "sha256": "7ffcb909a30460ef3bcecacde332adae42c1e9ff13e7c9f0f2d4a5d43cb909d0"
+    },
+    {
+      "path": "fps-candidates/shm-completion/README.md",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/README.md",
+      "bytes": 3701,
+      "sha256": "1ee2391237e4c8b468f41f80a960b78523609d65e5ba7104d02d76111ed0a308"
+    },
+    {
+      "path": "fps-candidates/shm-completion/SEAL_DELIVERY.py",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/SEAL_DELIVERY.py",
+      "bytes": 3832,
+      "sha256": "f8fa0a6b871f79644b5395aa4b9fc3ec02429b42172f18c9eb34d97b93f3cca4"
+    },
+    {
+      "path": "fps-candidates/shm-completion/SHM_COMPLETION_TEST_RESULTS.json",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/SHM_COMPLETION_TEST_RESULTS.json",
+      "bytes": 4524,
+      "sha256": "e436c6e7b77a6acc5b12bc6d69449281547f4e1623f0b8976fe7244ca646eda4"
+    },
+    {
+      "path": "fps-candidates/shm-completion/TEST_SHM_COMPLETION.py",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/TEST_SHM_COMPLETION.py",
+      "bytes": 1663,
+      "sha256": "fcfc3f8ae53d4bd34027f59dd8d5ce4f7a78ff96ec9e254ac61b6b48c19f0a1b"
+    },
+    {
+      "path": "fps-candidates/shm-completion/glx_lab_frontend.h",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/glx_lab_frontend.h",
+      "bytes": 2061,
+      "sha256": "e38bff8e5920e4d94b98645836751d89c94ad40d2209357595b0d23d6d1baca4"
+    },
+    {
+      "path": "fps-candidates/shm-completion/glx_lab_frontend_timed.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/glx_lab_frontend_timed.c",
+      "bytes": 7638,
+      "sha256": "0713221710462d87a7115081036973218ec54d02f656146f994d7582937f1f74"
+    },
+    {
+      "path": "fps-candidates/shm-completion/glx_lab_frontend_timed.c.patch",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/glx_lab_frontend_timed.c.patch",
+      "bytes": 2050,
+      "sha256": "47d1df4b73dc69b85bd7e4902462600543db7242a8f25c8aff42ef04d0265bb8"
+    },
+    {
+      "path": "fps-candidates/shm-completion/remesa_fast_shm.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/remesa_fast_shm.c",
+      "bytes": 8331,
+      "sha256": "312e143be7f7307f52724f757e7173c1eeb0810a36f4257a8f3e5266862cf769"
+    },
+    {
+      "path": "fps-candidates/shm-completion/remesa_fast_shm.c.patch",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/remesa_fast_shm.c.patch",
+      "bytes": 6947,
+      "sha256": "ae47b02b19d84453781780dae8281a8c146dac31109a32068610246b22f69fe8"
+    },
+    {
+      "path": "fps-candidates/shm-completion/remesa_fast_shm.h",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/remesa_fast_shm.h",
+      "bytes": 525,
+      "sha256": "1800d5848cada3b6541e1ac258ca93de2c7787878362fd733ce87e59cb767bb7"
+    },
+    {
+      "path": "fps-candidates/shm-completion/remesa_fast_shm.h.patch",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/remesa_fast_shm.h.patch",
+      "bytes": 645,
+      "sha256": "27a5c44ff9ddb20816a425a3516144054f7f19c6a775198e621f7f9435abed91"
+    },
+    {
+      "path": "fps-candidates/shm-completion/remesa_xcb_staging.h",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/remesa_xcb_staging.h",
+      "bytes": 723,
+      "sha256": "27d85c1619478827acb530d0f43581b61eb93b6d3ef327b3585f4b095cac94f0"
+    },
+    {
+      "path": "fps-candidates/shm-completion/test_shm_completion.c",
+      "source": "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test_shm_completion.c",
+      "bytes": 15956,
+      "sha256": "0721d04795eaaeee80327a4ee6caedef47786009f18273eb91b39624bd591a60"
+    }
+  ]
+}

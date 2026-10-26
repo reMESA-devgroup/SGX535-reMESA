@@ -1,0 +1,87 @@
+{
+  "status": "ACTUAL_HELPER_THREE_MODE_CPU_MOCK_PASS_PHYSICAL_GAIN_UNPROVEN",
+  "GPU_operations": 0,
+  "X_server_operations": 0,
+  "tests": [
+    {
+      "mode": "native",
+      "compile": [
+        "gcc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z",
+        "-I/home/gama/sgx535-offline/phase9-real-mesa-20261008/i386-deps/usr/include",
+        "-I/home/gama/sgx535-offline/glx-dependencies-20261022T023107Z/root/usr/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test_shm_completion.c",
+        "-pthread",
+        "-o",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-native"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-native"
+      ],
+      "exit": 0,
+      "result": "PASS actual SHM helper:120frames singlebuffer,checked+completion before reuse,arrow/Expose preserved,10nonmatching completion fields,queuedbeforepoll,multipoll/EINTR,timeout/disconnect/error/zeroCookie/wrap/latecompletion/resize,poison retained nooverwrite/detach/unmap/retry,borrowedDisplay notdereferenced afterteardown,closeinflight,normalcleanup; CPU mocks GPU0 Xserver0"
+    },
+    {
+      "mode": "ubsan",
+      "compile": [
+        "gcc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z",
+        "-I/home/gama/sgx535-offline/phase9-real-mesa-20261008/i386-deps/usr/include",
+        "-I/home/gama/sgx535-offline/glx-dependencies-20261022T023107Z/root/usr/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test_shm_completion.c",
+        "-pthread",
+        "-o",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-ubsan"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-ubsan"
+      ],
+      "exit": 0,
+      "result": "PASS actual SHM helper:120frames singlebuffer,checked+completion before reuse,arrow/Expose preserved,10nonmatching completion fields,queuedbeforepoll,multipoll/EINTR,timeout/disconnect/error/zeroCookie/wrap/latecompletion/resize,poison retained nooverwrite/detach/unmap/retry,borrowedDisplay notdereferenced afterteardown,closeinflight,normalcleanup; CPU mocks GPU0 Xserver0"
+    },
+    {
+      "mode": "i386",
+      "compile": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z",
+        "-I/home/gama/sgx535-offline/phase9-real-mesa-20261008/i386-deps/usr/include",
+        "-I/home/gama/sgx535-offline/glx-dependencies-20261022T023107Z/root/usr/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test_shm_completion.c",
+        "-pthread",
+        "-o",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-i386"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-fps-helper-shm-completion-20261026T171500Z/test-shm-completion-i386"
+      ],
+      "exit": 0,
+      "result": "PASS actual SHM helper:120frames singlebuffer,checked+completion before reuse,arrow/Expose preserved,10nonmatching completion fields,queuedbeforepoll,multipoll/EINTR,timeout/disconnect/error/zeroCookie/wrap/latecompletion/resize,poison retained nooverwrite/detach/unmap/retry,borrowedDisplay notdereferenced afterteardown,closeinflight,normalcleanup; CPU mocks GPU0 Xserver0"
+    }
+  ],
+  "helper_sha256": "312e143be7f7307f52724f757e7173c1eeb0810a36f4257a8f3e5266862cf769",
+  "deadline_scope": "Only new completion wait; retained checked calls can block as before",
+  "poisoned_fixture_reset_is_simulated_process_teardown_not_production_recovery": true
+}

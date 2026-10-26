@@ -131,7 +131,7 @@ int main(void)
  CHECK(remesa_shader_storage_create(&r,NULL)==EINVAL);
  r.bytes=NULL;CHECK(remesa_shader_storage_create(&r,&s)==EINVAL&&s==NULL);r.bytes=bytes;
  r.stage=(enum remesa_ir_stage)0;CHECK(remesa_shader_storage_create(&r,&s)==EINVAL&&s==NULL);r.stage=REMESA_IR_VERTEX;
- r.format=(enum remesa_shader_storage_format)3;CHECK(remesa_shader_storage_create(&r,&s)==ENOTSUP&&s==NULL);r.format=REMESA_SHADER_STORAGE_HOST_CPU_RECORDS;
+ r.format=(enum remesa_shader_storage_format)4;CHECK(remesa_shader_storage_create(&r,&s)==ENOTSUP&&s==NULL);r.format=REMESA_SHADER_STORAGE_HOST_CPU_RECORDS;
  r.byte_length=0;CHECK(remesa_shader_storage_create(&r,&s)==EINVAL&&s==NULL);
  r.byte_length=55;CHECK(remesa_shader_storage_create(&r,&s)==EINVAL&&s==NULL);
  r.byte_length=REMESA_SHADER_STORAGE_MAX_BYTES+8u;CHECK(remesa_shader_storage_create(&r,&s)==E2BIG&&s==NULL);
@@ -166,6 +166,12 @@ int main(void)
  CHECK(!remesa_shader_storage_inspect(s,&v)&&v.byte_length==4&&v.format==REMESA_SHADER_STORAGE_HOST_PDS_DATA);
  CHECK(remesa_shader_storage_validate_execution(s)==ENOTSUP);
  CHECK(!remesa_shader_storage_reference(&s,NULL)&&!s&&!live_allocations);
+ r.format=REMESA_SHADER_STORAGE_HOST_PDS_STRUCTURE;
+ CHECK(!remesa_shader_storage_create(&r,&s)&&live_allocations==2);
+ CHECK(!remesa_shader_storage_inspect(s,&v)&&v.format==REMESA_SHADER_STORAGE_HOST_PDS_STRUCTURE);
+ CHECK(remesa_shader_storage_validate_execution(s)==ENOTSUP);
+ CHECK(!remesa_shader_storage_reference(&s,NULL)&&!live_allocations);
+ r.format=REMESA_SHADER_STORAGE_HOST_PDS_DATA;
  r.byte_length=6;CHECK(remesa_shader_storage_create(&r,&s)==EINVAL&&!s&&!live_allocations);
  r.byte_length=16;
  for(i=0;i<2;i++){

@@ -1,0 +1,55 @@
+{
+  "format": "PIPE_FORMAT_Z24X8_UNORM",
+  "defined_bits": "low24 normalized unsigned depth",
+  "ignored_bits": "high8 VOID, not a stencil attachment",
+  "scope": "Format contract for this admitted renderer only; does not approve Z24S8 or make full raw buffers equal",
+  "sources": [
+    {
+      "path": "/home/gama/sgx535-offline/phase9-real-mesa-20261008/mesa-25.2.0/src/util/format/u_format.yaml",
+      "sha256": "0aabe9d19cd05ce9bed963023b5790080a468a9316ef69bf162f27366a642a67",
+      "lines": [
+        640,
+        645
+      ],
+      "required_text": [
+        "- name: Z24X8_UNORM",
+        "channels: [UN24, X8]",
+        "#     - 'x': void"
+      ]
+    },
+    {
+      "path": "/home/gama/sgx535-offline/phase9-real-mesa-20261008/mesa-25.2.0/src/util/format/u_format_parse.py",
+      "sha256": "d4f766bd800ea7571021c6e027dc16a744f90cc9d96988e5299f38fde2ed360c",
+      "lines": [
+        53,
+        56
+      ],
+      "required_text": [
+        "'X': VOID"
+      ]
+    },
+    {
+      "path": "/home/gama/sgx535-offline/gears-fast-nohash-20261025T223500Z/runtime_engine.c",
+      "sha256": "ecee32d8058e34c6e37fe49cedc90bcb2b202b89f87691183ca608e1bfa87d8a",
+      "lines": [
+        55,
+        57
+      ],
+      "required_text": [
+        "d->depth_format!=PIPE_FORMAT_Z24X8_UNORM"
+      ]
+    },
+    {
+      "path": "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_screen.c",
+      "sha256": "1b6a6b6aa54d0d3be5fbcc7f2ca1e021ab808fd79a80a756704cc1a2acdcdb03",
+      "lines": [
+        181,
+        185
+      ],
+      "required_text": [
+        "f==PIPE_FORMAT_Z24X8_UNORM",
+        "return bind==PIPE_BIND_DEPTH_STENCIL;"
+      ]
+    }
+  ]
+}

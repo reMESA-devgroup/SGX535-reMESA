@@ -1,0 +1,8 @@
+{
+  "status": "PHYSICAL_BACKGROUND_PLANE_CANDIDATE_FAILED",
+  "exit": 1,
+  "first_failed_pixel": 429,
+  "reason": "Background RGB not black",
+  "production_promotion": false,
+  "raw_readbacks_preserved": true
+}

@@ -1,0 +1,8 @@
+{
+  "status": "PHYSICAL_LESS_PIXEL_QUALIFICATION_FAILED",
+  "exit": 1,
+  "first_failed_pixel": 498576,
+  "reason": "COLOR missing at depth-covered stable interior",
+  "raw_evidence_preserved": true,
+  "production_promotion": false
+}

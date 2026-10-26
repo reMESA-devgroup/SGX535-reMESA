@@ -20,7 +20,7 @@
 
 _Static_assert(sizeof(struct remesa_native_draw)==4240,"native/i386 UAPI");
 struct linux_bo { size_t size; unsigned char *bytes; bool readable, busy, failed; };
-struct linux_fence { int error; bool published; };
+struct linux_fence { struct linux_fence *next; int error; bool published; };
 struct linux_shader {
  struct linux_shader *next;
  void *token;
@@ -29,6 +29,10 @@ struct linux_shader {
  struct remesa_shader_bindings bindings;
  uint64_t generation;
  void *storage_token;
+ bool supplied_cpu_image;
+ /* Keep the source inventory through authenticated retained completion;
+  * normal Gallium teardown must not release it after an uncertain attempt. */
+ bool fragment_held;
  /* Immutable host plan, never an executable task or authenticated PDS map. */
  bool pds_links_retained;
  struct remesa_shader_pds_links pds_links;
@@ -39,6 +43,7 @@ struct linux_device {
  struct remesa_linux_receipt receipt;
  struct remesa_native_draw response;
  struct linux_shader *shaders;
+ struct linux_fence *fences;
  struct remesa_shader_cookie_pool shader_cookies;
  uint64_t shader_generation;
  bool shader_candidate_valid;
@@ -53,7 +58,9 @@ struct linux_device {
  struct remesa_linux_fragment_receipt fragment_receipt;
 };
 static int endpoint_output_check(const struct linux_device *,const void *,size_t);
-static int fragment_admit(const struct remesa_shader_image *image)
+static uint32_t fragment_color(const struct linux_device *d)
+{return d->fragment_carrier.fragment_argb?d->fragment_carrier.fragment_argb:UINT32_C(0xffff00ff);}
+static int fragment_admit(const struct remesa_shader_image *image,uint32_t expected)
 {
  struct remesa_shader_image_view view;
  struct remesa_fragment_constant record;
@@ -62,17 +69,7 @@ static int fragment_admit(const struct remesa_shader_image *image)
   return ENOTSUP;
  error=remesa_fragment_constant_decode(view.fragment.bytes,8,&record);
  if(error)return error;
- return record.argb==UINT32_C(0xffff00ff)?0:ENOTSUP;
-}
-static int request_error(enum remesa_shader_request_status status)
-{
- switch(status) {
- case REMESA_SHADER_REQUEST_OK:return 0;
- case REMESA_SHADER_REQUEST_INVALID:return EINVAL;
- case REMESA_SHADER_REQUEST_UNSUPPORTED:return ENOTSUP;
- case REMESA_SHADER_REQUEST_NOMEM:return ENOMEM;
- }
- return EPROTO;
+ return record.argb==expected?0:ENOTSUP;
 }
 static bool overlaps(const void *a,size_t an,const void *b,size_t bn)
 {
@@ -82,26 +79,10 @@ static bool overlaps(const void *a,size_t an,const void *b,size_t bn)
 }
 int remesa_linux_shader_request_build(const struct remesa_shader_image *image,
  uint64_t owner,uint64_t generation,struct remesa_shader_request *out)
-{
- struct remesa_shader_image_view view;
- if(!out)return EINVAL;
- int error=remesa_shader_image_inspect(image,&view);if(error)return error;
- if(overlaps(out,sizeof(*out),view.programs,sizeof(*view.programs)))return EINVAL;
- /* The optional numeric VS candidate is CPU-format storage only. PDS remains
-  * absent; neither stage is substituted with a historical program. */
- struct remesa_shader_blob blobs[REMESA_SHADER_RESOURCE_COUNT]={{0}};
- if(view.vertex.byte_length)blobs[REMESA_SHADER_VERTEX_USSE-1]=(struct remesa_shader_blob){
-  .bytes=view.vertex.bytes,.length=(uint32_t)view.vertex.byte_length,
-  .alignment=(uint32_t)view.vertex.byte_alignment,.state=REMESA_SHADER_CPU_CANDIDATE
- };
- blobs[REMESA_SHADER_FRAGMENT_USSE-1]=(struct remesa_shader_blob){
-  .bytes=view.fragment.bytes,.length=(uint32_t)view.fragment.byte_length,
-  .alignment=(uint32_t)view.fragment.byte_alignment,.state=REMESA_SHADER_CPU_CANDIDATE
- };
- return request_error(remesa_shader_request_build(out,owner,generation,blobs));
-}
+{return remesa_shader_image_build_request(image,owner,generation,out);}
 static int prepare_candidate(void *priv,const struct remesa_shader_draw_programs *programs,
- const struct remesa_usse_vertex_mapping *mapping,void **out)
+ const struct remesa_usse_vertex_mapping *mapping,
+ const struct remesa_shader_image *provided,void **out)
 {
  struct linux_device *d=priv;
  struct linux_shader *shader;
@@ -116,13 +97,16 @@ static int prepare_candidate(void *priv,const struct remesa_shader_draw_programs
  if(d->shader_cookies.count>=REMESA_SHADER_COOKIE_LIMIT)return ENOSPC;
  if(d->shader_generation==UINT64_MAX)return EOVERFLOW;
  shader=calloc(1,sizeof(*shader));if(!shader)return ENOMEM;
- int error=mapping?remesa_shader_image_prepare_vertex_candidate(programs,mapping,&shader->image):
+ int error=provided?remesa_shader_image_clone(provided,&shader->image):
+  mapping?remesa_shader_image_prepare_vertex_candidate(programs,mapping,&shader->image):
   remesa_shader_image_prepare(programs,&shader->image);
+ shader->supplied_cpu_image=provided!=NULL;
  if(error){free(shader);return error;}
  shader->generation=d->shader_generation+1;
  if(d->shader_storage.ops) {
   struct remesa_device *store=&d->shader_storage;
-  error=mapping?remesa_persistent_prepare_vertex_candidate(store,programs,mapping,
+  error=provided?remesa_persistent_prepare_image(store,shader->image,&shader->storage_token):
+   mapping?remesa_persistent_prepare_vertex_candidate(store,programs,mapping,
    &shader->storage_token):store->ops->prepare_shader_programs(store->priv,programs,&shader->storage_token);
   if(error==ENOTSUP && shader->storage_token) {
    error=remesa_persistent_shader_bindings(store,shader->storage_token,&request,&shader->bindings);
@@ -151,7 +135,7 @@ static int prepare_candidate(void *priv,const struct remesa_shader_draw_programs
   * No historical draw ioctl or GPU action occurs. */
  /* The explicit fragment-stage laboratory prepares only this original FS.
   * It does not promote the semantic VS or PDS to executable original code. */
- return d->fragment_enabled?fragment_admit(shader->image):
+ return !provided&&d->fragment_enabled?fragment_admit(shader->image,fragment_color(d)):
   remesa_shader_image_validate_execution(shader->image);
 }
 static int prepare_shader_programs(void *priv,const struct remesa_shader_draw_programs *programs,
@@ -159,7 +143,7 @@ static int prepare_shader_programs(void *priv,const struct remesa_shader_draw_pr
 {
  struct linux_device *d=priv;
  return prepare_candidate(priv,programs,d&&d->vertex_candidate_configured?
-  &d->vertex_candidate_mapping:NULL,out);
+  &d->vertex_candidate_mapping:NULL,NULL,out);
 }
 static struct linux_shader **shader_link(struct linux_device *d,void *token)
 {
@@ -183,7 +167,9 @@ static int endpoint_output_check(const struct linux_device *d,
   int error=remesa_shader_image_inspect(shader->image,&view);if(error)return error;
   if(overlaps(out,bytes,view.programs,sizeof(*view.programs))||
      overlaps(out,bytes,view.fragment.bytes,view.fragment.byte_length)||
-     overlaps(out,bytes,view.vertex.bytes,view.vertex.byte_length))return EINVAL;
+     overlaps(out,bytes,view.vertex.bytes,view.vertex.byte_length)||
+     overlaps(out,bytes,view.fragment_pds.bytes,view.fragment_pds.byte_length)||
+     overlaps(out,bytes,view.fragment_pds_mask.bytes,view.fragment_pds_mask.byte_length))return EINVAL;
   for(unsigned i=0;i<2;i++)if(shader->pds_host_data[i]) {
    struct remesa_shader_storage_view data;
    error=remesa_shader_storage_inspect(shader->pds_host_data[i],&data);if(error)return error;
@@ -200,14 +186,20 @@ static int shader_output_check(const struct remesa_device *device,
  if(!device||!out||overlaps(out,bytes,device,sizeof(*device)))return EINVAL;
  return endpoint_output_check(device->priv,out,bytes);
 }
-static int fragment_geometry(const struct remesa_draw_packet *packet)
+static int fragment_geometry(const struct remesa_draw_packet *packet,uint32_t argb,bool quarter)
 {
  struct remesa_native_draw actual;
- const struct remesa_native_draw expected={.version=REMESA_NATIVE_ABI_VERSION,
-  .width=32,.height=32,.vertex_count=3,.index_count=3,.argb=0xffff00ff,
+ struct remesa_native_draw expected={.version=REMESA_NATIVE_ABI_VERSION,
+  .width=32,.height=32,.vertex_count=3,.index_count=3,.argb=argb,
   .positions={{0x41000000,0x41000000,0x3f000000,0x3f800000},
    {0x41c00000,0x41000000,0x3f000000,0x3f800000},
    {0x41000000,0x41c00000,0x3f000000,0x3f800000}},.indices={0,1,2}};
+ if(quarter) {
+  /* IEEE7548.25/24.25, finite mathematical vertex data, not PDS fields. */
+  const uint32_t xy[3][2]={{0x41040000,0x41040000},
+   {0x41c20000,0x41040000},{0x41040000,0x41c20000}};
+  for(unsigned v=0;v<3;v++)for(unsigned c=0;c<2;c++)expected.positions[v][c]=xy[v][c];
+ }
  int error=remesa_linux_request_build(packet,&actual);if(error)return error;
  return memcmp(&actual,&expected,offsetof(struct remesa_native_draw,operation))?ENOTSUP:0;
 }
@@ -218,7 +210,7 @@ static int fragment_stage(struct linux_device *d,struct linux_shader *shader)
  const struct remesa_persistent_ops *memory=remesa_linux_memory_ops();
  struct remesa_linux_fragment_receipt *receipt=&d->fragment_receipt;
  void *mapped=NULL;unsigned char *before=NULL;int error,cleanup;
- error=fragment_admit(shader->image);if(error)return error;
+ error=fragment_admit(shader->image,fragment_color(d));if(error)return error;
  if(shader->request.owner!=remesa_linux_memory_context(d->shader_memory))return ESTALE;
  for(unsigned i=0;i<4;i++)if(shader->bindings.resources[i].handle)
   for(unsigned j=0;j<10;j++)
@@ -237,11 +229,47 @@ static int fragment_stage(struct linux_device *d,struct linux_shader *shader)
  receipt->source_offset=shader->bindings.resources[1].offset;
  receipt->use_handle=use->id;receipt->use_va=use->va;
  memcpy(receipt->source,view.fragment.bytes,8);
+ if(d->fragment_carrier.independent_vertex) {
+  if(view.vertex.byte_length!=16||view.vertex.byte_alignment!=8||
+     shader->bindings.resources[0].handle!=receipt->source_handle||
+     shader->bindings.resources[0].length!=16||use->bytes<0x50){error=ENOTSUP;goto done;}
+  receipt->vertex_source_handle=shader->bindings.resources[0].handle;
+  receipt->vertex_source_offset=shader->bindings.resources[0].offset;
+  receipt->vertex_use_offset=0x40;
+  memcpy(receipt->vertex_source,view.vertex.bytes,16);
+ }
+ error=memory->cpu_map(d->shader_memory,use->id,false,&mapped);
+ if(error){if(mapped)(void)memory->cpu_unmap(d->shader_memory,use->id,false);goto done;}
+ if(!mapped){error=EOWNERDEAD;goto done;}
+ memcpy(before,mapped,(size_t)use->bytes);memcpy(receipt->preimage,mapped,8);
+ receipt->program_changed=memcmp(receipt->source,receipt->preimage,8)!=0;
+ if(d->fragment_carrier.independent_vertex)
+  memcpy(receipt->vertex_preimage,(const unsigned char *)mapped+0x40,16);
+ error=memory->cpu_unmap(d->shader_memory,use->id,false);mapped=NULL;
+ if(error){error=EOWNERDEAD;goto done;}
+ if(d->fragment_carrier.independent_vertex&&
+    memcmp(receipt->vertex_preimage,receipt->vertex_source,16)) {error=ESTALE;goto done;}
+ /* The green experiment replaces the exact admitted magenta entry. Check its
+  * preimage before any USE write or possible issue, rather than discovering a
+  * foreign carrier only in the post-submission authentication callback. */
+ if(fragment_color(d)==UINT32_C(0xff00ff00)) {
+  struct remesa_fragment_constant previous;
+  if(remesa_fragment_constant_decode(receipt->preimage,8,&previous)||
+     previous.argb!=UINT32_C(0xffff00ff)) {error=ESTALE;goto done;}
+ }
+ if(d->fragment_carrier.require_program_change&&!receipt->program_changed) {
+  error=ENOTSUP;goto done;
+ }
  error=memory->cpu_map(d->shader_memory,use->id,true,&mapped);
  if(error){if(mapped)(void)memory->cpu_unmap(d->shader_memory,use->id,true);goto done;}
  if(!mapped){error=EOWNERDEAD;goto done;}
- memcpy(before,mapped,(size_t)use->bytes);memcpy(receipt->preimage,mapped,8);
+ if(memcmp(mapped,before,(size_t)use->bytes)) {
+  (void)memory->cpu_unmap(d->shader_memory,use->id,true);mapped=NULL;
+  error=EOWNERDEAD;goto done;
+ }
  memcpy(mapped,view.fragment.bytes,8);
+ if(d->fragment_carrier.independent_vertex)
+  memcpy((unsigned char *)mapped+0x40,view.vertex.bytes,16);
  error=memory->cpu_unmap(d->shader_memory,use->id,true);mapped=NULL;
  if(error)goto done;
  error=memory->cpu_map(d->shader_memory,use->id,false,&mapped);
@@ -251,52 +279,190 @@ static int fragment_stage(struct linux_device *d,struct linux_shader *shader)
     memcmp((unsigned char *)mapped+8,before+8,(size_t)use->bytes-8))error=EOWNERDEAD;
  cleanup=memory->cpu_unmap(d->shader_memory,use->id,false);mapped=NULL;
  if(cleanup)error=EOWNERDEAD;
- if(!error){receipt->staged=true;receipt->outside_fragment_unchanged=true;}
+ if(!error){receipt->staged=true;receipt->outside_fragment_unchanged=true;
+  receipt->vertex_staged=d->fragment_carrier.independent_vertex;}
 done:
  if(error==EOWNERDEAD)receipt->quarantined=true;
  free(before);return error;
+}
+static int fragment_capture(struct linux_device *d,struct linux_shader *shader,
+ struct remesa_linux_fragment_capture *out)
+{
+ struct remesa_shader_request request;
+ struct remesa_persistent_shader_backing program;
+ struct remesa_persistent_draw_backing geometry;
+ /* The bounded experiment accounts exactly one token and two CPU-only BOs.
+  * Optional HOST DATA and additional tokens require their own inventory. */
+ if(d->shaders!=shader||shader->next||shader->pds_host_data[0]||
+    shader->pds_host_data[1])return ENOTSUP;
+ int error=remesa_persistent_shader_snapshot(&d->shader_storage,
+  shader->storage_token,&request,&program);if(error)return error;
+ error=remesa_persistent_shader_draw_backing(&d->shader_storage,
+  shader->storage_token,&geometry);if(error)return error;
+ if(program.owner!=request.owner||program.generation!=shader->generation||
+    geometry.owner!=program.owner||geometry.generation!=program.generation||
+    !program.pinned||!program.staged||program.quarantined||
+    !geometry.pinned||!geometry.staged||!program.handle||!geometry.handle||
+    program.handle==geometry.handle||
+    program.handle!=d->fragment_receipt.source_handle)return ESTALE;
+ uint64_t total=program.allocation_bytes;
+ if(geometry.allocation_bytes>UINT64_MAX-total)return EOVERFLOW;
+ total+=geometry.allocation_bytes;
+ uint64_t pages=0;
+ for(unsigned i=0;i<10;i++) {
+  const struct remesa_retained_binding *b=&d->fragment_job.bindings[i];
+  if(b->id==program.handle||b->id==geometry.handle)return EINVAL;
+  if(b->bytes>UINT64_MAX-total)return EOVERFLOW;
+  total+=b->bytes;pages+=b->bytes/4096;
+ }
+ if(pages>UINT32_MAX)return EOVERFLOW;
+ const uint32_t handles[2]={program.handle,geometry.handle};
+ const uint64_t sizes[2]={program.allocation_bytes,geometry.allocation_bytes};
+ for(unsigned i=0;i<2;i++) {
+  struct remesa_memory_info info;
+  error=remesa_linux_memory_info(d->shader_memory,handles[i],&info);if(error)return error;
+  if(info.allocated_bytes!=total||info.objects!=12||info.pinned_objects!=12||
+     info.mapped_pages!=pages||info.leases||info.held_jobs||info.quarantined||
+     info.object_bytes!=sizes[i]||info.object_pinned!=1||info.gpu_va||
+     info.object_mapped_pages||info.object_lease||info.verified_pages)return ESTALE;
+ }
+ struct remesa_linux_fragment_capture capture={.owner=program.owner,
+  .generation=program.generation,.program_handle=program.handle,
+  .geometry_handle=geometry.handle,.source_offset=d->fragment_receipt.source_offset,
+  .program_bytes=program.allocation_bytes,.geometry_bytes=geometry.allocation_bytes,
+  .program_changed=d->fragment_receipt.program_changed,.argb=fragment_color(d)};
+ memcpy(capture.source,d->fragment_receipt.source,8);
+ memcpy(capture.preimage,d->fragment_receipt.preimage,8);
+ capture.vertex_staged=d->fragment_receipt.vertex_staged;
+ capture.vertex_source_handle=d->fragment_receipt.vertex_source_handle;
+ capture.vertex_source_offset=d->fragment_receipt.vertex_source_offset;
+ capture.vertex_use_offset=d->fragment_receipt.vertex_use_offset;
+ memcpy(capture.vertex_source,d->fragment_receipt.vertex_source,16);
+ memcpy(capture.vertex_preimage,d->fragment_receipt.vertex_preimage,16);
+ *out=capture;return 0;
+}
+static int fragment_capture_after(struct linux_device *d,struct linux_shader *shader,
+ const struct remesa_linux_fragment_capture *before)
+{
+ struct remesa_linux_fragment_capture after;
+ /* Only after submit_retained reports its bounded retired response. Read the
+  * unmapped CPU program/geometry backing and INFO, never COLOR or extra MMIO.
+  * The existing endpoint recorder captures the raw results before the trusted
+  * authentication callback, which must not reenter this endpoint itself. */
+ int error=remesa_persistent_shader_verify(&d->shader_storage,shader->storage_token);
+ if(error)return error;
+ for(unsigned i=0;i<10;i++) {
+  const struct remesa_retained_binding *b=&d->fragment_job.bindings[i];
+  error=remesa_linux_memory_validate_backing(d->shader_memory,b->id,b->va,(size_t)b->bytes);
+  if(error)return error;
+ }
+ error=fragment_capture(d,shader,&after);if(error)return error;
+ /* Preserve actual read-only carrier observations for the protected recorder.
+  * This is after nominal retirement, before authentication/publication. Reads
+  * do not establish physical origin; the adapter must corroborate them with
+  * the independent observer and the same job. No expected pixels are used. */
+ const struct remesa_persistent_ops *memory=remesa_linux_memory_ops();
+ for(unsigned i=0;i<6;i++) {
+  void *observed=NULL;
+  error=memory->cpu_map(d->shader_memory,d->fragment_job.bindings[i].id,false,&observed);
+  if(error) {
+   if(observed)(void)memory->cpu_unmap(d->shader_memory,d->fragment_job.bindings[i].id,false);
+   return error;
+  }
+  if(!observed)return EOWNERDEAD;
+  error=memory->cpu_unmap(d->shader_memory,d->fragment_job.bindings[i].id,false);
+  if(error)return error;
+ }
+ if(after.owner!=before->owner||after.generation!=before->generation||
+    after.program_handle!=before->program_handle||
+    after.geometry_handle!=before->geometry_handle||
+    after.source_offset!=before->source_offset||after.argb!=before->argb||
+    after.program_bytes!=before->program_bytes||
+    after.geometry_bytes!=before->geometry_bytes||
+    after.program_changed!=before->program_changed||
+    memcmp(after.source,before->source,sizeof(after.source))||
+    memcmp(after.preimage,before->preimage,sizeof(after.preimage))||
+    after.vertex_staged!=before->vertex_staged||
+    after.vertex_source_handle!=before->vertex_source_handle||
+    after.vertex_source_offset!=before->vertex_source_offset||
+    after.vertex_use_offset!=before->vertex_use_offset||
+    memcmp(after.vertex_source,before->vertex_source,16)||
+    memcmp(after.vertex_preimage,before->vertex_preimage,16))return ESTALE;
+ return 0;
 }
 static int submit_fragment(struct linux_device *d,struct linux_bo *target,
  const struct remesa_draw_packet *packet,const struct remesa_shader_draw_inputs *inputs,
  struct linux_shader *shader,void **out)
 {
  struct remesa_linux_fragment_evidence evidence={0};
+ struct remesa_linux_fragment_capture capture;
  const struct remesa_persistent_ops *memory=remesa_linux_memory_ops();
  struct remesa_draw_plan geometry;
  struct remesa_shader_image_view view;
  struct linux_fence *f;void *color=NULL;
- int error=fragment_geometry(packet);if(error)return error;
+ int error=fragment_geometry(packet,fragment_color(d),d->fragment_carrier.gl_fbo_half_pixel_center);if(error)return error;
  if(d->fragment_prepared||d->attempted)return EBUSY;
  if(!shader->storage_token||target->size!=4096)return EINVAL;
  error=remesa_shader_draw_inputs_validate(inputs,&geometry);if(error)return error;
  error=remesa_shader_image_inspect(shader->image,&view);if(error)return error;
  const float positions[3][4]={{-.5f,-.5f,0,1},{.5f,-.5f,0,1},{-.5f,.5f,0,1}};
+ const float quarter_positions[3][4]={{-.484375f,-.484375f,0,1},
+  {.515625f,-.484375f,0,1},{-.484375f,.515625f,0,1}};
+ const void *selected_positions=d->fragment_carrier.gl_fbo_half_pixel_center?
+  (const void *)quarter_positions:(const void *)positions;
  const uint16_t indices[3]={0,1,2};
  if(!inputs->retained_fragment_carrier||inputs->preserve_color||inputs->position_input_slot!=view.programs->pipeline.position_input_slot||
     inputs->position_format!=PIPE_FORMAT_R32G32B32A32_FLOAT||
-    inputs->vertex_offset||inputs->element_offset||inputs->vertex_stride!=16||
-    inputs->vertex_bytes<sizeof(positions)||inputs->index_bytes<sizeof(indices)||
-    inputs->start||inputs->count!=3||inputs->index_size!=2||inputs->index_bias||
+    inputs->element_offset||inputs->vertex_stride!=16||
+    inputs->vertex_bytes<sizeof(positions)||
+    inputs->count!=3||inputs->index_bias||
     inputs->color_width!=32||inputs->color_height!=32||inputs->color_stride!=128||
-    inputs->color_bytes!=4096||inputs->cull_face||inputs->scissor_enabled||
-    memcmp(inputs->vertex_data,positions,sizeof(positions))||
-    memcmp(inputs->index_data,indices,sizeof(indices)))return ENOTSUP;
+    inputs->color_bytes!=4096||inputs->cull_face||inputs->scissor_enabled)return ENOTSUP;
+ /* Gallium uploaders suballocate VB/IB storage. Check the observed selected
+  * ranges, not their padding or allocation origins. These are CPU byte/index
+  * offsets; the retained GPU addresses, commands and geometry do not change.
+  * Keep the full bounded prefixes in stage_draw for source authentication. */
+ if(inputs->index_size==2) {
+  if(inputs->index_bytes<sizeof(indices)||
+     memcmp((const unsigned char *)inputs->index_data+(size_t)geometry.index_first_byte,
+            indices,sizeof(indices)))return ENOTSUP;
+ } else if(inputs->index_size!=0||inputs->start||inputs->index_data||inputs->index_bytes)
+  return ENOTSUP;
+ /* The non-indexed start0/count3 case selects exactly the same three
+  * vertices as the admitted uint16 {0,1,2}. The packet above still has to
+  * match the complete qualified geometry; no GPU packet or index storage
+  * is synthesized from a historical program. stage_draw preserves the
+  * actual absence of an index source rather than inventing an input BO. */
+ if(inputs->vertex_offset>inputs->vertex_bytes||
+    sizeof(positions)>inputs->vertex_bytes-inputs->vertex_offset)return EINVAL;
+ if(memcmp((const unsigned char *)inputs->vertex_data+inputs->vertex_offset,
+           selected_positions,sizeof(positions)))return ENOTSUP;
  for(unsigned c=0;c<3;c++)
   if(inputs->viewport.scale[c]!=(c==2?.5f:16.f)||
      inputs->viewport.translate[c]!=(c==2?.5f:16.f))return ENOTSUP;
  error=remesa_persistent_shader_stage_draw(&d->shader_storage,shader->storage_token,inputs);
  if(error)return error;
  f=calloc(1,sizeof(*f));if(!f)return ENOMEM;
- d->fragment_prepared=true;d->fragment_active=true;target->readable=false;target->busy=true;
+ f->next=d->fences;d->fences=f;
+ d->fragment_prepared=true;d->fragment_active=true;shader->fragment_held=true;
+ target->readable=false;target->busy=true;
  error=fragment_stage(d,shader);
  if(error)goto done;
+ if(d->fragment_carrier.authenticate_fragment) {
+  error=fragment_capture(d,shader,&capture);if(error)goto done;
+ }
  /* Only this endpoint's retained ioctl can issue. It borrows its existing
   * SGX owner; the diagnostic native ioctl/construct path is never called. */
  d->attempted=true;
  error=remesa_linux_memory_submit_retained(d->shader_memory,&d->fragment_job,
   &d->fragment_receipt.attempted,d->fragment_carrier.record,d->fragment_carrier.priv);
  if(error)goto done;
- error=d->fragment_carrier.authenticate(d->fragment_carrier.priv,&d->fragment_job,&evidence);
+ if(d->fragment_carrier.authenticate_fragment) {
+  error=fragment_capture_after(d,shader,&capture);if(error)goto done;
+  error=d->fragment_carrier.authenticate_fragment(d->fragment_carrier.priv,
+   &d->fragment_job,&capture,&evidence);
+ }
+ else error=d->fragment_carrier.authenticate(d->fragment_carrier.priv,&d->fragment_job,&evidence);
  if(error)goto done;
  const struct remesa_evidence_id *id=&evidence.expected.id;
  if(id->context!=d->fragment_job.context||id->operation!=d->fragment_job.operation||
@@ -322,6 +488,7 @@ static int submit_fragment(struct linux_device *d,struct linux_bo *target,
 done:
  if(error && (d->fragment_receipt.attempted||error==EOWNERDEAD))
   d->fragment_receipt.quarantined=true;
+ if(!d->fragment_receipt.quarantined)shader->fragment_held=false;
  d->fragment_active=false;target->busy=false;target->failed=error!=0;f->error=error;*out=f;return error;
 }
 static int submit_shader_programs(void *priv,void *bo,const struct remesa_draw_packet *packet,
@@ -346,6 +513,9 @@ static int submit_shader_programs(void *priv,void *bo,const struct remesa_draw_p
   if(memcmp(&request,&(*link)->request,sizeof(request)) ||
      memcmp(&bindings,&(*link)->bindings,sizeof(bindings)))return ESTALE;
  }
+ /* Supplied image tokens are an explicit CPU staging operation. Existing
+  * laboratory carrier admission cannot promote this newly supplied profile. */
+ if((*link)->supplied_cpu_image)return ENOTSUP;
  if(d->fragment_enabled)
   return submit_fragment(d,bo,packet,inputs,*link,out);
  /* Normal original-program execution stays gated before target memory or
@@ -356,6 +526,10 @@ static void destroy_shader_programs(void *priv,void *token)
 {
  struct linux_device *d=priv;
  struct linux_shader **link=shader_link(d,token);
+ /* The void Gallium cleanup callback can abandon its token, but an active or
+  * uncertain retained operation still owns the complete source inventory.
+  * Checked close already refuses this endpoint until retirement is known. */
+ if(link && (*link)->fragment_held)return;
  if(link){struct linux_shader *shader=*link;*link=shader->next;
   if(shader->storage_token)d->shader_storage.ops->destroy_shader_programs(
    d->shader_storage.priv,shader->storage_token);
@@ -418,6 +592,7 @@ static int submit(void *priv,void *bo,const struct remesa_draw_packet *p,void **
  if(b->size!=REMESA_NATIVE_COLOR_BYTES) return EINVAL;
  error=remesa_linux_request_build(p,&request);if(error) return error;
  f=calloc(1,sizeof(*f));if(!f) return ENOMEM;
+ f->next=d->fences;d->fences=f;
  original=request;b->readable=false;b->busy=true;
  /* Consume before syscall. EINTR, EFAULT and all other errors never retry. */
  d->attempted=true;d->receipt.attempted=1;
@@ -436,9 +611,28 @@ static int submit(void *priv,void *bo,const struct remesa_draw_packet *p,void **
  else { memcpy(b->bytes,request.color,sizeof(request.color));b->readable=true;f->published=true; }
  b->failed=f->error!=0;b->busy=false;*out=f;return f->error;
 }
+/* Membership is checked before dereferencing a caller's opaque fence. A
+ * foreign/stale handle cannot authenticate another endpoint or consume its
+ * completion object through the void destructor. */
+static struct linux_fence **fence_link(struct linux_device *d,const void *fence)
+{
+ if(!d||!fence)return NULL;
+ for(struct linux_fence **link=&d->fences;*link;link=&(*link)->next)
+  if(*link==fence)return link;
+ return NULL;
+}
 static int wait(void *priv,void *fence,uint64_t ns,bool visible)
-{ struct linux_fence *f=fence;(void)priv;(void)ns;if(!f) return EINVAL;return f->error ? f->error : visible && !f->published ? EAGAIN : 0; }
-static void destroy_fence(void *priv,void *fence) { (void)priv;free(fence); }
+{
+ struct linux_fence **link=fence_link(priv,fence);(void)ns;
+ if(!link)return EINVAL;
+ struct linux_fence *f=*link;
+ return f->error?f->error:visible&&!f->published?EAGAIN:0;
+}
+static void destroy_fence(void *priv,void *fence)
+{
+ struct linux_fence **link=fence_link(priv,fence);
+ if(link){struct linux_fence *f=*link;*link=f->next;free(f);}
+}
 static const struct remesa_device_ops ops={
  .allocate=allocate,.destroy_bo=destroy_bo,.map=map,.unmap=unmap,
  .submit=submit,.wait=wait,.destroy_fence=destroy_fence,
@@ -455,7 +649,24 @@ int remesa_linux_prepare_vertex_candidate(struct remesa_device *device,
  if(overlaps(out,sizeof(*out),programs,sizeof(*programs))||
     overlaps(out,sizeof(*out),mapping,sizeof(*mapping)))return EINVAL;
  if(*out)return EBUSY;
- return prepare_candidate(device->priv,programs,mapping,out);
+ return prepare_candidate(device->priv,programs,mapping,NULL,out);
+}
+int remesa_linux_prepare_image(struct remesa_device *device,
+ const struct remesa_shader_image *image,void **out)
+{
+ if(!device||device->ops!=&ops||!device->priv||!image||!out)return EINVAL;
+ int error=shader_output_check(device,out,sizeof(*out));if(error)return error;
+ struct linux_device *d=device->priv;
+ if(!d->shader_storage.ops)return ENODATA;
+ struct remesa_shader_image_view view;
+ error=remesa_shader_image_inspect(image,&view);if(error)return error;
+ if(overlaps(out,sizeof(*out),view.programs,sizeof(*view.programs)))return EINVAL;
+ const struct remesa_shader_storage_view *payloads[4]={&view.vertex,&view.fragment,
+  &view.fragment_pds,&view.fragment_pds_mask};
+ for(unsigned i=0;i<4;i++)
+  if(overlaps(out,sizeof(*out),payloads[i]->bytes,payloads[i]->byte_length))return EINVAL;
+ if(*out)return EBUSY;
+ return prepare_candidate(device->priv,view.programs,NULL,image,out);
 }
 int remesa_linux_set_vertex_candidate_mapping(struct remesa_device *device,
  const struct remesa_usse_vertex_mapping *mapping)
@@ -483,7 +694,7 @@ static int admit_fd(struct remesa_device *device,int fd)
  d->fd=fd;device->ops=&ops;device->priv=d;device->qualified_hardware_backend=true;return 0;
 }
 static bool empty_device(const struct remesa_device *d)
-{ return !d->ops && !d->priv && !d->offline_test_backend && !d->qualified_hardware_backend && !d->resource_only_backend && !d->retained_fragment_carrier && d->framebuffer_mode==REMESA_FRAMEBUFFER_REPLACE; }
+{ return !d->ops && !d->priv && !d->offline_test_backend && !d->qualified_hardware_backend && !d->resource_only_backend && !d->retained_fragment_carrier && !d->retained_gl_fbo_half_pixel_center && d->framebuffer_mode==REMESA_FRAMEBUFFER_REPLACE; }
 int remesa_linux_open(struct remesa_device *device,const char *node)
 {
  int fd;
@@ -519,9 +730,26 @@ int remesa_linux_enable_retained_fragment(struct remesa_device *device,
  const struct remesa_linux_fragment_carrier *config)
 {
  if(!device||device->ops!=&ops||!device->priv||!config||!config->job||
-    !config->memory||!config->record||!config->authenticate)return EINVAL;
+    !config->memory||!config->record||
+    (!!config->authenticate==!!config->authenticate_fragment))return EINVAL;
  struct linux_device *d=device->priv;
  if(d->fragment_enabled||d->attempted||d->shader_generation)return EBUSY;
+ if(config->fragment_argb&&config->fragment_argb!=UINT32_C(0xffff00ff)&&
+    config->fragment_argb!=UINT32_C(0xff00ff00))return ENOTSUP;
+ if(config->fragment_argb==UINT32_C(0xff00ff00)&&
+    (!config->authenticate_fragment||!config->require_program_change))return ENOTSUP;
+ if(config->gl_fbo_half_pixel_center &&
+    (!config->independent_vertex || config->fragment_argb!=UINT32_C(0xff00ff00) ||
+     !config->authenticate_fragment || !config->require_program_change))return ENOTSUP;
+ if(config->independent_vertex) {
+  if(config->fragment_argb!=UINT32_C(0xff00ff00)||!config->authenticate_fragment||
+     !d->vertex_candidate_configured)return ENOTSUP;
+  for(unsigned c=0;c<4;c++)
+   if(d->vertex_candidate_mapping.input[c].class_id!=2||
+      d->vertex_candidate_mapping.input[c].number!=c||
+      d->vertex_candidate_mapping.output[c].class_id!=1||
+      d->vertex_candidate_mapping.output[c].number!=c)return ENOTSUP;
+ }
  if(d->shader_memory!=config->memory||!d->shader_storage.ops)return EINVAL;
  struct remesa_retained_request job=*config->job;
  int error=remesa_retained_request_validate(&job);if(error)return error;
@@ -532,7 +760,9 @@ int remesa_linux_enable_retained_fragment(struct remesa_device *device,
  for(unsigned i=0;i<10;i++)if(job.bindings[i].bytes!=sizes[i])return ENOTSUP;
  if(job.bindings[0].va%4096||job.bindings[1].va%32768)return EINVAL;
  d->fragment_carrier=*config;d->fragment_carrier.job=NULL;d->fragment_job=job;
- d->fragment_enabled=true;device->retained_fragment_carrier=true;return 0;
+ d->fragment_enabled=true;device->retained_fragment_carrier=true;
+ device->retained_gl_fbo_half_pixel_center=config->gl_fbo_half_pixel_center;
+ return 0;
 }
 int remesa_linux_last_retained_fragment(const struct remesa_device *device,
  struct remesa_linux_fragment_receipt *out)
@@ -547,7 +777,7 @@ int remesa_linux_close_checked(struct remesa_device *device)
 {
  if(!device || device->ops!=&ops || !device->priv)return EINVAL;
  struct linux_device *d=device->priv;
- if(d->fragment_active||d->fragment_receipt.quarantined)return EBUSY;
+ if(d->fragment_active||d->fragment_receipt.quarantined||d->fences)return EBUSY;
  while(d->shaders)destroy_shader_programs(d,d->shaders->token);
  if(d->shader_storage.ops) {
   int error=remesa_persistent_close(&d->shader_storage);

@@ -98,8 +98,10 @@ int remesa_pds_prepare_use_links(const struct remesa_pds_plan plans[2],
 int remesa_pds_validate_use_links(const struct remesa_pds_plan plans[2],
  const struct remesa_pds_binding programs[2],const struct remesa_pds_use_link links[2]);
 /* Original numerical preview of the retained CPU address/prefix convention.
- * It is NOT a complete hardware descriptor or PDS program. T+4 is absent;
- * bits25:24 of T+8 are unknown and are not silently assigned a value.
+ * It is NOT a complete hardware descriptor or PDS program. T+4 is absent.
+ * For the audited primary FS CPU relocation, T+8 bits25:24 are known zero
+ * after the public kernel whole-word fixup; its known mask is UINT32_MAX.
+ * The VS projection retains unknown bits25:24 and mask0xfcffffff.
  * block_address and code_window_address preserve both competing fetch points;
  * neither is named the first PC. CODE/DATA must be disjoint windows of one
  * retained allocation. Limits/alignment ensure lossless CPU packing only.
@@ -155,6 +157,198 @@ int remesa_pds_apply_host_entry_fixups(const struct remesa_pds_plan *plans,
 int remesa_pds_validate_host_entry_fixups(const struct remesa_pds_plan *plans,
  const struct remesa_pds_binding *programs,const struct remesa_pds_use_link *links,
  const struct remesa_pds_host_data *data);
+/* Original host DATA construction schema, not PDS instructions or DS layout.
+ * Every DATA byte is covered by one four-byte little-endian cell. A literal
+ * remains opaque. CPU_META6 encodes the observed bounded CPU field. The
+ * single USE_ENTRY_LOWER19 cell must be at the validated
+ * link offset; value supplies only the upper opaque bits (low19 must be zero).
+ * No task-control meanings, DATA->DS transfers or CODE are supplied here. */
+enum remesa_pds_data_cell_kind {
+ REMESA_PDS_DATA_LITERAL32=1,
+ REMESA_PDS_DATA_USE_ENTRY_LOWER19=2,
+ /* CPU metadata6 packing observed in Xpsb; no resource/termination meaning. */
+ REMESA_PDS_DATA_CPU_META6=3
+};
+/* Bounded CPU field codec: observed metadata6 values0/1 -> word bit27.
+ * This supplies no upper task-control semantics or default stage selection.
+ * Pack rejects unobserved values; unpack rejects every other word bit.
+ * Outputs stay unchanged on error. CPU_META6 cell.value is metadata6, not
+ * an already packed word. No placement in DATA is selected automatically. */
+int remesa_pds_cpu_meta6_pack(uint32_t metadata6,uint32_t *word);
+int remesa_pds_cpu_meta6_unpack(uint32_t word,uint32_t *metadata6);
+struct remesa_pds_data_cell { uint32_t kind,value; };
+struct remesa_pds_host_data_recipe {
+ const struct remesa_pds_data_cell *cells;
+ size_t cell_count;
+};
+/* Validate both VS/FS recipes, their complete source/destination host ranges,
+ * exact retained bindings and live USE links before writing either buffer.
+ * Every source recipe and descriptor is disjoint from both destinations;
+ * caller serializes access. No allocation, callbacks, CODE writes or GPU
+ * publication occur. Any error leaves both buffers unchanged. */
+int remesa_pds_build_host_data_pair(const struct remesa_pds_plan *plans,
+ const struct remesa_pds_binding *programs,const struct remesa_pds_use_link *links,
+ const struct remesa_pds_host_data_recipe *recipes,
+ const struct remesa_pds_host_data *data);
+/* Read-only complete-byte check against the same canonical recipes and links.
+ * EPROTO means stored DATA differs; no executable qualification follows. */
+int remesa_pds_validate_host_data_pair(const struct remesa_pds_plan *plans,
+ const struct remesa_pds_binding *programs,const struct remesa_pds_use_link *links,
+ const struct remesa_pds_host_data_recipe *recipes,
+ const struct remesa_pds_host_data *data);
+/* Original logical task-input routing. These 64 slots are a bounded HOST
+ * namespace, NOT physical DS registers, SGX limits, DATA banks or an ISA.
+ * Every DATA cell must have exactly one source-to-slot definition; slots must
+ * be unique. Transfer order is immaterial. The USE entry is routed explicitly
+ * from its one canonical relocation cell. Caller cannot assign evidence flags.
+ * Values are fully known CPU inputs; cpu_relocation_mask identifies
+ * only established CPU relocation fields: lower19 for USE, zero for opaque
+ * literals. In particular, the upper13 USE bits remain uninterpreted.
+ */
+#define REMESA_PDS_HOST_TASK_SCHEMA 1u
+#define REMESA_PDS_HOST_TASK_SLOTS 64u
+struct remesa_pds_host_transfer {
+ uint32_t data_cell,logical_slot;
+};
+struct remesa_pds_host_transfer_request {
+ const struct remesa_pds_host_transfer *transfers;
+ size_t transfer_count;
+};
+struct remesa_pds_host_task_slot {
+ uint32_t data_cell,logical_slot,data_kind,value;
+ uint32_t cpu_relocation_mask;
+ uint64_t data_address;
+};
+struct remesa_pds_host_task_plan {
+ uint32_t schema,reserved;
+ enum remesa_ir_stage stage;
+ struct remesa_pds_use_link link;
+ uint32_t slot_count,entry_logical_slot;
+ /* Exact independent blockers, never caller-controlled qualifications.
+  * DATA->physical DS routing, dispatch task controls and hardware completion
+  * are not provided by logical value resolution. All remain ENOTSUP. */
+ int data_to_ds_error,dispatch_error,termination_error;
+ /* Canonical source-cell order; unused entries are zero. */
+ struct remesa_pds_host_task_slot slots[REMESA_PDS_HOST_TASK_SLOTS];
+};
+/* Validate VS/FS plans, canonical DATA recipes, exact current USE links and
+ * explicit complete logical routing before publishing either result. Bounds,
+ * undefined/duplicate slots or sources, stale links and alias/wrap are errors.
+ * At most64 cells are admitted by this host planner; larger DATA recipes stay
+ * valid for the independent DATA builder and return E2BIG here. No CODE is
+ * emitted and no hardware DS, task arity, resource count or completion field
+ * is invented. Outputs must be disjoint from every input; failure is atomic.
+ */
+int remesa_pds_prepare_task_pair(const struct remesa_pds_plan *plans,
+ const struct remesa_pds_binding *programs,const struct remesa_pds_use_link *links,
+ const struct remesa_pds_host_data_recipe *recipes,
+ const struct remesa_pds_host_transfer_request *requests,
+ struct remesa_pds_host_task_plan *out);
+/* Rebuild every resolved value/location from fresh inputs. Changes to opaque
+ * controls, source values, mappings, slots or declared blocker states are
+ * rejected; a self-consistent plan does not authenticate a GPU allocation. */
+int remesa_pds_validate_task_pair(const struct remesa_pds_plan *plans,
+ const struct remesa_pds_binding *programs,const struct remesa_pds_use_link *links,
+ const struct remesa_pds_host_data_recipe *recipes,
+ const struct remesa_pds_host_transfer_request *requests,
+ const struct remesa_pds_host_task_plan *tasks);
+/* Bounded CPU zero-texture pixel profile reconstructed from scalar CPU
+ * producers/relocations. These three CPU values do NOT establish hardware
+ * task arity, DS register sources, dispatch or termination semantics. */
+#define REMESA_PDS_CPU_PIXEL_TASK_WORDS 3u
+#define REMESA_PDS_CPU_PIXEL_DATA_CELLS 12u
+#define REMESA_PDS_CPU_PIXEL_TASK_SCHEMA 1u
+struct remesa_pds_cpu_pixel_task {
+ uint32_t words[REMESA_PDS_CPU_PIXEL_TASK_WORDS];
+};
+struct remesa_pds_cpu_pixel_task_fields {
+ struct remesa_use_entry_fixup_fields use;
+ uint32_t metadata6;
+};
+struct remesa_pds_cpu_pixel_task_source {
+ uint32_t data_cell,logical_slot,value;
+ uint64_t data_address;
+};
+struct remesa_pds_cpu_pixel_task_output {
+ uint32_t schema,cpu_word_count;
+ struct remesa_pds_cpu_pixel_task task;
+ struct remesa_pds_cpu_pixel_task_source sources[REMESA_PDS_CPU_PIXEL_TASK_WORDS];
+ int data_to_ds_error,dispatch_error,termination_error;
+ uint32_t reserved;
+};
+/* Exact admitted CPU profile: T0 =0x00100000|lower19 USE fixup,
+ * T1 =metadata6<<27 (metadata6=0/1), T2 =0x20. Meaning of upper controls
+ * and T2 remains unknown. Pixel data master is required. */
+int remesa_pds_cpu_pixel_task_pack(const struct remesa_use_entry_plan *,
+ uint32_t metadata6,struct remesa_pds_cpu_pixel_task *);
+int remesa_pds_cpu_pixel_task_unpack(const struct remesa_pds_cpu_pixel_task *,
+ struct remesa_pds_cpu_pixel_task_fields *);
+/* Original complete 48-byte HOST recipe: typed fields at cells0,1,8;
+ * all remaining cells are zero by explicit host padding policy. Historical
+ * CPU writes do not prove the contents or meaning of these other cells. */
+int remesa_pds_cpu_pixel_task_recipe(uint32_t metadata6,
+ struct remesa_pds_data_cell out[REMESA_PDS_CPU_PIXEL_DATA_CELLS]);
+/* Consume the three CPU profile values from an exact canonical FS logical
+ * task graph. Fresh mapping ownership is checked by the pipeline caller;
+ * this function checks self-consistency only. Sources retain caller logical
+ * slots and byte addresses, never physical DS assignments. All execution
+ * blockers stay ENOTSUP. Output must be disjoint from input, ranges may not
+ * wrap and every failure leaves output unchanged. No CODE is emitted. */
+int remesa_pds_cpu_pixel_task_prepare(const struct remesa_pds_host_task_plan *,
+ struct remesa_pds_cpu_pixel_task_output *);
 void remesa_pds_encoding_status(struct remesa_pds_encoding_status *);
 int remesa_pds_encode(const struct remesa_usse_program *,const struct remesa_pds_plan *,void *,size_t,size_t *written);
+/* Explicit selected producer profiles, separate from the unchanged scalar
+ * schema above. Numeric owned/symbolic bindings are caller-authenticated;
+ * producing bytes never grants transport, GPU admission or AF/first-PC facts.
+ * Alignment32 is a conservative host storage/entry policy, not an ISA claim. */
+#define REMESA_PDS_SELECTED_SCHEMA 1u
+enum remesa_pds_selected_profile {
+ REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3=1,
+ REMESA_PDS_SELECTED_FS_INPUT_COL0=2,
+ REMESA_PDS_SELECTED_FS_CONSTANT_DRIVER_BG0=3
+};
+struct remesa_pds_selected_request {
+ uint32_t profile,use_bank;
+ uint64_t semantic_identity; /* exact caller program correlation; not crypto */
+ struct remesa_pds_request storage;
+ /* bytes is the reserved USE span (144/16/8), not committed CODE64/8/8. */
+ struct remesa_pds_binding use,vertex_source;
+ uint32_t source_records,reserved; /* VS records of48B; both zero for FS */
+};
+enum remesa_pds_selected_relocation_kind {
+ REMESA_PDS_SELECTED_USE_LOWER19=1,
+ REMESA_PDS_SELECTED_SOURCE_ADDRESS32=2
+};
+struct remesa_pds_selected_relocation {
+ uint32_t kind,data_byte_offset,mask,background;
+ uint64_t allocation_cookie,mapping_generation,address,bytes;
+};
+struct remesa_pds_selected_plan {
+ uint32_t schema;
+ enum remesa_ir_stage stage;
+ struct remesa_pds_selected_request request;
+ struct remesa_use_entry_plan use_entry;
+ uint32_t use_address_bits,data_bytes,code_bytes,image_bytes,alignment;
+ uint32_t use_committed_bytes,use_reserved_bytes,pds_reserved_bytes;
+ uint32_t relocation_count,reserved;
+ struct remesa_pds_selected_relocation relocations[2];
+};
+/* DATA48 followed immediately by CODE16/12/8. PDS reservation192 for the
+ * original VS producer;64 for FS is explicit host rounding policy, not an
+ * inferred original FS reservation. Requires contiguous same-allocation
+ * DATA/CODE and32B block start. SOURCE/USE fixups are calculated from retained
+ * input bindings; relocations/masks preserve their producer distinctions. */
+int remesa_pds_selected_prepare(const struct remesa_pds_selected_request *,
+ struct remesa_pds_selected_plan *);
+int remesa_pds_selected_validate(const struct remesa_pds_selected_plan *,
+ const struct remesa_pds_selected_request *current);
+int remesa_pds_selected_pair_validate(const struct remesa_pds_selected_plan plans[2]);
+/* Resolved LE DATA+CODE and conservative byte known-mask, transactionally.
+ * Mask0 remains unknown CPU padding even when initialized to zero. Full USE
+ * word mask is known after canonical lower19 fixup, with exact profile bg.
+ * All outputs/input spans must be disjoint; every failure leaves bytes,
+ * mask and written unchanged. Unknown profiles remain ENOTSUP. */
+int remesa_pds_selected_encode(const struct remesa_pds_selected_plan *,void *bytes,
+ uint8_t *known_mask,size_t capacity,size_t *written);
 #endif

@@ -1,8 +1,13 @@
 /* SPDX-License-Identifier: MIT */
 #include "remesa_persistent.h"
 #include "remesa_shader_program.h"
+#include "remesa_fragment_body.h"
 #include "remesa_draw.h"
 #include "remesa_pds.h"
+#include "remesa_pds_structure.h"
+#include "remesa_ta_index.h"
+#include "remesa_depth_scene_image.h"
+#include "remesa_resource_layout.h"
 #include "remesa/shader_request.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -12,6 +17,17 @@ struct memory {
  struct remesa_token token;uint32_t handle;uint64_t va;
  size_t bytes,allocated;unsigned refs;
  bool live,owner,pinned,gpu_mapped,reserved,cpu_mapped,readable,quarantined;
+ bool depth_backing,scene_hw;
+ struct remesa_scene_layout scene_layout;
+ struct remesa_depth_scene_image *scene_image;
+ uint8_t *control_image;
+ bool isp_update,scene_close,raw_geometry,shader_program,shader_pds;
+ struct remesa_use_entry_plan state_use_entry;
+ unsigned state_kind;
+ size_t state_bytes,state_use_offset,state_pds_offset,state_ta_offset,state_ta_bytes;
+ struct shader_upload *shader_dependency;
+ uint8_t state_pds_known[REMESA_PDS_STRUCTURE_STATE_BYTES];
+ uint32_t depth_width,depth_height,depth_pitch,depth_cpp;
 };
 struct submission {
  struct remesa_fence fence;struct memory *target;
@@ -26,11 +42,21 @@ struct shader_upload {
  uint32_t handle;
  size_t allocated;
  bool pinned,leased,staged,quarantined,owner;
- /* Raw pre-VS data has a separate CPU-only allocation. Neither this object
-  * nor the program backing has an SGX mapping or an execution address. */
+ struct memory *gpu;
+ unsigned state_refs;
+ struct remesa_use_entry_plan gpu_entry[2];
+ struct {
+  struct memory *gpu;
+  uint8_t image[REMESA_PERSISTENT_SHADER_PDS_BYTES];
+  uint8_t known[REMESA_PERSISTENT_SHADER_PDS_BYTES];
+  uint32_t use_lower19[2];
+ } pds_gpu;
+ /* Original CPU staging is preserved; optional immutable GPU promotions are
+  * separately owned and do not admit physical fetch or submission. */
  struct {
   struct remesa_shader_draw_snapshot *snapshot;
   uint32_t handle;
+  struct memory *gpu;
   size_t allocated,vertex_bytes,index_offset,index_bytes;
   bool pinned,leased,staged;
  } geometry;
@@ -92,10 +118,17 @@ static bool handle_aliases(struct persistent *d,uint32_t handle,const uint32_t *
  if(alias)d->failed=true;
  return alias;
 }
+static void destroy_bo(void *,void *);
 static int geometry_dispose(struct persistent *d,struct shader_upload *s)
 {
  const struct remesa_persistent_ops *o=d->cfg.ops;
  if(s->quarantined || s->geometry.leased)return shader_quarantine(d,s);
+ if(s->geometry.gpu) {
+  struct memory *b=s->geometry.gpu;
+  destroy_bo(d,b);
+  if(b->live)return shader_quarantine(d,s);
+  s->geometry.gpu=NULL;
+ }
  if(s->geometry.pinned) {
   int e=o->unpin(d->cfg.priv,s->geometry.handle);
   if(e)return shader_quarantine(d,s);
@@ -131,7 +164,18 @@ static int shader_dispose(struct persistent *d,struct shader_upload **link)
 {
  struct shader_upload *s=*link;
  const struct remesa_persistent_ops *o=d->cfg.ops;
+ if(s->state_refs)return EBUSY;
  if(s->quarantined || s->leased)return shader_quarantine(d,s);
+ if(s->pds_gpu.gpu) {
+  destroy_bo(d,s->pds_gpu.gpu);
+  if(s->pds_gpu.gpu->live)return shader_quarantine(d,s);
+  s->pds_gpu.gpu=NULL;
+ }
+ if(s->gpu) {
+  destroy_bo(d,s->gpu);
+  if(s->gpu->live)return shader_quarantine(d,s);
+  s->gpu=NULL;
+ }
  int pds_error=pds_dispose(d,s);if(pds_error)return pds_error;
  int geometry_error=geometry_dispose(d,s);if(geometry_error)return geometry_error;
  if(s->pinned) {
@@ -240,23 +284,10 @@ static int geometry_lease(struct persistent *d,struct shader_upload *s,bool writ
  if(release_error)return shader_quarantine(d,s);
  s->geometry.leased=false;return e;
 }
-static enum remesa_shader_request_status image_request(const struct remesa_shader_image_view *view,
- uint64_t owner,uint64_t generation,struct remesa_shader_request *out)
-{
- struct remesa_shader_blob blobs[REMESA_SHADER_RESOURCE_COUNT]={{0}};
- if(view->vertex.byte_length)blobs[REMESA_SHADER_VERTEX_USSE-1]=(struct remesa_shader_blob){
-  .bytes=view->vertex.bytes,.length=(uint32_t)view->vertex.byte_length,
-  .alignment=(uint32_t)view->vertex.byte_alignment,.state=REMESA_SHADER_CPU_CANDIDATE
- };
- blobs[REMESA_SHADER_FRAGMENT_USSE-1]=(struct remesa_shader_blob){
-  .bytes=view->fragment.bytes,.length=(uint32_t)view->fragment.byte_length,
-  .alignment=(uint32_t)view->fragment.byte_alignment,.state=REMESA_SHADER_CPU_CANDIDATE
- };
- return remesa_shader_request_build(out,owner,generation,blobs);
-}
 static int prepare_candidate(void *data,
  const struct remesa_shader_draw_programs *programs,
- const struct remesa_usse_vertex_mapping *mapping,void **out)
+ const struct remesa_usse_vertex_mapping *mapping,
+ const struct remesa_shader_image *provided,void **out)
 {
  struct persistent *d=data;
  struct shader_upload *s;
@@ -277,7 +308,8 @@ static int prepare_candidate(void *data,
  /* CPU research records must not enter the ordinary allocation path, which
   * reserves and installs an SGX VA. This path creates/pins only CPU backing. */
  s=calloc(1,sizeof(*s));if(!s)return ENOMEM;
- e=mapping?remesa_shader_image_prepare_vertex_candidate(programs,mapping,&s->image):
+ e=provided?remesa_shader_image_clone(provided,&s->image):
+  mapping?remesa_shader_image_prepare_vertex_candidate(programs,mapping,&s->image):
   remesa_shader_image_prepare(programs,&s->image);
  if(e){free(s);return e;}
  e=remesa_shader_image_inspect(s->image,&view);
@@ -287,12 +319,8 @@ static int prepare_candidate(void *data,
     view.vertex.byte_alignment>PAGE_BYTES) {
   remesa_shader_image_destroy(s->image);free(s);return ENOTSUP;
  }
- enum remesa_shader_request_status status=image_request(&view,d->cfg.context,
-  d->shader_generation+1,&s->request);
- if(status!=REMESA_SHADER_REQUEST_OK) {
-  remesa_shader_image_destroy(s->image);free(s);
-  return status==REMESA_SHADER_REQUEST_NOMEM?ENOMEM:EINVAL;
- }
+ e=remesa_shader_image_build_request(s->image,d->cfg.context,d->shader_generation+1,&s->request);
+ if(e){remesa_shader_image_destroy(s->image);free(s);return e;}
  if(s->request.byte_count>PAGE_BYTES) {
   remesa_shader_image_destroy(s->image);free(s);return E2BIG;
  }
@@ -323,7 +351,7 @@ fail:
 }
 static int prepare_shader_programs(void *data,
  const struct remesa_shader_draw_programs *programs,void **out)
-{return prepare_candidate(data,programs,NULL,out);}
+{return prepare_candidate(data,programs,NULL,NULL,out);}
 static int submit_shader_programs(void *data,void *target,
  const struct remesa_draw_packet *packet,const struct remesa_shader_draw_inputs *inputs,
  void *token,void **out)
@@ -339,8 +367,8 @@ static int submit_shader_programs(void *data,void *target,
  struct shader_upload **link=shader_link(d,token);
  if(!link || !(*link)->owner)return EINVAL;
  if(d->failed || (*link)->quarantined)return EIO;
- /* No SGX VA exists for this backing. Reject before any historical dispatch,
-  * target access, job hold, cache operation or device action. */
+ /* CPU staging and opt-in code ownership do not qualify a physical draw.
+  * Reject before historical dispatch, target access, job hold or device action. */
  return remesa_shader_image_validate_execution((*link)->image);
 }
 static void destroy_shader_programs(void *data,void *token)
@@ -388,16 +416,43 @@ static void dispose(struct persistent *d,struct memory *b)
  if(b->token.generation && remesa_registry_remove(&d->registry,b->token)!=REMESA_OK) {
   quarantine(d,b);return;
  }
- d->allocated-=b->allocated;memset(b,0,sizeof(*b));
+ struct shader_upload *dependency=b->shader_dependency;
+ d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);memset(b,0,sizeof(*b));
+ if(dependency) {
+  if(!dependency->state_refs){shader_quarantine(d,dependency);return;}
+  --dependency->state_refs;
+  if(!dependency->state_refs&&!dependency->owner) {
+   struct shader_upload **link=shader_link(d,dependency->token);
+   if(!link||shader_dispose(d,link))d->failed=true;
+  }
+ }
 }
 static void drop_memory(struct persistent *d,struct memory *b)
 { if(b->refs) --b->refs;dispose(d,b); }
-static int reserve_va(struct persistent *d,struct memory *b)
+static struct remesa_persistent_va_range placement_range(const struct persistent *d,
+ enum remesa_persistent_va_class kind)
 {
- uint64_t va=d->cfg.va_start;
- for(unsigned attempt=0;attempt<=REMESA_PERSISTENT_BUFFERS;attempt++) {
+ struct remesa_persistent_va_range r=d->cfg.placement[kind];
+ if(!r.start&&!r.end) {r.start=d->cfg.va_start;r.end=d->cfg.va_end;}
+ if(!r.alignment)r.alignment=PAGE_BYTES;
+ return r;
+}
+static int reserve_va(struct persistent *d,struct memory *b,
+ enum remesa_persistent_va_class kind)
+{
+ const struct remesa_persistent_va_range r=placement_range(d,kind);
+ uint64_t va=r.start;
+ for(unsigned attempt=0;attempt<=REMESA_PERSISTENT_BUFFERS+d->cfg.reserved_count;attempt++) {
   bool overlap=false;
-  if(va>d->cfg.va_end || b->allocated>d->cfg.va_end-va) return ENOSPC;
+  /* Validated root <=2^32 and alignment <=2^32 keep this sum in uint64_t. */
+  va=(va+r.alignment-1)&~(r.alignment-1);
+  if(va>r.end || b->allocated>r.end-va) return ENOSPC;
+  for(unsigned i=0;i<d->cfg.reserved_count;i++) {
+   if(va<d->cfg.reserved[i].end && d->cfg.reserved[i].start<va+b->allocated) {
+    va=d->cfg.reserved[i].end;overlap=true;break;
+   }
+  }
+  if(overlap)continue;
   for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++) {
    struct memory *other=&d->buffers[i];
    if(other==b || !other->live || !other->reserved) continue;
@@ -409,7 +464,8 @@ static int reserve_va(struct persistent *d,struct memory *b)
  }
  return ENOSPC;
 }
-static int allocate(void *data,size_t bytes,void **out)
+static int allocate_class(void *data,size_t bytes,void **out,
+ enum remesa_persistent_va_class kind)
 {
  struct persistent *d=data;struct memory *b=NULL;int e;
  if(!out) return EINVAL;
@@ -424,7 +480,7 @@ static int allocate(void *data,size_t bytes,void **out)
  if(!b) return ENOSPC;
  *b=(struct memory){.live=true,.bytes=bytes,.allocated=n};d->allocated+=n;
  e=status(remesa_registry_allocate(&d->registry,n,&b->token));if(e) goto fail;
- e=reserve_va(d,b);if(e) goto fail;
+ e=reserve_va(d,b,kind);if(e) goto fail;
  e=d->cfg.ops->create(d->cfg.priv,n,&b->handle);
  /* The shared provider must not recycle an identity that is still owned by
   * a CPU-only shader candidate or another resource. Check even on an error:
@@ -440,6 +496,8 @@ fail:
  if(e==EOWNERDEAD) {quarantine(d,b);d->failed=true;} else dispose(d,b);
  return e;
 }
+static int allocate(void *data,size_t bytes,void **out)
+{ return allocate_class(data,bytes,out,REMESA_VA_DEFAULT); }
 static void destroy_bo(void *data,void *object)
 {
  struct persistent *d=data;struct memory *b=object;
@@ -456,6 +514,7 @@ static int map_bo(void *data,void *object,bool write,void **out)
  if(!owns_memory(d,b)) return EINVAL;
  if(!b->live || b->quarantined) return EIO;
  if(!b->owner) return EINVAL;
+ if(write&&(b->scene_hw||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image))return ENOTSUP;
  if(b->cpu_mapped || b->refs==UINT32_MAX) return EBUSY;
  if(remesa_registry_snapshot(&d->registry,b->token,&r)!=REMESA_OK) return EINVAL;
  if(r.state!=REMESA_MAPPED) return EBUSY;
@@ -509,6 +568,7 @@ static int submit(void *data,void *object,const struct remesa_draw_packet *packe
  if(!b->owner) return EINVAL;
  if(b->cpu_mapped || b->refs==UINT32_MAX) return EBUSY;
  if(b->bytes!=4096 || remesa_draw_packet_validate(packet)!=REMESA_PACKET_OK) return EINVAL;
+ if(b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image) return ENOTSUP; /* No typed data through color ABI. */
  for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++) if(!d->jobs[i].live) {j=&d->jobs[i];break;}
  if(!j) return EBUSY;
  *j=(struct submission){.target=b,.live=true};j->packet=*packet;++b->refs;
@@ -584,7 +644,23 @@ int remesa_persistent_open(struct remesa_device *device,const struct remesa_pers
  if(!device || !cfg || !cfg->ops || !cfg->context ||
     ((unsigned)cfg->offline_test_backend+(unsigned)cfg->qualified_hardware_backend+
      (unsigned)cfg->resource_only_backend)!=1 || !cfg->byte_budget ||
-    !cfg->va_start || cfg->va_start%PAGE_BYTES || cfg->va_end%PAGE_BYTES || cfg->va_end<=cfg->va_start) return EINVAL;
+    !cfg->va_start || cfg->va_start%PAGE_BYTES || cfg->va_end%PAGE_BYTES || cfg->va_end<=cfg->va_start ||
+    cfg->va_end>UINT64_C(0x100000000) || cfg->reserved_count>REMESA_PERSISTENT_BUFFERS) return EINVAL;
+ for(unsigned i=0;i<REMESA_VA_CLASS_COUNT;i++) {
+  const struct remesa_persistent_va_range *r=&cfg->placement[i];
+  if(!r->start&&!r->end&&!r->alignment)continue;
+  if(r->start<cfg->va_start||r->end>cfg->va_end||r->start>=r->end||
+     r->start%PAGE_BYTES||r->end%PAGE_BYTES||
+     (r->alignment&&(r->alignment<PAGE_BYTES||r->alignment>UINT64_C(0x100000000)||
+                      (r->alignment&(r->alignment-1)))))return EINVAL;
+ }
+ for(unsigned i=0;i<cfg->reserved_count;i++) {
+  uint64_t start=cfg->reserved[i].start,end=cfg->reserved[i].end;
+  if(start<cfg->va_start || end>cfg->va_end || start>=end ||
+     start%PAGE_BYTES || end%PAGE_BYTES)return EINVAL;
+  for(unsigned j=0;j<i;j++)
+   if(start<cfg->reserved[j].end && cfg->reserved[j].start<end)return EINVAL;
+ }
  const struct remesa_persistent_ops *o=cfg->ops;
  if(!o->create||!o->pin||!o->gpu_map||!o->gpu_unmap||!o->unpin||!o->destroy||!o->cpu_map||!o->cpu_unmap||!o->sync_for_device||!o->dispatch||!o->poll||!o->release) return EOPNOTSUPP;
  d=calloc(1,sizeof(*d));if(!d)return ENOMEM;d->cfg=*cfg;
@@ -649,6 +725,12 @@ int remesa_persistent_shader_output_check(const struct remesa_device *device,
     overlaps(out,bytes,d,sizeof(*d)))return EINVAL;
  int error=remesa_shader_cookie_output_check(&d->shader_cookies,out,bytes);
  if(error)return error;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].scene_image&&overlaps(out,bytes,d->buffers[i].scene_image,
+     sizeof(*d->buffers[i].scene_image)))return EINVAL;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].control_image&&overlaps(out,bytes,d->buffers[i].control_image,
+     REMESA_CONTROL_IMAGE_BYTES))return EINVAL;
  for(struct shader_upload *s=d->shaders;s;s=s->next) {
   struct remesa_shader_image_view view;
   if(overlaps(out,bytes,s,sizeof(*s)))return EINVAL;
@@ -656,6 +738,8 @@ int remesa_persistent_shader_output_check(const struct remesa_device *device,
   if(overlaps(out,bytes,view.programs,sizeof(*view.programs))||
      overlaps(out,bytes,view.fragment.bytes,view.fragment.byte_length)||
      overlaps(out,bytes,view.vertex.bytes,view.vertex.byte_length)||
+     overlaps(out,bytes,view.fragment_pds.bytes,view.fragment_pds.byte_length)||
+     overlaps(out,bytes,view.fragment_pds_mask.bytes,view.fragment_pds_mask.byte_length)||
      geometry_output_overlap(s,out,bytes))return EINVAL;
   for(unsigned i=0;i<2;i++)if(s->pds.data[i]) {
    struct remesa_shader_storage_view data;
@@ -813,6 +897,274 @@ int remesa_persistent_shader_draw_backing(const struct remesa_device *device,voi
  *out=value;return 0;
 }
 
+/* The token retains this owned allocation; no caller can substitute a VA.
+ * Physical fetch format and requester qualification are separate contracts. */
+int remesa_persistent_shader_prepare_draw_gpu(struct remesa_device *device,void *token)
+{
+ struct remesa_shader_draw_inputs inputs;struct remesa_draw_plan plan;
+ int e=remesa_persistent_shader_draw_snapshot(device,token,&inputs,&plan);if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ if(s->geometry.gpu)return EBUSY;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].cpu_mapped)return EBUSY;
+ /* Revalidate the committed immutable extent, not its page-rounded capacity. */
+ e=remesa_shader_draw_inputs_validate(&inputs,&plan);if(e)return e;
+ e=geometry_lease(d,s,false);if(e)return e;
+ void *object=NULL;e=allocate_class(d,s->geometry.allocated,&object,REMESA_VA_PROGRAM);
+ if(e)return e==EOWNERDEAD?shader_quarantine(d,s):e;
+ struct memory *b=object;b->raw_geometry=true;
+ const struct remesa_persistent_ops *o=d->cfg.ops;
+ for(unsigned pass=0;pass<2;pass++) {
+  void *cpu=NULL;bool write=pass==0;
+  e=o->cpu_map(d->cfg.priv,b->handle,write,&cpu);
+  if(e) {
+   if(e==EOWNERDEAD||cpu) {b->cpu_mapped=true;memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;}
+   goto fail;
+  }
+  b->cpu_mapped=true;
+  if(!cpu)e=EPROTO;
+  else if(write) {
+   memset(cpu,0,b->allocated);memcpy(cpu,inputs.vertex_data,s->geometry.vertex_bytes);
+   if(s->geometry.index_bytes)memcpy((uint8_t *)cpu+s->geometry.index_offset,
+                                    inputs.index_data,s->geometry.index_bytes);
+  } else {
+   if(memcmp(cpu,inputs.vertex_data,s->geometry.vertex_bytes)||
+      (s->geometry.index_bytes&&memcmp((uint8_t *)cpu+s->geometry.index_offset,
+       inputs.index_data,s->geometry.index_bytes)))e=EPROTO;
+   for(size_t i=s->geometry.vertex_bytes;i<b->allocated;i++)
+    if((i<s->geometry.index_offset||i>=s->geometry.index_offset+s->geometry.index_bytes)&&
+       ((uint8_t *)cpu)[i]){e=EPROTO;break;}
+  }
+  if(o->cpu_unmap(d->cfg.priv,b->handle,write)) {
+   memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;
+  }
+  b->cpu_mapped=false;if(e)goto fail;
+ }
+ e=o->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;s->geometry.gpu=b;return 0;
+fail:
+ if(b->quarantined){s->geometry.gpu=b;return shader_quarantine(d,s);}
+ destroy_bo(d,b);
+ if(b->live){s->geometry.gpu=b;return shader_quarantine(d,s);}
+ return e;
+}
+int remesa_persistent_shader_draw_gpu_backing(const struct remesa_device *device,void *token,
+ struct remesa_persistent_draw_gpu_backing *out)
+{
+ if(!out)return EINVAL;
+ struct remesa_shader_draw_inputs inputs;struct remesa_draw_plan plan;
+ int e=remesa_persistent_shader_draw_snapshot(device,token,&inputs,&plan);if(e)return e;
+ e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ struct memory *b=s->geometry.gpu;if(!b)return EAGAIN;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].cpu_mapped)return EBUSY;
+ if(!b->live||!b->owner||b->quarantined||!b->raw_geometry||!b->pinned||
+    !b->gpu_mapped||!b->readable||b->cpu_mapped)return EPROTO;
+ struct remesa_persistent_draw_gpu_backing value={
+  .owner=d->cfg.context,.generation=s->request.generation,.gpu_va=b->va,
+  .handle=b->handle,.allocation_bytes=b->allocated,.vertex_bytes=s->geometry.vertex_bytes,
+  .index_offset=s->geometry.index_offset,.index_bytes=s->geometry.index_bytes,
+  .min_vertex=plan.min_vertex,.max_vertex=plan.max_vertex};
+ *out=value;return 0;
+}
+
+/* Own a code allocation using the same provider, registry and VA allocator as
+ * other typed resources. CPU image state remains CANDIDATE; no execution gate
+ * or request ABI is promoted by this opt-in ownership operation. */
+static int owned_image_lease(struct persistent *d,struct memory *b,
+ const uint8_t *image,size_t bytes,bool write)
+{
+ const struct remesa_persistent_ops *o=d->cfg.ops;void *cpu=NULL;
+ int e=o->cpu_map(d->cfg.priv,b->handle,write,&cpu);
+ if(e) {
+  if(e==EOWNERDEAD||cpu) {
+   b->cpu_mapped=true;memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;
+  }
+  return e;
+ }
+ b->cpu_mapped=true;
+ if(!cpu)e=EPROTO;
+ else if(write) {
+  memset(cpu,0,b->allocated);memcpy(cpu,image,bytes);
+ } else {
+  if(memcmp(cpu,image,bytes))e=EPROTO;
+  for(size_t i=bytes;i<b->allocated;i++)
+   if(((const uint8_t *)cpu)[i]){e=EPROTO;break;}
+ }
+ if(o->cpu_unmap(d->cfg.priv,b->handle,write)) {
+  memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;
+ }
+ b->cpu_mapped=false;return e;
+}
+int remesa_persistent_shader_prepare_gpu(struct remesa_device *device,void *token,
+ const uint32_t banks[2])
+{
+ if(!banks||(uintptr_t)banks%_Alignof(uint32_t)||
+    sizeof(*banks)*2>UINTPTR_MAX-(uintptr_t)banks)return EINVAL;
+ const uint32_t bank[2]={banks[0],banks[1]};
+ struct remesa_shader_request request;struct remesa_persistent_shader_backing backing;
+ int e=remesa_persistent_shader_snapshot(device,token,&request,&backing);if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ if(s->gpu)return EBUSY;
+ struct remesa_shader_image_view image;
+ e=remesa_shader_image_inspect(s->image,&image);if(e)return e;
+ /* Only the generated POSITION4 VS16 and restricted packed constant FS8.
+  * Optional PDS/masks and other host grammars are not promoted by this API. */
+ if(request.resource_mask!=3u||image.vertex.byte_length!=16||
+    image.fragment.byte_length!=8||image.fragment_form!=REMESA_SHADER_PACKED_CONSTANT)
+  return ENOTSUP;
+ uint32_t register_offset[2];
+ for(unsigned i=0;i<2;i++) {
+  e=remesa_use_base_offset(bank[i],&register_offset[i]);if(e)return e;
+ }
+ if(register_offset[0]==register_offset[1])return EBUSY;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].cpu_mapped)return EBUSY;
+ e=stage_lease(d,s,false);
+ if(e==EPROTO)return shader_quarantine(d,s);
+ if(e)return e;
+ void *object=NULL;e=allocate_class(d,s->allocated,&object,REMESA_VA_PROGRAM);
+ if(e)return e==EOWNERDEAD?shader_quarantine(d,s):e;
+ struct memory *b=object;b->shader_program=true;
+ struct remesa_use_entry_request entry[2];struct remesa_use_entry_plan plan[2];
+ for(unsigned i=0;i<2;i++)entry[i]=(struct remesa_use_entry_request){
+  .allocation_address=b->va,.allocation_bytes=b->allocated,
+  .entry_offset=request.resources[i].offset,.program_bytes=request.resources[i].length,
+  .bank=bank[i],.data_master=i==0?REMESA_USE_VERTEX:REMESA_USE_PIXEL};
+ e=remesa_use_entry_pair_prepare(entry,plan);if(e)goto fail;
+ e=owned_image_lease(d,b,s->request.data,s->request.byte_count,true);if(e)goto fail;
+ e=owned_image_lease(d,b,s->request.data,s->request.byte_count,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;s->gpu=b;s->gpu_entry[0]=plan[0];s->gpu_entry[1]=plan[1];return 0;
+fail:
+ if(b->quarantined){s->gpu=b;return shader_quarantine(d,s);}
+ destroy_bo(d,b);
+ if(b->live){s->gpu=b;return shader_quarantine(d,s);}
+ return e;
+}
+int remesa_persistent_shader_gpu_backing(const struct remesa_device *device,void *token,
+ struct remesa_persistent_shader_gpu_backing *out)
+{
+ if(!out)return EINVAL;
+ struct remesa_shader_request request;struct remesa_persistent_shader_backing backing;
+ int e=remesa_persistent_shader_snapshot(device,token,&request,&backing);if(e)return e;
+ e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ struct memory *b=s->gpu;if(!b)return EAGAIN;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].cpu_mapped)return EBUSY;
+ if(!b->live||!b->owner||b->quarantined||!b->shader_program||!b->pinned||
+    !b->gpu_mapped||!b->readable||b->cpu_mapped)return EPROTO;
+ struct remesa_persistent_shader_gpu_backing result={
+  .owner=d->cfg.context,.generation=s->request.generation,.gpu_va=b->va,
+  .handle=b->handle,.allocation_bytes=b->allocated};
+ for(unsigned i=0;i<2;i++) {
+  result.program_offset[i]=request.resources[i].offset;
+  result.program_bytes[i]=request.resources[i].length;result.entry[i]=s->gpu_entry[i];
+ }
+ *out=result;return 0;
+}
+
+/* One owned image holds primary VS/FS and the empty-secondary CPU profile.
+ *32-byte object alignment matches the existing fragment-reference encoder;
+ * deterministic unknown DATA/padding remains masked rather than qualified. */
+static const size_t shader_pds_offsets[3]={0,64,128};
+static const size_t shader_pds_bytes[3]={64,56,4};
+static const size_t shader_pds_data_bytes[3]={48,48,0};
+static const size_t shader_pds_code_bytes[3]={16,8,4};
+int remesa_persistent_shader_prepare_pds_gpu(struct remesa_device *device,void *token)
+{
+ struct remesa_persistent_shader_gpu_backing code;
+ int e=remesa_persistent_shader_gpu_backing(device,token,&code);if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ if(s->pds_gpu.gpu)return EBUSY;
+ struct remesa_persistent_draw_gpu_backing raw;
+ e=remesa_persistent_shader_draw_gpu_backing(device,token,&raw);if(e)return e;
+ struct remesa_shader_draw_inputs inputs;struct remesa_draw_plan plan;
+ e=remesa_persistent_shader_draw_snapshot(device,token,&inputs,&plan);if(e)return e;
+ if(inputs.position_format!=PIPE_FORMAT_R32G32B32A32_FLOAT||
+    inputs.position_input_slot||inputs.vertex_stride!=16||inputs.index_bias)return ENOTSUP;
+ if(raw.owner!=code.owner||raw.generation!=code.generation)return ESTALE;
+ const uint64_t base=(uint64_t)inputs.vertex_offset+inputs.element_offset;
+ if((base&3u)||base>raw.vertex_bytes||plan.vertex_end_byte>raw.vertex_bytes||
+    plan.min_vertex!=raw.min_vertex||plan.max_vertex!=raw.max_vertex||
+    (uint64_t)plan.max_vertex*inputs.vertex_stride+16>raw.vertex_bytes-base)return EINVAL;
+ e=remesa_persistent_shader_verify(device,token);if(e)return e;
+ uint8_t image[REMESA_PERSISTENT_SHADER_PDS_BYTES]={0};
+ uint8_t known[REMESA_PERSISTENT_SHADER_PDS_BYTES]={0};uint32_t fixup[2];
+ for(unsigned i=0;i<2;i++) {
+  e=remesa_use_entry_preview_fixup(&code.entry[i],&fixup[i]);if(e)return e;
+ }
+ const struct remesa_pds_vertex_image_request vertex={
+  .source_allocation_address=raw.gpu_va,.source_allocation_bytes=raw.vertex_bytes,
+  .source_offset=base,.vertex_stride_dwords=inputs.vertex_stride/4,.use_lower19=fixup[0]};
+ size_t written=0;
+ e=remesa_pds_structure_encode_vertex_image(&vertex,image,known,64,&written);if(e)return e;
+ if(written!=64)return EPROTO;
+ const struct remesa_pds_structure_request fs={.code_policy=REMESA_PDS_STRUCTURE_CODE_CPU_COMPLETE};
+ struct remesa_pds_structure shape;
+ e=remesa_pds_structure_encode(&fs,&shape);if(e)return e;
+ e=remesa_pds_structure_serialize(&shape,image+64,known+64,56,&written);if(e)return e;
+ if(written!=56||shape.data_dwords!=12||shape.relocation_count!=1||
+    shape.relocations[0].kind!=REMESA_PDS_STRUCTURE_USE||shape.relocations[0].data_cell||
+    shape.relocations[0].background)
+  return EPROTO;
+ /* This is the empty psb primary CPU grammar with background0, matching the
+  * physically preserved reference. The other pixel_task_pack profile's
+  *0x100000 contribution must not be silently mixed into this constructor.
+  * Original DATA0 evidence mask stays0; the derived fixup is separate metadata. */
+ uint32_t task=shape.relocations[0].background|fixup[1];
+ for(unsigned i=0;i<4;i++)image[64+i]=(uint8_t)(task>>(8*i));
+ const struct remesa_pds_code_instruction secondary={REMESA_PDS_STRUCTURE_CPU_EMPTY_SECONDARY_AF,
+  REMESA_PDS_STRUCTURE_NO_CELL,REMESA_PDS_STRUCTURE_NO_CELL};
+ e=remesa_pds_structure_encode_code(&secondary,1,image+128,4,&written);if(e)return e;
+ if(written!=4)return EPROTO;
+ memset(known+128,255,4);
+ void *object=NULL;e=allocate_class(d,sizeof(image),&object,REMESA_VA_PROGRAM);
+ if(e)return e==EOWNERDEAD?shader_quarantine(d,s):e;
+ struct memory *b=object;b->shader_pds=true;
+ e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ memcpy(s->pds_gpu.image,image,sizeof(image));memcpy(s->pds_gpu.known,known,sizeof(known));
+ s->pds_gpu.use_lower19[0]=fixup[0];s->pds_gpu.use_lower19[1]=fixup[1];
+ b->readable=true;s->pds_gpu.gpu=b;return 0;
+fail:
+ if(b->quarantined){s->pds_gpu.gpu=b;return shader_quarantine(d,s);}
+ destroy_bo(d,b);
+ if(b->live){s->pds_gpu.gpu=b;return shader_quarantine(d,s);}
+ return e;
+}
+int remesa_persistent_shader_pds_gpu_backing(const struct remesa_device *device,void *token,
+ struct remesa_persistent_shader_pds_gpu_backing *out)
+{
+ if(!out||(uintptr_t)out%_Alignof(struct remesa_persistent_shader_pds_gpu_backing))return EINVAL;
+ struct remesa_persistent_shader_gpu_backing code;
+ int e=remesa_persistent_shader_gpu_backing(device,token,&code);if(e)return e;
+ e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ struct memory *b=s->pds_gpu.gpu;if(!b)return EAGAIN;
+ if(!b->live||!b->owner||b->quarantined||!b->shader_pds||!b->pinned||
+    !b->gpu_mapped||!b->readable||b->cpu_mapped)return EPROTO;
+ struct remesa_shader_draw_inputs inputs;struct remesa_draw_plan plan;
+ e=remesa_persistent_shader_draw_snapshot(device,token,&inputs,&plan);if(e)return e;
+ struct remesa_persistent_shader_pds_gpu_backing result={
+  .owner=code.owner,.generation=code.generation,.gpu_va=b->va,
+  .handle=b->handle,.allocation_bytes=b->allocated,.vertex_stride=inputs.vertex_stride,
+  .min_vertex=plan.min_vertex,.max_vertex=plan.max_vertex};
+ for(unsigned i=0;i<3;i++) {
+  result.object_offset[i]=shader_pds_offsets[i];result.object_bytes[i]=shader_pds_bytes[i];
+  result.data_bytes[i]=shader_pds_data_bytes[i];result.code_bytes[i]=shader_pds_code_bytes[i];
+ }
+ memcpy(result.known_mask,s->pds_gpu.known,sizeof(result.known_mask));
+ memcpy(result.use_lower19,s->pds_gpu.use_lower19,sizeof(result.use_lower19));
+ *out=result;return 0;
+}
+
 int remesa_persistent_shader_stage_pds_data(struct remesa_device *device,void *token,
  const struct remesa_pds_host_data_view *data)
 {
@@ -888,6 +1240,19 @@ int remesa_persistent_shader_verify(struct remesa_device *device,void *token)
  e=remesa_shader_image_inspect(s->image,&view);if(e)return e;
  e=stage_lease(d,s,false);
  if(e==EPROTO)return shader_quarantine(d,s);
+ if(!e && s->gpu) {
+  if(!s->gpu->live||s->gpu->quarantined||!s->gpu->shader_program||
+     !s->gpu->pinned||!s->gpu->gpu_mapped||s->gpu->cpu_mapped)return EPROTO;
+  e=owned_image_lease(d,s->gpu,s->request.data,s->request.byte_count,false);
+  if(e==EPROTO)return shader_quarantine(d,s);
+ }
+ if(!e && s->pds_gpu.gpu) {
+  struct memory *b=s->pds_gpu.gpu;
+  if(!b->live||b->quarantined||!b->shader_pds||!b->pinned||!b->gpu_mapped||b->cpu_mapped)
+   return EPROTO;
+  e=owned_image_lease(d,b,s->pds_gpu.image,sizeof(s->pds_gpu.image),false);
+  if(e==EPROTO)return shader_quarantine(d,s);
+ }
  if(!e && s->geometry.snapshot) {
   if(!s->geometry.staged || !s->geometry.pinned || !s->geometry.handle ||
      s->geometry.leased)return EPROTO;
@@ -910,5 +1275,525 @@ int remesa_persistent_prepare_vertex_candidate(struct remesa_device *device,
     overlaps(out,sizeof(*out),mapping,sizeof(*mapping)))return EINVAL;
  int e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
- return prepare_candidate(device->priv,programs,mapping,out);
+ return prepare_candidate(device->priv,programs,mapping,NULL,out);
+}
+
+int remesa_persistent_prepare_image(struct remesa_device *device,
+ const struct remesa_shader_image *image,void **out)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!image||!out)return EINVAL;
+ int error=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(error)return error;
+ struct remesa_shader_image_view view;
+ error=remesa_shader_image_inspect(image,&view);if(error)return error;
+ if(overlaps(out,sizeof(*out),view.programs,sizeof(*view.programs)))return EINVAL;
+ const struct remesa_shader_storage_view *payloads[4]={&view.vertex,&view.fragment,
+  &view.fragment_pds,&view.fragment_pds_mask};
+ for(unsigned i=0;i<4;i++)
+  if(overlaps(out,sizeof(*out),payloads[i]->bytes,payloads[i]->byte_length))return EINVAL;
+ if(*out)return EBUSY;
+ return prepare_candidate(device->priv,view.programs,NULL,image,out);
+}
+
+/* These APIs reuse the existing BO owner and VA reservation ledger. They do
+ * not establish a Z surface's hardware visibility or add it to a job. */
+static int depth_output_check(const struct remesa_device *device,void *out,size_t bytes)
+{
+ int e=remesa_persistent_shader_output_check(device,out,bytes);if(e)return e;
+ struct persistent *d=device->priv;
+ if(d->failed)return EIO;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].live&&d->buffers[i].cpu_mapped)return EBUSY;
+ return 0;
+}
+int remesa_persistent_allocate_placed(struct remesa_device *device,size_t bytes,
+ enum remesa_persistent_va_class kind,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ if((unsigned)kind>=REMESA_VA_CLASS_COUNT)return EINVAL;
+ return allocate_class(device->priv,bytes,out,kind);
+}
+int remesa_persistent_memory_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_memory_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner)return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ const struct remesa_persistent_memory_backing value={
+  .owner=d->cfg.context,.generation=b->token.generation,.gpu_va=b->va,
+  .handle=b->handle,.logical_bytes=b->bytes,.allocation_bytes=b->allocated};
+ *out=value;return 0;
+}
+int remesa_persistent_render_target_snapshot(const struct remesa_device *device,
+ void *object,uint32_t width,uint32_t height,uint32_t pitch,
+ struct remesa_persistent_render_target_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner)return EINVAL;
+ if(b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||
+    b->shader_pds||b->scene_image||b->control_image)return ENOTSUP;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_render_target_backing result={
+  .owner=d->cfg.context,.generation=b->token.generation,.gpu_va=b->va,
+  .handle=b->handle,.allocation_bytes=b->allocated};
+ const struct remesa_render_target_request request={width,height,pitch,b->va,b->bytes};
+ e=remesa_render_target_encode_linear_bgra8(&request,&result.state);if(e)return e;
+ *out=result;return 0;
+}
+int remesa_persistent_scene_allocate(struct remesa_device *device,uint32_t width,
+ uint32_t height,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct remesa_scene_layout layout;
+ e=remesa_scene_layout_encode(width,height,0,&layout);if(e)return e;
+ struct persistent *d=device->priv;void *object=NULL;
+ e=allocate_class(d,layout.required_bytes,&object,REMESA_VA_SURFACE);if(e)return e;
+ struct memory *b=object;const uint8_t zero=0;
+ b->scene_hw=true;b->scene_layout=layout;
+ b->depth_width=width;b->depth_height=height;
+ /* owned_image_lease initializes and checks the entire rounded allocation,
+  * including padding; using one explicit zero avoids NULL zero-length copies. */
+ e=owned_image_lease(d,b,&zero,1,true);if(e)goto fail;
+ e=owned_image_lease(d,b,&zero,1,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ destroy_bo(d,b);return b->live?EOWNERDEAD:e;
+}
+int remesa_persistent_scene_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_scene_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner||!b->scene_hw)return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped||!b->readable)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_scene_backing result={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,
+  .region_gpu_va=b->va+b->scene_layout.cookie[7],.handle=b->handle,
+  .width=b->depth_width,.height=b->depth_height,.allocation_bytes=b->allocated,
+  .layout=b->scene_layout};
+ *out=result;return 0;
+}
+int remesa_persistent_depth_allocate(struct remesa_device *device,uint32_t width,
+ uint32_t height,uint32_t cpp,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ if(!width||!height||(cpp!=2&&cpp!=4))return EINVAL;
+ if(width>2048||height>2048)return ENOTSUP;
+ struct persistent *d=device->priv;
+ /* Check the selected allocation range, not the endpoint root: programs
+  * and Z may now belong to distinct ranges of the same owner. */
+ if(placement_range(d,REMESA_VA_SURFACE).start<UINT64_C(0x40000000))return ENOTSUP;
+ struct remesa_resource_layout layout;
+ e=remesa_resource_layout(&device->resource_limits,(width+31u)&~31u,
+                          (height+31u)&~31u,cpp,&layout);if(e)return e;
+ uint32_t pitch=layout.stride/cpp;
+ if(layout.stride%cpp||pitch>2048||(pitch&31u))return ENOTSUP;
+ void *object=NULL;e=allocate_class(d,layout.bytes,&object,REMESA_VA_SURFACE);if(e)return e;
+ struct memory *b=object;
+ const struct remesa_depth_surface_request request={width,height,pitch,cpp,
+  REMESA_DEPTH_SURFACE_UNDEFINED,b->va,b->allocated};
+ struct remesa_depth_surface_state state;
+ e=remesa_depth_surface_encode(&request,&state);
+ if(e) {
+  destroy_bo(d,b);
+  return b->live&&b->quarantined?EOWNERDEAD:e;
+ }
+ b->depth_backing=true;b->depth_width=width;b->depth_height=height;
+ b->depth_pitch=pitch;b->depth_cpp=cpp;
+ *out=b;return 0;
+}
+int remesa_persistent_depth_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_depth_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b))return EINVAL;
+ if(!b->live||!b->owner||!b->depth_backing)return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_depth_backing result={
+  .owner=d->cfg.context,.generation=b->token.generation,.gpu_va=b->va,
+  .handle=b->handle,.width=b->depth_width,.height=b->depth_height,
+  .pitch_pixels=b->depth_pitch,.cpp=b->depth_cpp,.allocation_bytes=b->allocated};
+ const struct remesa_depth_surface_request request={b->depth_width,b->depth_height,
+  b->depth_pitch,b->depth_cpp,REMESA_DEPTH_SURFACE_UNDEFINED,b->va,b->allocated};
+ e=remesa_depth_surface_encode(&request,&result.initial_surface);if(e)return e;
+ *out=result;return 0;
+}
+
+enum { ISP_UPDATE_STATE=0,ISP_UPDATE_USE=16,ISP_UPDATE_PDS=32,
+       ISP_UPDATE_TA=96,ISP_UPDATE_BYTES=108 };
+/* This lease is private to preparation; published objects are never writable.
+ * An error with an acquired/uncertain lease is not an ordinary rollback. */
+static int isp_update_lease(struct persistent *d,struct memory *b,
+ const uint8_t *expected,size_t expected_bytes,bool write)
+{
+ void *cpu=NULL;const struct remesa_persistent_ops *o=d->cfg.ops;
+ int e=o->cpu_map(d->cfg.priv,b->handle,write,&cpu);
+ if(e) {
+  if(e==EOWNERDEAD||cpu) {
+   b->cpu_mapped=true;memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;
+  }
+  return e;
+ }
+ b->cpu_mapped=true;
+ if(!cpu)e=EPROTO;
+ else if(write) {
+  memset(cpu,0,b->allocated);memcpy(cpu,expected,expected_bytes);
+ } else {
+  if(memcmp(cpu,expected,expected_bytes))e=EPROTO;
+  for(size_t i=expected_bytes;i<b->allocated;i++)
+   if(((const unsigned char *)cpu)[i]){e=EPROTO;break;}
+ }
+ int released=o->cpu_unmap(d->cfg.priv,b->handle,write);
+ if(released) {memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;}
+ b->cpu_mapped=false;
+ if(!e&&write) {
+  int synced=o->sync_for_device(d->cfg.priv,b->handle);
+  if(synced){memory_error(d,b,synced);return EOWNERDEAD;}
+ }
+ return e;
+}
+static int state_update_prepare(struct remesa_device *device,
+ const uint8_t *source_state,size_t source_bytes,unsigned kind,uint32_t bank,
+ struct shader_upload *dependency,void **out)
+{
+ int e;
+ if(!source_bytes||source_bytes%4||source_bytes/4>16)return ENOTSUP;
+ const bool scene_close=kind==REMESA_PERSISTENT_STATE_SCENE_CLOSE;
+ const size_t use_offset=(source_bytes+15u)&~(size_t)15u;
+ const size_t pds_offset=(use_offset+16u+31u)&~(size_t)31u;
+ const size_t ta_offset=pds_offset+64u;
+ const size_t ta_bytes=scene_close?12u:8u;
+ /* Preserve all108 legacy bytes, including the final unused zero word. */
+ const size_t image_bytes=source_bytes==8?ISP_UPDATE_BYTES:ta_offset+ta_bytes;
+ uint8_t image[192]={0};if(image_bytes>sizeof(image))return E2BIG;
+ memcpy(image+ISP_UPDATE_STATE,source_state,source_bytes);
+ /* Reuse the independently verified original n=1..16 state auxiliary operands.
+  * Numeric classes are not asserted as architectural register-bank names. */
+ const struct remesa_usse_cpu_move move={.source={2,0},.destination={1,0},
+  .control12=(uint32_t)(source_bytes/4)-1u,.control21=1,.control23=1};
+ const struct remesa_usse_cpu_three_source tail={.source={{0,0},{2,(uint32_t)(source_bytes/4)},{2,0}},
+  .source_extension={0,1,1},.word0_control21=1,.word1_control18=1};
+ size_t written=0;
+ e=remesa_usse_cpu_move_encode(&move,image+use_offset,8,&written);if(e)return e;
+ if(written!=8)return EPROTO;
+ e=remesa_usse_cpu_three_source_encode(&tail,image+use_offset+8,8,&written);
+ if(e)return e;
+ if(written!=8)return EPROTO;
+ /* Reject invalid banks before allocating backing. Actual bank ownership is
+  * not acquired/programmed by a successful numeric entry-plan operation. */
+ uint32_t ignored;e=remesa_use_base_offset(bank,&ignored);if(e)return e;
+ struct persistent *d=device->priv;void *object=NULL;
+ e=allocate_class(d,PAGE_BYTES,&object,REMESA_VA_PROGRAM);if(e)return e;
+ struct memory *b=object;b->isp_update=true;b->scene_close=scene_close;
+ b->state_kind=kind;b->state_bytes=source_bytes;b->state_use_offset=use_offset;
+ b->state_pds_offset=pds_offset;b->state_ta_offset=ta_offset;b->state_ta_bytes=ta_bytes;
+ const struct remesa_use_entry_request use={.allocation_address=b->va,
+  .allocation_bytes=b->allocated,.entry_offset=use_offset,.program_bytes=16,
+  .bank=bank,.data_master=REMESA_USE_VERTEX};
+ struct remesa_use_entry_plan entry;uint32_t fixup;
+ e=remesa_use_entry_prepare(&use,&entry);if(e)goto fail;
+ e=remesa_use_entry_preview_fixup(&entry,&fixup);if(e)goto fail;
+ if(dependency)for(unsigned i=0;i<2;i++)
+  if(entry.register_offset==dependency->gpu_entry[i].register_offset&&
+     entry.register_word!=dependency->gpu_entry[i].register_word){e=EBUSY;goto fail;}
+ const struct remesa_pds_state_image_request pds={
+  .source_allocation_address=b->va,.source_allocation_bytes=b->allocated,
+  .source_offset=ISP_UPDATE_STATE,.state_dwords=(uint32_t)(source_bytes/4),.use_lower19=fixup};
+ uint8_t mask[REMESA_PDS_STRUCTURE_STATE_BYTES];
+ e=remesa_pds_structure_encode_state_image(&pds,image+pds_offset,mask,
+                                         sizeof(mask),&written);if(e)goto fail;
+ if(written!=sizeof(mask)){e=EPROTO;goto fail;}
+ /* Distinct source headers and command contracts; never turn a word0 ISP
+  * update into a final scene state by appending a literal to its reference. */
+ if(scene_close) {
+  const struct remesa_ta_scene_close_request close={b->va,b->allocated,
+   pds_offset,REMESA_PDS_STRUCTURE_STATE_BYTES};
+  e=remesa_ta_scene_close_encode(&close,image+ta_offset);
+ } else e=remesa_ta_state_reference_encode(b->va+pds_offset,(uint32_t)(source_bytes/4),false,image+ta_offset);
+ if(e)goto fail;
+ if(dependency){b->shader_dependency=dependency;++dependency->state_refs;}
+ e=isp_update_lease(d,b,image,image_bytes,true);if(e)goto fail;
+ e=isp_update_lease(d,b,image,image_bytes,false);if(e)goto fail;
+ b->state_use_entry=entry;memcpy(b->state_pds_known,mask,sizeof(mask));
+ b->readable=true;*out=b;return 0;
+fail:
+ destroy_bo(d,b);
+ if(b->live&&b->quarantined)return dependency?shader_quarantine(d,dependency):EOWNERDEAD;
+ return e;
+}
+int remesa_persistent_isp_update_prepare(struct remesa_device *device,
+ const struct remesa_isp_opaque_triangle_request *request,uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(!request||sizeof(*request)>UINTPTR_MAX-(uintptr_t)request||
+    overlaps(out,sizeof(*out),request,sizeof(*request)))return EINVAL;
+ if(*out)return EBUSY;
+ struct remesa_isp_opaque_triangle_request r;memcpy(&r,request,sizeof(r));
+ uint8_t state[8];e=remesa_isp_opaque_triangle_data_encode(&r,state);if(e)return e;
+ return state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_ISP_WORD0,bank,NULL,out);
+}
+int remesa_persistent_scene_close_prepare(struct remesa_device *device,uint32_t width,
+ uint32_t height,uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ uint8_t state[8];e=remesa_ta_scene_close_data_encode(width,height,state);if(e)return e;
+ return state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_SCENE_CLOSE,bank,NULL,out);
+}
+static int state_update_snapshot(const struct remesa_device *device,void *object,
+ bool scene_close,struct remesa_persistent_isp_update_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner||!b->isp_update||b->scene_close!=scene_close||b->state_kind!=(scene_close?
+    REMESA_PERSISTENT_STATE_SCENE_CLOSE:REMESA_PERSISTENT_STATE_ISP_WORD0))return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped||!b->readable)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_isp_update_backing result={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .allocation_bytes=b->allocated,.state_offset=ISP_UPDATE_STATE,.state_bytes=8,
+  .use_offset=ISP_UPDATE_USE,.use_bytes=16,.pds_offset=ISP_UPDATE_PDS,.pds_bytes=60,
+  .ta_offset=ISP_UPDATE_TA,.ta_bytes=scene_close?12:8,.use_entry=b->state_use_entry};
+ memcpy(result.pds_known_mask,b->state_pds_known,sizeof(result.pds_known_mask));
+ *out=result;return 0;
+}
+int remesa_persistent_isp_update_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_isp_update_backing *out)
+{return state_update_snapshot(device,object,false,out);}
+int remesa_persistent_scene_close_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_scene_close_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct remesa_persistent_scene_close_backing result;
+ e=state_update_snapshot(device,object,true,&result.image);if(e)return e;
+ *out=result;return 0;
+}
+
+static int owned_fragment_reference(const struct remesa_device *device,void *token,
+ bool clear,struct remesa_ta_fragment_binding_request *out,struct shader_upload **owner)
+{
+ struct remesa_persistent_shader_pds_gpu_backing pds;
+ int e=remesa_persistent_shader_pds_gpu_backing(device,token,&pds);if(e)return e;
+ struct persistent *d=device->priv;struct shader_upload *s=*shader_link(d,token);
+ if(s->state_refs==UINT32_MAX)return EOVERFLOW;
+ e=remesa_persistent_shader_verify((struct remesa_device *)device,token);if(e)return e;
+ if(clear) {
+  struct remesa_shader_image_view image;struct remesa_fragment_constant color;
+  e=remesa_shader_image_inspect(s->image,&image);if(e)return e;
+  e=remesa_fragment_constant_prepare(&image.programs->fragment.usse,&color);if(e)return e;
+  if(color.argb!=UINT32_C(0xff00ff00))return ENOTSUP;
+ }
+ struct remesa_ta_fragment_binding_request result={
+  .address_window_base=pds.gpu_va&~UINT64_C(0x0fffffff),
+  .profile=clear?REMESA_TA_FRAGMENT_SCENE_ZCLEAR:REMESA_TA_FRAGMENT_AUTHORED_CONSTANT};
+ result.primary=(struct remesa_ta_fragment_pds_reference){pds.gpu_va,pds.allocation_bytes,
+  pds.object_offset[1],pds.object_bytes[1],12,0,clear?0u:1u};
+ result.secondary=(struct remesa_ta_fragment_pds_reference){pds.gpu_va,pds.allocation_bytes,
+  pds.object_offset[2],pds.object_bytes[2],0,0,0};
+ *out=result;*owner=s;return 0;
+}
+static int constant_state_prepare(struct remesa_device *device,void *token,
+ const struct remesa_persistent_constant_state_request *request,uint32_t bank,
+ bool after_zclear,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(!request||sizeof(*request)>UINTPTR_MAX-(uintptr_t)request||
+    overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
+ if(*out)return EBUSY;
+ struct remesa_persistent_constant_state_request input;memcpy(&input,request,sizeof(input));
+ struct remesa_ta_constant_draw_state_request state={.isp=input.isp,
+  .viewport=input.viewport,.scalar_profile=input.scalar_profile};
+ struct shader_upload *dependency;
+ e=owned_fragment_reference(device,token,false,&state.fragment,&dependency);if(e)return e;
+ uint8_t bytes[56];size_t length=sizeof(bytes);
+ if(after_zclear)e=remesa_ta_constant_draw_after_zclear_encode(&state,bytes,sizeof(bytes),&length);
+ else e=remesa_ta_constant_draw_state_encode(&state,bytes);
+ if(e)return e;
+ return state_update_prepare(device,bytes,length,after_zclear?REMESA_PERSISTENT_STATE_AFTER_ZCLEAR:
+  REMESA_PERSISTENT_STATE_CONSTANT_DRAW,bank,dependency,out);
+}
+int remesa_persistent_constant_state_prepare(struct remesa_device *device,void *token,
+ const struct remesa_persistent_constant_state_request *request,uint32_t bank,void **out)
+{return constant_state_prepare(device,token,request,bank,false,out);}
+int remesa_persistent_after_zclear_state_prepare(struct remesa_device *device,void *token,
+ const struct remesa_persistent_constant_state_request *request,uint32_t bank,void **out)
+{return constant_state_prepare(device,token,request,bank,true,out);}
+int remesa_persistent_fragment_state_prepare(struct remesa_device *device,void *token,
+ uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct remesa_ta_fragment_binding_request binding;struct shader_upload *dependency;
+ e=owned_fragment_reference(device,token,false,&binding,&dependency);if(e)return e;
+ uint8_t bytes[16];e=remesa_ta_fragment_binding_encode(&binding,bytes);if(e)return e;
+ return state_update_prepare(device,bytes,sizeof(bytes),REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE,
+  bank,dependency,out);
+}
+int remesa_persistent_zclear_state_prepare(struct remesa_device *device,void *token,
+ uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct remesa_ta_fragment_binding_request binding;struct shader_upload *dependency;
+ e=owned_fragment_reference(device,token,true,&binding,&dependency);if(e)return e;
+ uint8_t bytes[44];e=remesa_ta_scene_zclear_state_encode(&binding,bytes);if(e)return e;
+ return state_update_prepare(device,bytes,sizeof(bytes),REMESA_PERSISTENT_STATE_SCENE_ZCLEAR,
+  bank,dependency,out);
+}
+int remesa_persistent_scene_state_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_scene_state_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner||!b->isp_update||
+    (b->state_kind!=REMESA_PERSISTENT_STATE_CONSTANT_DRAW&&
+     b->state_kind!=REMESA_PERSISTENT_STATE_SCENE_ZCLEAR&&
+     b->state_kind!=REMESA_PERSISTENT_STATE_AFTER_ZCLEAR&&
+     b->state_kind!=REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE))return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped||!b->readable)return EIO;
+ struct shader_upload *s=b->shader_dependency;
+ /* A deleted public shader token may still have a valid internal state hold. */
+ if(!s||!s->state_refs||s->quarantined||!s->gpu||!s->pds_gpu.gpu||
+    !s->gpu->live||!s->pds_gpu.gpu->live)return ESTALE;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_scene_state_backing result={.kind=b->state_kind,
+  .shader_owner=d->cfg.context,.shader_generation=s->request.generation,
+  .shader_code_handle=s->gpu->handle,.shader_pds_handle=s->pds_gpu.gpu->handle};
+ result.image=(struct remesa_persistent_isp_update_backing){.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .allocation_bytes=b->allocated,.state_offset=0,.state_bytes=b->state_bytes,
+  .use_offset=b->state_use_offset,.use_bytes=16,.pds_offset=b->state_pds_offset,.pds_bytes=60,
+  .ta_offset=b->state_ta_offset,.ta_bytes=b->state_ta_bytes,.use_entry=b->state_use_entry};
+ memcpy(result.image.pds_known_mask,b->state_pds_known,sizeof(result.image.pds_known_mask));
+ *out=result;return 0;
+}
+
+int remesa_persistent_depth_scene_prepare(struct remesa_device *device,
+ const struct remesa_depth_scene_image_request *request,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(!request||sizeof(*request)>UINTPTR_MAX-(uintptr_t)request||
+    overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
+ struct remesa_depth_scene_image_request r;memcpy(&r,request,sizeof(r));
+ if(r.gpu_va||r.allocation_bytes)return EINVAL;
+ for(unsigned i=0;i<3;i++) {
+  struct remesa_shader_image_view v;
+  e=remesa_shader_image_inspect(r.programs[i],&v);if(e)return e;
+  const struct remesa_shader_storage_view *payloads[4]={&v.vertex,&v.fragment,&v.fragment_pds,&v.fragment_pds_mask};
+  if(overlaps(out,sizeof(*out),v.programs,sizeof(*v.programs)))return EINVAL;
+  for(unsigned j=0;j<4;j++)if(overlaps(out,sizeof(*out),payloads[j]->bytes,payloads[j]->byte_length))return EINVAL;
+ }
+ if(*out)return EBUSY;
+ /* The provider supplies this address after allocation; external numeric
+  * mappings cannot be promoted through this owner API. */
+ struct persistent *d=device->priv;void *object=NULL;
+ e=allocate_class(d,REMESA_DEPTH_SCENE_IMAGE_BYTES,&object,REMESA_VA_PROGRAM);if(e)return e;
+ struct memory *b=object;
+ b->scene_image=calloc(1,sizeof(*b->scene_image));
+ if(!b->scene_image){e=ENOMEM;goto fail;}
+ r.gpu_va=b->va;r.allocation_bytes=b->allocated;
+ e=remesa_depth_scene_image_encode(&r,b->scene_image);if(e)goto fail;
+ e=owned_image_lease(d,b,b->scene_image->bytes,REMESA_DEPTH_SCENE_IMAGE_BYTES,true);if(e)goto fail;
+ e=owned_image_lease(d,b,b->scene_image->bytes,REMESA_DEPTH_SCENE_IMAGE_BYTES,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->depth_width=r.width;b->depth_height=r.height;b->readable=true;*out=b;return 0;
+fail:
+ destroy_bo(d,b);return b->live?EOWNERDEAD:e;
+}
+int remesa_persistent_depth_scene_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_depth_scene_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->owner||!b->scene_image)return EINVAL;
+ if(b->quarantined||!b->pinned||!b->gpu_mapped||!b->readable)return EIO;
+ struct remesa_resource resource;
+ if(remesa_registry_snapshot(&d->registry,b->token,&resource)!=REMESA_OK)return ESTALE;
+ if(resource.state!=REMESA_MAPPED||b->refs!=1)return EBUSY;
+ struct remesa_persistent_depth_scene_backing result={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .width=b->depth_width,.height=b->depth_height,.allocation_bytes=b->allocated,
+  .vertex_profile=(uint32_t)b->scene_image->vertex_profile,
+  .used_bytes=b->scene_image->used_bytes,.ta_offset=b->scene_image->ta_offset,
+  .ta_bytes=b->scene_image->ta_bytes};
+ memcpy(result.use_entries,b->scene_image->use_entries,sizeof(result.use_entries));
+ *out=result;return 0;
+}
+int remesa_persistent_depth_scene_verify(struct remesa_device *device,void *object)
+{
+ struct remesa_persistent_depth_scene_backing snapshot;
+ int e=remesa_persistent_depth_scene_snapshot(device,object,&snapshot);if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=owned_image_lease(d,b,b->scene_image->bytes,REMESA_DEPTH_SCENE_IMAGE_BYTES,false);
+ if(e)memory_error(d,b,e);
+ return e;
+}
+
+/* Typed immutable control DATA. Numeric references are checked by the encoders;
+ * the composing LAB owner retains and validates the referenced BOs separately.
+ * This operation grants neither job holds nor permission to execute. */
+int remesa_persistent_control_prepare(struct remesa_device *device,
+ const struct remesa_raster_control_request *r,
+ const struct remesa_raster_object_reference *ta,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(!r||!ta||overlaps(r,sizeof(*r),out,sizeof(*out))||
+    overlaps(ta,sizeof(*ta),out,sizeof(*out)))return EINVAL;
+ if(*out)return EBUSY;
+ uint8_t bytes[REMESA_CONTROL_IMAGE_BYTES];
+ e=remesa_raster_control_encode(r,bytes);if(e)return e;
+ e=remesa_ta_control_encode(ta,bytes+REMESA_RASTER_CONTROL_BYTES);if(e)return e;
+ struct persistent *d=device->priv;void *object=NULL;
+ e=allocate_class(d,sizeof(bytes),&object,REMESA_VA_DEFAULT);if(e)return e;
+ struct memory *b=object;
+ b->control_image=malloc(sizeof(bytes));if(!b->control_image){e=ENOMEM;goto fail;}
+ memcpy(b->control_image,bytes,sizeof(bytes));
+ e=owned_image_lease(d,b,b->control_image,sizeof(bytes),true);if(e)goto fail;
+ e=owned_image_lease(d,b,b->control_image,sizeof(bytes),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:destroy_bo(d,b);return b->live?EOWNERDEAD:e;
+}
+int remesa_persistent_control_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_memory_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(!owns_memory(d,b)||!b->live||!b->control_image)return EINVAL;
+ if(!b->readable)return EIO;
+ return remesa_persistent_memory_snapshot(device,object,out);
+}
+int remesa_persistent_control_verify(struct remesa_device *device,void *object)
+{
+ struct remesa_persistent_memory_backing snapshot;
+ int e=remesa_persistent_control_snapshot(device,object,&snapshot);if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=owned_image_lease(d,b,b->control_image,REMESA_CONTROL_IMAGE_BYTES,false);
+ if(e)memory_error(d,b,e);
+ return e;
 }

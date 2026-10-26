@@ -1,5 +1,20 @@
 # Native Gallium adapter
 
+The [execution-contract update](../../docs/phase9/PDS-EXECUTION-CONTRACT-20261018.md)
+adds original CPU metadata6 packing, typed logical task inputs and VS export
+routes used by candidate generation. Gallium validates the integrated contract;
+physical DATA/DS, task termination and executable PDS CODE remain unsupported.
+
+The [Phase 9 PDS/shader integration update](../../docs/phase9/PDS-SHADER-INTEGRATION-20261018.md)
+adds original typed DATA construction, owned VS/FS host linking and durable
+Gallium compiler diagnostics. PDS CODE and full GPU pipeline execution remain
+unsupported; no admission or default laboratory setting changes.
+
+The [October 18 implementation update](../../docs/phase9/DRIVER-DEVELOPMENT-20261018.md)
+documents the bounded USSE fragment encoder, additional constant NIR forms and
+the offline Mesa/Gallium regression results. Full pipeline execution remains
+unsupported; the historical first-PC research is inactive.
+
 See the [October 14 development update](../../docs/phase9/DEVELOPMENT-UPDATE.md)
 for the current original-fragment integration and its explicit laboratory gate.
 The older diagnostic interface described below remains a separate path.
@@ -56,3 +71,9 @@ the 4096-byte readback before comparing the exact magenta triangle. Its
 `--execute-once` mode requires a separately reviewed execution card and explicit
 live authorization. `tests/qualify_linux.py` builds this application without
 executing it, and runs interposed ioctl transport tests offline.
+# Sprint PDS task output
+
+O perfil CPU pixel restrito e sua integração original com DATA/Gallium estão
+descritos em [PDS-TASK-OUTPUT-CONSUMER-20261019.md](../../docs/phase9/PDS-TASK-OUTPUT-CONSUMER-20261019.md).
+CODE PDS executável permanece ENOTSUP; a saída CPU não certifica aridade ou
+fontes DS físicas.

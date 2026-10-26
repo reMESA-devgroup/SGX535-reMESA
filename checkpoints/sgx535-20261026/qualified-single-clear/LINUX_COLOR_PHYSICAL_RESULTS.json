@@ -1,0 +1,21 @@
+{
+  "classification": "REAL_LINUX_GEM_READONLY_MMAP_CPU_POLICY_TEST_NOT_GPU_RENDERING",
+  "GPU_submissions": 0,
+  "boot": "16e7d545-d940-4c91-8e80-f42d0fed873e",
+  "notes": {
+    "gma500_gfx": "5d0636df89a43469b3737e61d7c89662186c5b2bf7dec720e6ffa0a7b41640c5",
+    "sgx535_provenance": "5fada73a6db16bd944cbdafc6e90fae7547eef2be66d26657dddc20b801aaec7"
+  },
+  "client_sha256": "c95fb4e8b0d5c4fe7ec3c350632f4577a97072db00fdfd6815d5751cf5b0ec05",
+  "root": "/root/sgx535-color-vma-cpu-depth-less-single-20261026T160400Z",
+  "exit": 0,
+  "stdout": "{\"classification\":\"REAL_LINUX_GEM_COLOR_READONLY_VIEW_CPU_PATTERN_NOT_GPU_RENDERING\",\"GPU_submissions\":0,\"all_4096000_bytes_match_ioctl\":true,\"write_exec_private_partial_offset_rejected\":true,\"mprotect_write_exec_denied\":true,\"fork_existing_PTE_revocation_SIGBUS\":true,\"unleased_fault_SIGBUS\":true,\"fixed_mremap_revocation\":true,\"partial_munmap_lifetime\":true,\"GEM_final_INFO_zero\":true,\"closed\":true}\n",
+  "stderr": "",
+  "controls_after": {
+    "remesa_memory_enabled": "N",
+    "remesa_retained_lab_enabled": "N",
+    "remesa_stream_enabled": "N"
+  },
+  "legacy_capsule_unchanged": true,
+  "source_after": "SGXSOURCE2\nstate=0\nreasons=0\nproducers_active=0\ndriver_attached=1\ncapsule_state=0\nboot=3\nprepared=1\nasserted_reset=127\nreleased_reset=0\nstartup_pending=0\nstartup_reads=0\nstartup_fault=0\nstartup_autonomous=0\ndelayed_exclusion=STARTUP_LIFECYCLE\n"
+}

@@ -49,8 +49,7 @@ int remesa_shader_draw_inputs_validate(const struct remesa_shader_draw_inputs *i
         in->count > REMESA_DRAW_MAX_INDICES ||
         in->color_format != PIPE_FORMAT_B8G8R8A8_UNORM ||
         in->cull_face > PIPE_FACE_FRONT_AND_BACK ||
-        in->viewport.swizzle_x || in->viewport.swizzle_y ||
-        in->viewport.swizzle_z || in->viewport.swizzle_w)
+        !remesa_viewport_swizzle_is_identity(&in->viewport))
         return ENOTSUP;
     for (unsigned axis=0; axis<3; ++axis)
         if (!isfinite(in->viewport.scale[axis]) ||
@@ -175,6 +174,99 @@ void remesa_shader_draw_snapshot_destroy(struct remesa_shader_draw_snapshot *sna
 {
     if(snapshot){free(snapshot->bytes);free(snapshot);}
 }
+
+struct remesa_gears_geometry {
+    struct remesa_gears_geometry_view view;
+    unsigned char data[];
+};
+
+static int gears_attribute_validate(const struct remesa_gears_attribute *a,
+                                    uint32_t max_vertex,unsigned normal)
+{
+    unsigned width=remesa_position_format_bytes(a->format);
+    if(!width || (normal && width==8))return ENOTSUP;
+    if(!a->data || a->bytes>UINTPTR_MAX-(uintptr_t)a->data)return EINVAL;
+    /* Division avoids overflow even for an untrusted 64-bit base offset. */
+    if(a->offset>a->bytes || width>a->bytes-a->offset)return EINVAL;
+    if(a->stride && max_vertex>(a->bytes-a->offset-width)/a->stride)return EINVAL;
+    return 0;
+}
+
+int remesa_gears_geometry_create(const struct pipe_draw_info *info,
+ const struct pipe_draw_start_count_bias *draw,unsigned normal_from_attribute,
+ const struct remesa_gears_attribute *position,const struct remesa_gears_attribute *normal,
+ const void *indices,size_t index_bytes,struct remesa_gears_geometry **out)
+{
+    uint32_t count,max_vertex=0;
+    uint64_t index_first=0;
+    int error;
+    if(!info||!draw||!position||!out||normal_from_attribute>1||
+       (normal_from_attribute&&!normal))return EINVAL;
+    if(snapshot_overlap(out,sizeof(*out),info,sizeof(*info))||
+       snapshot_overlap(out,sizeof(*out),draw,sizeof(*draw))||
+       snapshot_overlap(out,sizeof(*out),position,sizeof(*position))||
+       snapshot_overlap(out,sizeof(*out),position->data,position->bytes)||
+       (normal_from_attribute &&
+        (snapshot_overlap(out,sizeof(*out),normal,sizeof(*normal))||
+         snapshot_overlap(out,sizeof(*out),normal->data,normal->bytes)))||
+       (info->index_size&&snapshot_overlap(out,sizeof(*out),indices,index_bytes)))return EINVAL;
+    if(*out)return EBUSY;
+    if(info->mode!=MESA_PRIM_TRIANGLES||info->start_instance||
+       info->instance_count>1||(info->index_size&&info->primitive_restart))return ENOTSUP;
+    count=draw->count-draw->count%3;
+    if(!count||!info->instance_count)return ENODATA;
+    if(count>REMESA_GEARS_GEOMETRY_MAX_VERTICES)return E2BIG;
+    if(info->index_size) {
+        if(info->index_size!=1&&info->index_size!=2&&info->index_size!=4)return EINVAL;
+        if(!indices||index_bytes>UINTPTR_MAX-(uintptr_t)indices)return EINVAL;
+        index_first=(uint64_t)draw->start*info->index_size;
+        if(index_first+(uint64_t)count*info->index_size>index_bytes)return EINVAL;
+        for(uint32_t i=0;i<count;i++) {
+            uint32_t raw=read_index((const unsigned char *)indices+(size_t)index_first+
+                                    (size_t)i*info->index_size,info->index_size);
+            int64_t id=(int64_t)raw+draw->index_bias;
+            if(id<0||id>UINT32_MAX || (info->index_bounds_valid &&
+               (raw<info->min_index||raw>info->max_index)))return EINVAL;
+            if((uint32_t)id>max_vertex)max_vertex=(uint32_t)id;
+        }
+    } else {
+        uint64_t end=(uint64_t)draw->start+count;
+        if(end>(uint64_t)UINT32_MAX+1)return EINVAL;
+        max_vertex=(uint32_t)(end-1);
+    }
+    error=gears_attribute_validate(position,max_vertex,0);if(error)return error;
+    if(normal_from_attribute) {
+        error=gears_attribute_validate(normal,max_vertex,1);if(error)return error;
+    }
+    const uint32_t stride=normal_from_attribute?8:4;
+    size_t bytes=(size_t)count*stride*4;
+    struct remesa_gears_geometry *g=malloc(sizeof(*g)+bytes);
+    if(!g)return ENOMEM;
+    g->view=(struct remesa_gears_geometry_view){g->data,bytes,count,stride,normal_from_attribute};
+    for(uint32_t i=0;i<count;i++) {
+        uint32_t id=info->index_size ? (uint32_t)((int64_t)read_index(
+          (const unsigned char *)indices+(size_t)index_first+(size_t)i*info->index_size,
+          info->index_size)+draw->index_bias) : draw->start+i;
+        for(unsigned a=0;a<1+normal_from_attribute;a++) {
+            const struct remesa_gears_attribute *attr=a?normal:position;
+            uint32_t value[4]={0,0,0,0x3f800000};
+            memcpy(value,(const unsigned char *)attr->data+(size_t)attr->offset+
+                         (size_t)id*attr->stride,remesa_position_format_bytes(attr->format));
+            memcpy(g->data+((size_t)i*stride+a*4)*4,value,sizeof(value));
+        }
+    }
+    *out=g;return 0;
+}
+
+int remesa_gears_geometry_inspect(const struct remesa_gears_geometry *g,
+                                struct remesa_gears_geometry_view *out)
+{
+    if(!g||!out||snapshot_overlap(out,sizeof(*out),g,sizeof(*g)+g->view.bytes))return EINVAL;
+    *out=g->view;return 0;
+}
+
+void remesa_gears_geometry_destroy(struct remesa_gears_geometry *g)
+{ free(g); }
 
 enum remesa_draw_status remesa_prepare_constant_draw(
     const struct pipe_draw_info *info, const struct pipe_draw_start_count_bias *draw,
@@ -384,7 +476,7 @@ enum remesa_draw_status remesa_pack_triangle_draw_vertex(
     if (viewport) {
         if (viewport->scale[0]!=16 || viewport->scale[1]!=16 || viewport->scale[2]!=.5f ||
             viewport->translate[0]!=16 || viewport->translate[1]!=16 || viewport->translate[2]!=.5f ||
-            viewport->swizzle_x || viewport->swizzle_y || viewport->swizzle_z || viewport->swizzle_w)
+            !remesa_viewport_swizzle_is_identity(viewport))
             return REMESA_DRAW_UNSUPPORTED;
     }
     if (info->mode != MESA_PRIM_TRIANGLES || info->primitive_restart ||

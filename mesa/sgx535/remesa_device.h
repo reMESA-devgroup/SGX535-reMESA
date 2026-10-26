@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "remesa/draw_packet.h"
+struct remesa_gears_runtime_ops;
 struct remesa_shader_draw_programs;
 struct remesa_shader_draw_inputs;
 /* Internal serialized userspace seam, not a kernel ABI. Submit snapshots the
@@ -80,6 +81,11 @@ struct remesa_device {
  /* Explicit laboratory FS-only route: original NIR FS, retained historical
   * VS/PDS carrier. Never an implicit fallback or an accelerated GL claim. */
  bool retained_fragment_carrier;
+ /* Default-off finite laboratory raster profile, derived only by successful
+  * retained-carrier configuration. Not a general half-pixel capability. */
+ bool retained_gl_fbo_half_pixel_center;
+ /* Explicit private whole-frame gears route; NULL preserves every legacy gate. */
+ const struct remesa_gears_runtime_ops *gears_runtime;
 };
 struct pipe_context;
 /* Diagnostic fixed program, not NIR/OpenGL support. Positions are projected

@@ -41,8 +41,10 @@ int remesa_fragment_body_decode(const void *,size_t,struct remesa_fragment_body 
 int remesa_fragment_body_validate(const struct remesa_fragment_body *);
 /* Smaller original CPU-format candidate. The selected historical CPU writer
  * placed a packed32 payload directly in numeric destination class1/number0,
- * with fixed control bits18 and23. Exact-source-qualified two-color evidence
- * correlates this form with magenta/green output in that retained context.
+ * with fixed control bits18 and23. Green, magenta and yellow are the only
+ * admitted semantic profiles. Original CPU initializer/writer/finalizer replay
+ * independently qualifies all three payload encodings; retained hardware
+ * evidence remains contextual and does not qualify a generic color export.
  * It does NOT establish generic output-bank names, END semantics or a PDS
  * launch contract. This candidate needs no float-to-color PACK or temporaries.
  */

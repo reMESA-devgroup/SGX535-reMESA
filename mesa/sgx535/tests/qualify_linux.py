@@ -27,7 +27,7 @@ result={'scope':'semantic marshalling and interposed transport tested; applicati
 inputs=[here/'remesa_fixed_state.c',here/'remesa_render_pass.c',here/'remesa_sampler_state.c',here/'remesa_texture_binding.c',here/'remesa_texture_descriptor.c',here/'remesa_screen.c',here/'remesa_draw.c',here/'remesa_linux.c',root/'common/remesa/draw_packet.c',root/'common/remesa/retained_evidence.c',root/'common/remesa/shader_request.c',
  here/'tests/gallium_first_draw.c',here/'tests/test_linux_transport.c',here/'tests/test_gallium_linux_integration.c',root/'include/remesa/native_uapi.h',
  root/'include/remesa/draw_packet.h',here/'remesa_linux.h',here/'remesa_device.h',here/'remesa_screen.h',here/'remesa_draw.h',here/'mesa-api-pin.json']
-shader_sources=[here/n for n in ['remesa_retained_transport.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_shader_program.c','remesa_program_registers.c','remesa_nir.c','remesa_fragment_body.c','remesa_shader_storage.c']]
+shader_sources=[here/n for n in ['remesa_retained_transport.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_pds_structure.c','remesa_shader_program.c','remesa_usse_fragment_color.c','remesa_usse_arithmetic.c','remesa_program_registers.c','remesa_nir.c','remesa_fragment_body.c','remesa_shader_storage.c']]
 shader_sources += [here/n for n in ['remesa_persistent.c','remesa_linux_memory.c']]+[root/'kernel/remesa'/n for n in ['registry.c','resource.c','provider.c']]
 inputs += shader_sources+[root/'include/remesa/shader_uapi.h',root/'include/remesa/shader_request.h',here/'remesa_fragment_body.h',here/'remesa_shader_storage.h',here/'tests/test_native_shader.c']
 inputs += [here/'remesa_loader.c',here/'remesa_loader.h',here/'tests/test_loader.c']

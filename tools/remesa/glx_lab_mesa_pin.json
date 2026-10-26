@@ -1,0 +1,9 @@
+{
+  "src/gallium/frontends/glx/xlib/glx_api.c": "84eacc31aa2eddfece251b06bf40d99adff6c9f634d686e61f5fd9de774d9e7c",
+  "src/gallium/frontends/glx/xlib/glx_getproc.c": "6887b962301f13211f9d03be04fb1273c9bd619b5d8af2f78458515313f95330",
+  "src/gallium/frontends/glx/xlib/glx_usefont.c": "eabecdd1de9fa67277e2c7d8b05f22a0fda968d80aff6359452dd55224cbf393",
+  "src/gallium/frontends/glx/xlib/xm_api.c": "08b8797aef1dcd394776688e53123435329088c04de7834c2a2d61a6fa354026",
+  "src/gallium/frontends/glx/xlib/xm_st.c": "2858977630c048c83da143a43728758e1de15593e6200ae53a2fb343d3df45b8",
+  "src/gallium/frontends/glx/xlib/xm_st.h": "a8cdb6a158561c38fba01a12ee2c7d38fb2b1ab0b9550294bf35e01de810bcc1",
+  "src/gallium/frontends/glx/xlib/xm_api.h": "bf2d27e38b742cdefbc68244da09eaca8d7d4e4327743896f029bde6b8f1bbcc"
+}

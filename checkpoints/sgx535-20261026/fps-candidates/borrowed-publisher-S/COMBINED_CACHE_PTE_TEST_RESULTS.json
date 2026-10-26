@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "remote_calls": 0,
+  "scope": "Actual K provider/cache/owner bridge with synthetic PFN/cache/vmap model, authenticated-input seal modeled by dummy PDS guard. Actual MMU batch separately differential-tested; no hardware coherence proof.",
+  "base_C2_test_SHA256": "43bcfd601fbd820df7856dd8b718b2d836fb66c215d06476bc0b68d497908379",
+  "combined_test_SHA256": "04722adeb4befea4bdfb449bca78c234721a131d1bdab29456af399ea769eac5",
+  "tests": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_combined_cache_pte.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-combined-cache-pte-native"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\nPASS combined sealed PDS/PTE routing with TA cache+borrowed READ leases: batches=1056, no new READTA vmap/vunmap, all subsequent frames/checks/faults preserved; modeled CPU GPU0\n"
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_combined_cache_pte.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-combined-cache-pte-ubsan"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\nPASS combined sealed PDS/PTE routing with TA cache+borrowed READ leases: batches=1056, no new READTA vmap/vunmap, all subsequent frames/checks/faults preserved; modeled CPU GPU0\n"
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_combined_cache_pte.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-combined-cache-pte-i386"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\nPASS combined sealed PDS/PTE routing with TA cache+borrowed READ leases: batches=1056, no new READTA vmap/vunmap, all subsequent frames/checks/faults preserved; modeled CPU GPU0\n"
+    }
+  ]
+}

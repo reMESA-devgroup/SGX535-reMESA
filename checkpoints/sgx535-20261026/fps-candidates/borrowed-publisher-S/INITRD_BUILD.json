@@ -1,0 +1,26 @@
+{
+  "base_path": "/home/gama/sgx535-offline/gl-triangle-recovery-20261021T101936Z/quarter-v2-private-initrd.img",
+  "base_sha256": "ed7101f6d00a2163f83ad68492047a9e04edc6d3e92d73fe0ab6ecf3f9090be9",
+  "image_sha256": "8de16bc063e860f5cf8a63798340942d7192622dbb6d445b606714281df21394",
+  "image_bytes": 51096563,
+  "modules": {
+    "gma500_gfx": {
+      "sha256": "09d8b00ea38ea89c7be3533426bca4e662ce60e3f408596ea982afc48743d762",
+      "note_sha256": "a82986ab57269b013346635c6b91acac9cdcfff0ffe3194379251170ba8573b6"
+    },
+    "sgx535_provenance": {
+      "sha256": "d1d36ec49ce59c0f7584ed71c0cfe9b5dbe42ef18a736d8c627c94552c0f1818",
+      "note_sha256": "5fada73a6db16bd944cbdafc6e90fae7547eef2be66d26657dddc20b801aaec7"
+    }
+  },
+  "changed_members": [
+    "init",
+    "usr/lib/sgx535-first-load/gma500_gfx.ko",
+    "scripts/sgx535-first-load",
+    "usr/lib/sgx535-first-load/sgx535_provenance.ko"
+  ],
+  "other_members_unchanged": true,
+  "boot_script_logic_unchanged_identity_bindings_updated": true,
+  "GPU_submissions": 0,
+  "installed": false
+}

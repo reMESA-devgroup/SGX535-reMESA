@@ -1,0 +1,141 @@
+{
+  "status": "SEALED_OFFLINE_ONLY_PHYSICAL_FPS_UNPROVEN",
+  "GPU_operations": 0,
+  "X_server_operations": 0,
+  "normal_synchronous_barriers": [
+    5,
+    3
+  ],
+  "runtime_replace_only": "/home/gama/sgx535-offline/gears-fps-helper-x11-pipeline-20261026T130000Z/libGL-gears-runtime.so.1",
+  "required_existing_bootstrap": "/home/gama/sgx535-offline/gears-readback-target-production-20261026T003000Z/gears-bootstrap.so",
+  "baseline": "/home/gama/sgx535-offline/gears-x11-bulk-clear-combined-20261026T030000Z",
+  "baseline_inputs_verified_unchanged": {
+    "/home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/libGL-gears-runtime.so.1": "764e008c043e53ddef19946c3b7fbd186b5370670de30fc7e68483a172262f05",
+    "/home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/remesa_xcb.o": "7a9cef7cc75af8698ae058d664810d997cb7fb69ce168998281b6f536481eef6",
+    "/home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/glx_lab_frontend.o": "e4950ed1ab6d2f6bd005f9b04df5aad583fb44bc0c67d826de210a8aed9e914d",
+    "/home/gama/sgx535-offline/gears-host-clear-bulk-20261026T013000Z/libremesa_loader-bulk.a": "b225af8ada43c916a0d9e8ebdd7b1bb000710dee9f54f0e9e03b365de84c1a8c",
+    "/home/gama/sgx535-offline/gears-fast-nohash-20261025T223500Z/gears-bootstrap.so": "d2b1b52ca07c7687190d238ef157669bb07d715375fc65efd730a954af4f7cf4",
+    "/home/gama/sgx535-offline/phase9-real-mesa-20261008/build-i386/src/gallium/drivers/sgx535/libremesa_loader.a": "f158b02bbc888f82c905e759e0e4780b8161986339ea70d90e64ccb659f416ab"
+  },
+  "protected_previous_files_verified_unchanged": 31,
+  "tests": [
+    "native",
+    "UBSan",
+    "i386/qemu"
+  ],
+  "negative_scope": [
+    "all16 image error positions and multiple errors",
+    "Geometry,Attributes,both errors and NULL replies consumed",
+    "image+FreeGC simultaneous error priority",
+    "zero image cookie partial queues",
+    "zero FreeGC cookie no retry",
+    "connection failure beforeFreeGC and duringimagechecks",
+    "sequencewrap insideimages and exactlyFreeGC",
+    "cap64/fallback65",
+    "LAB serial",
+    "held resource untilallchecks",
+    "one reused stagingallocation120frames"
+  ],
+  "files": {
+    "BUILD_AND_TEST.py": {
+      "bytes": 3534,
+      "sha256": "f8f6a1f4ed533a4592cb1f69a7a224e5a5b6d25553032088c1c4283495d0fc1a"
+    },
+    "PRIMARY_RESEARCH.md": {
+      "bytes": 1108,
+      "sha256": "6f5ca7eea93687128a455699343ad703c483dc4c7ef0cea1523a69f9f638f6d3"
+    },
+    "README.md": {
+      "bytes": 2948,
+      "sha256": "7e9daaba121f73fc0448f8b180677dc8c0975d426044ca2bc5df5e0f0dd71b56"
+    },
+    "RESULTS.json": {
+      "bytes": 29702,
+      "sha256": "f4fe02ce926e6d874546ac89a2ddaea2a28088e593d6f2856d13f0ac83a34661"
+    },
+    "SEAL_DELIVERY.py": {
+      "bytes": 3205,
+      "sha256": "21d309a11d8e6e8015cecc9bf9731416a229fcb54300390242144734a29c58f2"
+    },
+    "frontend-link.log": {
+      "bytes": 239,
+      "sha256": "1755a8fe22b8319436e78bb52d9af4b415a4142574a654504308e8c37b6a8d4b"
+    },
+    "libGL-gears-runtime.so.1": {
+      "bytes": 20408940,
+      "sha256": "5a2848897b61739f6fa14259b802dcb9dc404d82a75e4ae89a8937aa602ccac7"
+    },
+    "remesa_fast_shm.h": {
+      "bytes": 352,
+      "sha256": "f63d439910c3918271ce71f22496e23be8996bd4c5ea79052e763e93d96d49e6"
+    },
+    "remesa_xcb-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "remesa_xcb.c": {
+      "bytes": 20048,
+      "sha256": "2010a8a16e95c1e9ad05b6170f23dcec5c8c3e2362d7c7fced6553136a88c43f"
+    },
+    "remesa_xcb.c.patch": {
+      "bytes": 6103,
+      "sha256": "3658da616f6af47c668707eaaefe30a49c4175009008c71dc17dbb02e6f57942"
+    },
+    "remesa_xcb.o": {
+      "bytes": 18044,
+      "sha256": "17341463053c7067f3fc721d5139fc5a78520357d7cfc8ddd319200b5d0dd215"
+    },
+    "remesa_xcb_staging.h": {
+      "bytes": 723,
+      "sha256": "27d85c1619478827acb530d0f43581b61eb93b6d3ef327b3585f4b095cac94f0"
+    },
+    "test-i386-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-i386-run.log": {
+      "bytes": 17733,
+      "sha256": "8c6976e0d109d0c59d098bb7fb17e8b69a6bb3c16129b54481e7d705c9b68435"
+    },
+    "test-native-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-native-run.log": {
+      "bytes": 17733,
+      "sha256": "87780769f7c7b91c807d62e571cc350c021648680d948819533cfd7ab750d973"
+    },
+    "test-staging-i386": {
+      "bytes": 831900,
+      "sha256": "55f7292e133035eb91a49a2eefce5606b72171af1fec2deecf5f020d9592920a"
+    },
+    "test-staging-native": {
+      "bytes": 78504,
+      "sha256": "c4b50b4c69ef9183f21b0c4ec196f8e4e0e62eec043c48dc268985ef7c46ca19"
+    },
+    "test-staging-ubsan": {
+      "bytes": 157360,
+      "sha256": "5415d3b8743021d569013da4e44a8880c58bbd69f6f5b13844d8f06d4f8056a9"
+    },
+    "test-ubsan-compile.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "test-ubsan-run.log": {
+      "bytes": 17733,
+      "sha256": "2197519f0fb8e3cd3f5d630ff2bdec51af64e9daefa33ac21dbdb2ed90b08f61"
+    },
+    "test_staging.c": {
+      "bytes": 13539,
+      "sha256": "7e7ddfd81e43b06c4aec957438b0ce0d60dc005c019dde728556abe0d26a7ac7"
+    },
+    "test_staging_base.inc": {
+      "bytes": 5465,
+      "sha256": "85c939991075bcc7f66f46f2dd8c58f9dbcd6c4c5ce34c3e6ae34994affc7ef1"
+    },
+    "test_xcb.c": {
+      "bytes": 19858,
+      "sha256": "8d36453f4c76188234d51b3eba2aff86f130862a6bebae503389a92a84270a82"
+    }
+  }
+}

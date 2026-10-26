@@ -161,6 +161,25 @@ static void record_preview_bounds(const struct remesa_shader_pds_links *source)
    if(n==7)CHECK(out[1].high_address_region==0x30000000&&out[1].address_prefix_bits==0x0c000101);
   }
  }
+ /* Independent original Xpsb producer + public-kernel source-slice oracles:
+  * sgx-physical-task/PRIMARY_REFERENCE_ORACLES.json. Higher address-region
+  * bits never leak into the now-qualified primary FS bits25:24. */
+ const uint64_t block[]={0x20000160,0x20000160,0x30000160,0x2ffff160};
+ const uint64_t prefix[]={48,64,48,48};
+ const uint32_t word[]={0x0c000016,0x10000016,0x0c000016,0x0cffff16};
+ for(unsigned n=0;n<4;n++) {
+  struct remesa_pds_request requests[2]={source->use[0].request,source->use[1].request};
+  requests[0].code.address=requests[0].data.address=0x24000000;
+  requests[1].code.address=requests[1].data.address=block[n]-requests[1].data.offset;
+  requests[1].code.offset=requests[1].data.offset+prefix[n];
+  for(unsigned i=0;i<2;i++)CHECK(!remesa_pds_prepare(&source->launch.stage[i].program,&requests[i],&plans[i]));
+  CHECK(!remesa_pds_prepare_use_links(plans,programs,banks,offsets,links));
+  CHECK(!remesa_pds_preview_record_pair(plans,programs,links,out));
+  CHECK(out[1].address_prefix_bits==word[n]&&out[1].address_prefix_known_mask==UINT32_MAX);
+  CHECK(!(out[1].address_prefix_bits&UINT32_C(0x03000000)));
+  CHECK(out[1].high_address_region==(block[n]&UINT64_C(0xf0000000)));
+  CHECK(out[0].address_prefix_known_mask==UINT32_C(0xfcffffff));
+ }
  CHECK(remesa_pds_preview_record_pair(plans,programs,links,(void *)plans)==EINVAL);
  CHECK(remesa_pds_preview_record_pair(plans,programs,links,(void *)programs)==EINVAL);
  CHECK(remesa_pds_preview_record_pair(plans,programs,links,(void *)links)==EINVAL);
@@ -347,7 +366,7 @@ static void native_pds_links(struct remesa_device *device,void *token,
    CHECK(previews[i].block_address==0x20000010+4096*i&&previews[i].prefix_bytes==48);
    CHECK(previews[i].code_window_address==0x20000040+4096*i&&previews[i].code_bytes==32);
    CHECK(previews[i].address_prefix_bits==0x0c000001+256*i&&
-         previews[i].address_prefix_known_mask==0xfcffffff&&previews[i].high_address_region==0x20000000);
+         previews[i].address_prefix_known_mask==(i?UINT32_MAX:UINT32_C(0xfcffffff))&&previews[i].high_address_region==0x20000000);
    CHECK(previews[i].use_entry_address==0x10000000+32*i&&previews[i].use_program_bytes==(i?8:32));
    CHECK(previews[i].use_address_bits==links.use[i].address_bits&&
          previews[i].data_fixup_address==links.use[i].data_address);

@@ -1,0 +1,20 @@
+--- /home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module/remesa_stream_owner_flush.c
++++ /home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/module/remesa_stream_owner_flush.c
+@@ -40,12 +40,12 @@
+         drm_clflush_pages(bo->pages, bo->page_count);
+     }
+     dma_wmb();
+-    /* These private CPU mappings are no longer needed. With no exported GEM
+-     * handles, dropping them also prevents a later accidental CPU patch from
+-     * silently invalidating this flush while the BO pages remain pinned. */
+-    for (role = 0; role <= SGX535_BO_COLOR; role++) {
++    /* FAST revokes its validated borrowed pointers without unmapping the
++     * provider's held backing. LAB retains the original private-alias drop. */
++    error=remesa_stream_trusted_consume_images(owner,&handled);
++    if(error)return error;
++    if(!handled)for (role = 0; role <= SGX535_BO_COLOR; role++) {
+         struct sgx535_gma500_bo *bo = &owner->objects[role];
+-
+         vunmap(bo->cpu);
+         bo->cpu = NULL;
+         owner->views[role].bytes = NULL;

@@ -8,6 +8,38 @@
 /* Supported host position fetch widths. Missing FLOAT2 z/w are 0/1;
  * FLOAT3 w is 1. Unsupported formats return zero; no GPU ISA is generated. */
 unsigned remesa_position_format_bytes(enum pipe_format);
+/* Owned pre-VS triangle stream for the complete gears POSITION/NORMAL profile.
+ * Caller holds immutable source leases. Attribute offsets include VB + element
+ * offsets; stride zero broadcasts. FLOAT2/3 position defaults are z=0,w=1;
+ * FLOAT3 normal defaults w=1. All supplied components are copied bit for bit.
+ * No matrix, normalization, lighting, clipping or viewport arithmetic runs.
+ * Indexed assembly preserves primitive and provoking-vertex order, including
+ * repeated references. Incomplete trailing primitives are ignored. This host
+ * allocation bound is not an SGX capacity or execution qualification.
+ */
+#define REMESA_GEARS_GEOMETRY_MAX_VERTICES 4095u
+struct remesa_gears_attribute {
+ const void *data; size_t bytes;
+ uint64_t offset; uint32_t stride;
+ enum pipe_format format;
+};
+struct remesa_gears_geometry;
+struct remesa_gears_geometry_view {
+ const void *vertices; size_t bytes;
+ uint32_t vertex_count, stride_dwords, normal_from_attribute;
+};
+/* Borrowed index storage begins at resource byte zero. The explicit snapshots
+ * are authoritative; index union/ownership hints are never dereferenced or
+ * adopted. Nonindexed draws ignore index data/bias/bounds entirely. Exactly
+ * one instance and triangle lists are supported; restart is rejected.
+ * Empty output required; outputs unchanged on error. */
+int remesa_gears_geometry_create(const struct pipe_draw_info *,
+ const struct pipe_draw_start_count_bias *,unsigned normal_from_attribute,
+ const struct remesa_gears_attribute *,const struct remesa_gears_attribute *,
+ const void *indices,size_t index_bytes,struct remesa_gears_geometry **);
+int remesa_gears_geometry_inspect(const struct remesa_gears_geometry *,
+ struct remesa_gears_geometry_view *);
+void remesa_gears_geometry_destroy(struct remesa_gears_geometry *);
 /* Original shader inputs, borrowed only during the backend submit call.
  * These are synchronized VB/IB snapshots before vertex shader evaluation,
  * clipping or viewport transformation. The diagnostic window-space packet

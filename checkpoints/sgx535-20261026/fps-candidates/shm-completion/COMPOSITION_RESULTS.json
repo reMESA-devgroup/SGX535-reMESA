@@ -1,0 +1,27 @@
+{
+  "status": "SEALED_FAST_SHM_OPT_IN_OFFLINE_ONLY_PHYSICAL_FPS_UNPROVEN",
+  "GPU_operations": 0,
+  "SSH_calls": 0,
+  "X_server_operations": 0,
+  "baseline": "/home/gama/sgx535-offline/gears-x11-bulk-clear-combined-20261026T030000Z",
+  "source_changes": {
+    "remesa_fast_shm.c": "312e143be7f7307f52724f757e7173c1eeb0810a36f4257a8f3e5266862cf769",
+    "remesa_fast_shm.h": "1800d5848cada3b6541e1ac258ca93de2c7787878362fd733ce87e59cb767bb7",
+    "glx_lab_frontend_timed.c": "0713221710462d87a7115081036973218ec54d02f656146f994d7582937f1f74"
+  },
+  "object_replacements": [
+    "glx_lab_frontend.o",
+    "remesa_fast_shm.o"
+  ],
+  "qualified_PUTIMAGE_publisher_unchanged": "/home/gama/sgx535-offline/gears-x11-batch-production-20261026T003000Z/remesa_xcb.o",
+  "default": "PUTIMAGE",
+  "activation": "FAST + REMESA_GEARS_PRESENT=SHM",
+  "one_buffer_bytes": 4096000,
+  "one_request_in_flight": true,
+  "required_new_explicit_runtime_NEEDED_existing_library": "libXext.so.6",
+  "loader_must_be_checked_on_Mini_before_GPU": true,
+  "retained_checked_requests_are_not_globally_bounded": true,
+  "physical_gain_demonstrated": false,
+  "protected_previous_files_verified_unchanged": 31,
+  "libGL_sha256": "6dee99991c3433d15809da6f43ba1bac3b00598675f7595637f433c5f739767d"
+}

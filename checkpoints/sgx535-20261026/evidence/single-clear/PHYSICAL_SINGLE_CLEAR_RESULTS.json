@@ -1,0 +1,228 @@
+{
+  "status": "PHYSICAL_SINGLE_CLEAR_COLOR_Z_COCOVERAGE_STABLE_REFERENCE_PASS_NOT_FULL_GL_CONFORMANCE",
+  "boot": "16e7d545-d940-4c91-8e80-f42d0fed873e",
+  "TA_CPU_reads_after_GPU_before_next_frame": [
+    [
+      4,
+      7
+    ],
+    [
+      5,
+      8
+    ],
+    [
+      5,
+      8
+    ]
+  ],
+  "TA_lazy_read_matches_explicit_full_SYNC": true,
+  "frames": [
+    {
+      "frame": 1,
+      "operation": 1,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 26563,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        460224,
+        485792
+      ],
+      "visible_pixels": 409648,
+      "analytical_stable_interior_pixels": 265731,
+      "analytical_max_abs_Z_error": 5.010071138622507e-06,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    },
+    {
+      "frame": 2,
+      "operation": 2,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 24868,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        971584
+      ],
+      "visible_pixels": 410280,
+      "analytical_stable_interior_pixels": 265411,
+      "analytical_max_abs_Z_error": 1.2483849729738594e-05,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    },
+    {
+      "frame": 3,
+      "operation": 3,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 26206,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        473008
+      ],
+      "visible_pixels": 410014,
+      "analytical_stable_interior_pixels": 265738,
+      "analytical_max_abs_Z_error": 5.957180331028766e-06,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    },
+    {
+      "frame": 4,
+      "operation": 4,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 26563,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        460224,
+        485792
+      ],
+      "visible_pixels": 409648,
+      "analytical_stable_interior_pixels": 265731,
+      "analytical_max_abs_Z_error": 5.010071138622507e-06,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    },
+    {
+      "frame": 5,
+      "operation": 5,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 24868,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        971584
+      ],
+      "visible_pixels": 410280,
+      "analytical_stable_interior_pixels": 265411,
+      "analytical_max_abs_Z_error": 1.2483849729738594e-05,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    },
+    {
+      "frame": 6,
+      "operation": 6,
+      "phase": 9,
+      "ledger": 7,
+      "proof": 111,
+      "mode": "OPEN8 ABI5 NOHASH production kernel, separate raw qualification reader",
+      "COLOR_full_byte_exact_to_ALWAYS_baseline": false,
+      "raw_Z_byte_exact": false,
+      "COLOR_silhouette_identical_to_ALWAYS": true,
+      "COLOR_Z_co_coverage_exact_all_pixels": true,
+      "background_COLOR_RGBA_zero_and_Z24_clear_all_pixels": true,
+      "Z24_never_farther_on_historical_visible_geometry": true,
+      "Z24_strictly_closer_pixels": 26206,
+      "old_depth_only_artifacts_removed_and_independently_empty": [
+        473008
+      ],
+      "visible_pixels": 410014,
+      "analytical_stable_interior_pixels": 265738,
+      "analytical_max_abs_Z_error": 5.957180331028766e-06,
+      "analytical_visible_gear_class_exact_in_stable_interiors": true,
+      "analytical_reference_scope": "Captured original triangles/MVP, nearest depth and gear class in stable interiors. Removed old depth-only pixels additionally require independent no-triangle reference. Not full GL shading/precision conformance."
+    }
+  ],
+  "historical_precedent40_receipts_independently_chained": true,
+  "scope": "Separate typed LESS/single-clear GPU qualification. Historical COLOR silhouette is exact; new COLOR/Z co-coverage and backgroundclear required on every pixel. Removed old depth-only artifacts require independent no-triangle reference. Stable foreground nearest-depth/gear-class checked. Preserved old Z-footprint qualifier FAILED; old raw/oracles unchanged. All72STAGE/6retirement9ledger7/5inputs/9negativegates/11BO/PTE/INFO0/TAcoherence retained. Not full GL shading/precision conformance",
+  "full_RAW_approval": false,
+  "raw_Z_byte_exact": false,
+  "format_contract_sources": {
+    "format": "PIPE_FORMAT_Z24X8_UNORM",
+    "defined_bits": "low24 normalized unsigned depth",
+    "ignored_bits": "high8 VOID, not a stencil attachment",
+    "scope": "Format contract for this admitted renderer only; does not approve Z24S8 or make full raw buffers equal",
+    "sources": [
+      {
+        "path": "/home/gama/sgx535-offline/phase9-real-mesa-20261008/mesa-25.2.0/src/util/format/u_format.yaml",
+        "sha256": "0aabe9d19cd05ce9bed963023b5790080a468a9316ef69bf162f27366a642a67",
+        "lines": [
+          640,
+          645
+        ],
+        "required_text": [
+          "- name: Z24X8_UNORM",
+          "channels: [UN24, X8]",
+          "#     - 'x': void"
+        ]
+      },
+      {
+        "path": "/home/gama/sgx535-offline/phase9-real-mesa-20261008/mesa-25.2.0/src/util/format/u_format_parse.py",
+        "sha256": "d4f766bd800ea7571021c6e027dc16a744f90cc9d96988e5299f38fde2ed360c",
+        "lines": [
+          53,
+          56
+        ],
+        "required_text": [
+          "'X': VOID"
+        ]
+      },
+      {
+        "path": "/home/gama/sgx535-offline/gears-fast-nohash-20261025T223500Z/runtime_engine.c",
+        "sha256": "ecee32d8058e34c6e37fe49cedc90bcb2b202b89f87691183ca608e1bfa87d8a",
+        "lines": [
+          55,
+          57
+        ],
+        "required_text": [
+          "d->depth_format!=PIPE_FORMAT_Z24X8_UNORM"
+        ]
+      },
+      {
+        "path": "/home/gama/sgx535-worktrees/driver-resume-20261018/mesa/sgx535/remesa_screen.c",
+        "sha256": "1b6a6b6aa54d0d3be5fbcc7f2ca1e021ab808fd79a80a756704cc1a2acdcdb03",
+        "lines": [
+          181,
+          185
+        ],
+        "required_text": [
+          "f==PIPE_FORMAT_Z24X8_UNORM",
+          "return bind==PIPE_BIND_DEPTH_STENCIL;"
+        ]
+      }
+    ]
+  },
+  "FAST_is_not_LAB_approval": true,
+  "new_glxgears_execution": false,
+  "controls_after": {
+    "remesa_memory_enabled": "N",
+    "remesa_retained_lab_enabled": "N",
+    "remesa_stream_enabled": "N"
+  },
+  "legacy_capsule_unchanged": true
+}

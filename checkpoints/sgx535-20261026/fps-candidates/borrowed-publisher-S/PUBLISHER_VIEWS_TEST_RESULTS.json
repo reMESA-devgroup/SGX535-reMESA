@@ -1,0 +1,71 @@
+{
+  "status": "PASS_ACTUAL_FUNCTIONS_CPU_MOCKS_NOT_GPU_PROOF",
+  "GPU_operations": 0,
+  "tests": [
+    {
+      "mode": "native",
+      "compile": [
+        "gcc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_publisher_views.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-native"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-native"
+      ],
+      "exit": 0
+    },
+    {
+      "mode": "ubsan",
+      "compile": [
+        "gcc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_publisher_views.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-ubsan"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-ubsan"
+      ],
+      "exit": 0
+    },
+    {
+      "mode": "i386",
+      "compile": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=gnu11",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_publisher_views.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-i386"
+      ],
+      "run": [
+        "/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-publisher-views-i386"
+      ],
+      "exit": 0
+    }
+  ],
+  "source_sha256": {
+    "remesa_stream_trusted.c": "ffcb8c7d5a38ca474ae22b20886363c5b270cabb919207b715e56345c7253367",
+    "remesa_stream_owner_flush.c": "22b971be3e244f38d896566da1adac9469bb02af58421844e2defbb71021bd47",
+    "remesa_stream_trusted.h": "533ec15d4ea95b2f889693ff61cef2c21a352ed83d5016de8d9b583737b62683"
+  },
+  "provider_memory_lifetime_unmodified": true
+}

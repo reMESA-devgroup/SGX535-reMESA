@@ -8,6 +8,14 @@ struct remesa_resource_layout {
  uint32_t stride,pages;
  size_t bytes;
 };
+/* Separate BO backing sizes for a prospective drawable. This plans storage,
+ * not SGX surface descriptors or depth-test/rendering support. Front and back
+ * must be independently owned; a swap must not alias their live allocations. */
+struct remesa_drawable_layout {
+ uint32_t count;
+ struct remesa_resource_layout planes[3]; /* front, optional back, optional Z */
+ size_t allocation_bytes[3],total_bytes;
+};
 #define REMESA_TEXTURE_LEVELS 32u
 struct remesa_texture_level {
  uint32_t width,height,stride;
@@ -42,6 +50,28 @@ static inline int remesa_resource_layout(const struct remesa_resource_limits *li
  *out=(struct remesa_resource_layout){.stride=(uint32_t)row,
   .bytes=(size_t)total,.pages=(uint32_t)((total+4095)/4096)};
  return 0;
+}
+/* BGRA8 colors; depth_cpp describes backing only (0,2,4), not a GPU format.
+ * Entire result is transactional, including page rounding and aggregate budget.
+ * Reuse the resource owner/allocator for each plane, never grow a live BO. */
+static inline int remesa_drawable_layout(const struct remesa_resource_limits *limits,
+ uint32_t width,uint32_t height,bool double_buffer,uint32_t depth_cpp,
+ size_t byte_budget,struct remesa_drawable_layout *out)
+{
+ struct remesa_drawable_layout result={0};
+ if(!limits||!out||!byte_budget||(depth_cpp&&depth_cpp!=2&&depth_cpp!=4))return EINVAL;
+ result.count=1+(unsigned)double_buffer+(depth_cpp!=0);
+ for(unsigned i=0;i<result.count;i++) {
+  uint32_t cpp=depth_cpp&&i==result.count-1?depth_cpp:4;
+  int e=remesa_resource_layout(limits,width,height,cpp,&result.planes[i]);if(e)return e;
+  uint64_t rounded=(uint64_t)result.planes[i].pages*4096;
+  /* Keep allocation sizes and the combined plan portable to i386, even when
+   * a sub-4GiB pixel extent rounds up to exactly 4GiB. */
+  if(rounded>UINT32_MAX || rounded>UINT32_MAX-result.total_bytes)return EOVERFLOW;
+  if(rounded>byte_budget-result.total_bytes)return ENOSPC;
+  result.allocation_bytes[i]=(size_t)rounded;result.total_bytes+=(size_t)rounded;
+ }
+ *out=result;return 0;
 }
 /* Linear 2D host backing, with independently bounded rows at every mip level.
  * The whole chain shares one allocation and one writer/lease. This is not a

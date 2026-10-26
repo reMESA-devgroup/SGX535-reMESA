@@ -3,6 +3,7 @@
  * No shader bytes, rendering, completion fixtures or hardware submissions.
  */
 #include "remesa_shader_program.h"
+#include "remesa_fragment_body.h"
 #include "vertex_nir_fixture.h"
 #include "uniform_nir_fixture.h"
 /* Included test fixture has external allocation interception and an inherited
@@ -217,7 +218,8 @@ int main(void)
  struct remesa_shader_program_report report={0};
  CHECK(!remesa_shader_program_report(&program,&report));
  CHECK(report.stage==REMESA_IR_FRAGMENT&&report.status==REMESA_PROGRAM_SEMANTIC_ONLY&&
-       report.virtual_instructions==6&&report.binary_error==ENOTSUP);
+       report.virtual_instructions==6&&!report.binary_error&&report.binary_bytes==8&&
+       report.launch_error==ENOTSUP);
  CHECK(report.register_evidence.use_banks==16&&
        report.register_evidence.use_address_bits==25&&
        report.register_evidence.declared_pds_alignment_shift==20&&
@@ -226,10 +228,13 @@ int main(void)
        !report.register_evidence.instruction_fields_known);
  unsigned char binary[128],before[128];memset(binary,0xa5,sizeof(binary));memcpy(before,binary,sizeof(before));
  size_t written=987;
- CHECK(remesa_shader_program_encode(&program,binary,sizeof(binary),&written)==ENOTSUP);
- CHECK(written==987&&!memcmp(binary,before,sizeof(binary)));
+ CHECK(!remesa_shader_program_encode(&program,binary,sizeof(binary),&written)&&written==8);
+ struct remesa_fragment_constant encoded;
+ CHECK(!remesa_fragment_constant_decode(binary,written,&encoded)&&encoded.argb==0xffff00ff);
+ CHECK(!memcmp(binary+8,before+8,sizeof(binary)-8));
+ memcpy(binary,before,sizeof(binary));written=987;
  CHECK(remesa_shader_program_encode(&program,NULL,1,&written)==EINVAL);
- CHECK(remesa_shader_program_encode(&program,NULL,0,&written)==ENOTSUP&&written==987);
+ CHECK(remesa_shader_program_encode(&program,NULL,0,&written)==ENOSPC&&written==987);
  /* A different independently valid lowering must not become this program. */
  nir=fixture(0xff00ff00);CHECK(!remesa_shader_ir_lower(nir,&ir));ralloc_free(nir);
  CHECK(!remesa_usse_lower(&ir,&copy.usse));
@@ -473,8 +478,11 @@ int main(void)
   state.ir.nir=nir;unsigned freed_before=destroyed;void *handle=ctx->create_fs_state(ctx,&state);
   CHECK(handle&&destroyed==freed_before+1);ctx->bind_fs_state(ctx,handle);CHECK(!remesa_context_error(ctx));
   CHECK(!remesa_context_shader_program_report(ctx,PIPE_SHADER_FRAGMENT,handle,&report));
-  CHECK(remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,handle,binary,sizeof(binary),&written)==ENOTSUP);
-  CHECK(written==987&&!memcmp(binary,before,sizeof(binary)));
+  CHECK(!report.binary_error&&report.binary_bytes==8&&report.launch_error==ENOTSUP);
+  CHECK(!remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,handle,binary,sizeof(binary),&written)&&written==8);
+  CHECK(!remesa_fragment_constant_decode(binary,written,&encoded)&&encoded.argb==color);
+  CHECK(!memcmp(binary+8,before+8,sizeof(binary)-8));
+  memcpy(binary,before,sizeof(binary));written=987;
   ctx->delete_fs_state(ctx,handle);
   CHECK(remesa_context_shader_program_report(ctx,PIPE_SHADER_FRAGMENT,handle,&report)==EINVAL);
  }
@@ -485,9 +493,11 @@ int main(void)
  CHECK(scalar_fs&&destroyed==scalar_freed+1);
  ctx->bind_fs_state(ctx,scalar_fs);CHECK(!remesa_context_error(ctx));
  CHECK(!remesa_context_shader_program_report(ctx,PIPE_SHADER_FRAGMENT,scalar_fs,&report));
- CHECK(report.stage==REMESA_IR_FRAGMENT&&report.binary_error==ENOTSUP);
- CHECK(remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,scalar_fs,binary,sizeof(binary),&written)==ENOTSUP);
- CHECK(written==987&&!memcmp(binary,before,sizeof(binary)));
+ CHECK(report.stage==REMESA_IR_FRAGMENT&&!report.binary_error&&report.binary_bytes==8&&report.launch_error==ENOTSUP);
+ CHECK(!remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,scalar_fs,binary,sizeof(binary),&written)&&written==8);
+ CHECK(!remesa_fragment_constant_decode(binary,written,&encoded)&&encoded.argb==0xff00ff00);
+ CHECK(!memcmp(binary+8,before+8,sizeof(binary)-8));
+ memcpy(binary,before,sizeof(binary));written=987;
  ctx->delete_fs_state(ctx,scalar_fs);
  CHECK(remesa_context_shader_program_report(ctx,PIPE_SHADER_FRAGMENT,scalar_fs,&report)==EINVAL);
  for(unsigned mode=0;mode<7;mode++) {
@@ -522,7 +532,7 @@ int main(void)
  CHECK(!remesa_context_shader_program_report(ctx,PIPE_SHADER_VERTEX,vs,&report));
  CHECK(report.stage==REMESA_IR_VERTEX&&report.binary_error==ENOTSUP);
  CHECK(!remesa_context_shader_program_report(ctx,PIPE_SHADER_FRAGMENT,fs,&report));
- CHECK(report.stage==REMESA_IR_FRAGMENT&&report.binary_error==ENOTSUP);
+ CHECK(report.stage==REMESA_IR_FRAGMENT&&!report.binary_error&&report.binary_bytes==8&&report.launch_error==ENOTSUP);
  CHECK(report.register_evidence.use_banks==16&&
        !report.register_evidence.use_va_packing_verified&&
        !report.register_evidence.rev121_verified&&
@@ -582,8 +592,10 @@ int main(void)
  CHECK(!memcmp(&shader_preview,&shader_sentinel,sizeof(shader_preview)));
  candidate.policy=REMESA_PDS_CANDIDATE_ANALYSIS_ONLY;
  CHECK(remesa_context_shader_program_encode(ctx,PIPE_SHADER_VERTEX,vs,binary,sizeof(binary),&written)==ENOTSUP);
- CHECK(remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,fs,binary,sizeof(binary),&written)==ENOTSUP);
- CHECK(written==987&&!memcmp(binary,before,sizeof(binary)));
+ CHECK(!remesa_context_shader_program_encode(ctx,PIPE_SHADER_FRAGMENT,fs,binary,sizeof(binary),&written)&&written==8);
+ CHECK(!remesa_fragment_constant_decode(binary,written,&encoded)&&encoded.argb==0xffff00ff);
+ CHECK(!memcmp(binary+8,before+8,sizeof(binary)-8));
+ memcpy(binary,before,sizeof(binary));written=987;
  struct remesa_shader_program_report sentinel;memset(&sentinel,0xa5,sizeof(sentinel));report=sentinel;
  CHECK(remesa_context_shader_program_report(other,PIPE_SHADER_VERTEX,vs,&report)==EINVAL);
  CHECK(!memcmp(&report,&sentinel,sizeof(report)));

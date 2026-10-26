@@ -1,0 +1,317 @@
+{
+  "scope": "Diagnostic only, does not approve failed qualification",
+  "frames": [
+    {
+      "frame": 1,
+      "closer": 26587,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 20,
+      "missing_COLOR_stable": 13,
+      "wrong_gear_stable": 16,
+      "depth_wrong_stable": 16,
+      "first_failures": [
+        {
+          "pixel": 460224,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 16102932,
+          "new_Z": 16102932
+        },
+        {
+          "pixel": 485792,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 15980870,
+          "new_Z": 15980870
+        },
+        {
+          "pixel": 498576,
+          "stable": 1,
+          "old_COLOR": "0016afff",
+          "new_COLOR": "00000000",
+          "old_Z": 16045468,
+          "new_Z": 15976371
+        },
+        {
+          "pixel": 524144,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974518,
+          "new_Z": 15967375
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970019,
+          "new_Z": 15962876
+        }
+      ]
+    },
+    {
+      "frame": 2,
+      "closer": 24893,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 19,
+      "missing_COLOR_stable": 14,
+      "wrong_gear_stable": 18,
+      "depth_wrong_stable": 18,
+      "first_failures": [
+        {
+          "pixel": 524144,
+          "stable": 0,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974506,
+          "new_Z": 15967383
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970018,
+          "new_Z": 15962888
+        },
+        {
+          "pixel": 549712,
+          "stable": 0,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15965528,
+          "new_Z": 15958392
+        },
+        {
+          "pixel": 575280,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15956537,
+          "new_Z": 15949396
+        },
+        {
+          "pixel": 588064,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15952039,
+          "new_Z": 15944903
+        }
+      ]
+    },
+    {
+      "frame": 3,
+      "closer": 26232,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 20,
+      "missing_COLOR_stable": 12,
+      "wrong_gear_stable": 17,
+      "depth_wrong_stable": 17,
+      "first_failures": [
+        {
+          "pixel": 473008,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 15985366,
+          "new_Z": 15985366
+        },
+        {
+          "pixel": 485792,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15988011,
+          "new_Z": 15980869
+        },
+        {
+          "pixel": 498576,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15983513,
+          "new_Z": 15976372
+        },
+        {
+          "pixel": 524144,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974520,
+          "new_Z": 15967378
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970025,
+          "new_Z": 15962885
+        }
+      ]
+    },
+    {
+      "frame": 4,
+      "closer": 26587,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 20,
+      "missing_COLOR_stable": 13,
+      "wrong_gear_stable": 16,
+      "depth_wrong_stable": 16,
+      "first_failures": [
+        {
+          "pixel": 460224,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 16102932,
+          "new_Z": 16102932
+        },
+        {
+          "pixel": 485792,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 15980870,
+          "new_Z": 15980870
+        },
+        {
+          "pixel": 498576,
+          "stable": 1,
+          "old_COLOR": "0016afff",
+          "new_COLOR": "00000000",
+          "old_Z": 16045468,
+          "new_Z": 15976371
+        },
+        {
+          "pixel": 524144,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974518,
+          "new_Z": 15967375
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970019,
+          "new_Z": 15962876
+        }
+      ]
+    },
+    {
+      "frame": 5,
+      "closer": 24893,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 19,
+      "missing_COLOR_stable": 14,
+      "wrong_gear_stable": 18,
+      "depth_wrong_stable": 18,
+      "first_failures": [
+        {
+          "pixel": 524144,
+          "stable": 0,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974506,
+          "new_Z": 15967383
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970018,
+          "new_Z": 15962888
+        },
+        {
+          "pixel": 549712,
+          "stable": 0,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15965528,
+          "new_Z": 15958392
+        },
+        {
+          "pixel": 575280,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15956537,
+          "new_Z": 15949396
+        },
+        {
+          "pixel": 588064,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15952039,
+          "new_Z": 15944903
+        }
+      ]
+    },
+    {
+      "frame": 6,
+      "closer": 26232,
+      "farther": 0,
+      "coverage_changed": 0,
+      "missing_COLOR_on_depth": 20,
+      "missing_COLOR_stable": 12,
+      "wrong_gear_stable": 17,
+      "depth_wrong_stable": 17,
+      "first_failures": [
+        {
+          "pixel": 473008,
+          "stable": 0,
+          "old_COLOR": "00000000",
+          "new_COLOR": "00000000",
+          "old_Z": 15985366,
+          "new_Z": 15985366
+        },
+        {
+          "pixel": 485792,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15988011,
+          "new_Z": 15980869
+        },
+        {
+          "pixel": 498576,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15983513,
+          "new_Z": 15976372
+        },
+        {
+          "pixel": 524144,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15974520,
+          "new_Z": 15967378
+        },
+        {
+          "pixel": 536928,
+          "stable": 1,
+          "old_COLOR": "0018c1ff",
+          "new_COLOR": "00000000",
+          "old_Z": 15970025,
+          "new_Z": 15962885
+        }
+      ]
+    }
+  ]
+}

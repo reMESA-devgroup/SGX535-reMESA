@@ -100,12 +100,17 @@ int main(void)
  memset(p,0x77,32);writes=f.writes;c->buffer_unmap(c,t);assert(f.writes==writes);check_buffer(c,r,12,20,0xa5);
  /* Invalid usage must not map backing or bypass pending writer retirement. */
  const unsigned rejected[]={PIPE_MAP_READ|PIPE_MAP_FLUSH_EXPLICIT,
-  PIPE_MAP_READ|PIPE_MAP_WRITE|PIPE_MAP_DISCARD_RANGE,PIPE_MAP_WRITE|PIPE_MAP_UNSYNCHRONIZED,
+  PIPE_MAP_READ|PIPE_MAP_WRITE|PIPE_MAP_DISCARD_RANGE,PIPE_MAP_READ|PIPE_MAP_UNSYNCHRONIZED,
   PIPE_MAP_WRITE|PIPE_MAP_PERSISTENT,PIPE_MAP_WRITE|PIPE_MAP_COHERENT,
   PIPE_MAP_WRITE|PIPE_MAP_FLUSH_EXPLICIT|PIPE_MAP_DIRECTLY};
  unsigned maps=f.maps;
  for(unsigned i=0;i<sizeof(rejected)/sizeof(rejected[0]);i++)
   assert(!c->buffer_map(c,r,0,rejected[i],&box,&t)&&!t&&f.maps==maps);
+ /* Unsynchronized uploads may map idle backing without probing a writer.
+  * No flush means no changed bytes; the CPU lease still excludes aliases. */
+ unsigned waits=f.waits;
+ p=c->buffer_map(c,r,0,PIPE_MAP_WRITE|PIPE_MAP_UNSYNCHRONIZED|PIPE_MAP_FLUSH_EXPLICIT,&box,&t);
+ assert(p&&t&&f.waits==waits);c->buffer_unmap(c,t);maps=f.maps;
  for(unsigned failure=1;failure<=2;failure++) {
   fail_calloc=failure;assert(!c->buffer_map(c,r,0,PIPE_MAP_WRITE|PIPE_MAP_FLUSH_EXPLICIT,&box,&t)&&!t);
   assert(!fail_calloc&&f.maps==maps&&r->reference.count==1);
@@ -116,6 +121,9 @@ int main(void)
  /* A discard map waits for the same independently imported writer fence. */
  struct pipe_fence_handle *fence=NULL;assert(!remesa_resource_attach_writer(c,r,&f,&fence));
  maps=f.maps;f.wait_error=EAGAIN;
+ waits=f.waits;
+ assert(!c->buffer_map(c,r,0,PIPE_MAP_WRITE|PIPE_MAP_UNSYNCHRONIZED,&box,&t));
+ assert(!t&&f.maps==maps&&f.waits==waits); /* not even a wait/poll */
  assert(!c->buffer_map(c,r,0,PIPE_MAP_WRITE|PIPE_MAP_DISCARD_WHOLE_RESOURCE|PIPE_MAP_DONTBLOCK,&box,&t));
  c->buffer_subdata(c,r,PIPE_MAP_DISCARD_RANGE|PIPE_MAP_DONTBLOCK,8,1,seed);
  assert(remesa_context_error(c)==EAGAIN&&f.maps==maps);

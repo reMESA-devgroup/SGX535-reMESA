@@ -1,0 +1,29 @@
+{
+  "status": "LIVE_SESSION_ENDED_REQUIRES_FINAL_CLEANUP_AUDIT",
+  "boot": "21c326de-c4c8-4607-ab26-9331fb358254",
+  "notes": {
+    "gma500_gfx": "5d0636df89a43469b3737e61d7c89662186c5b2bf7dec720e6ffa0a7b41640c5",
+    "sgx535_provenance": "5fada73a6db16bd944cbdafc6e90fae7547eef2be66d26657dddc20b801aaec7"
+  },
+  "manifest_sha256": "f51513d1b452d6d48a35ecba0cddf24959a1b9116ac0a2a8980745aa379aeb2a",
+  "client_sha256": "159aa90de37785038490ff51bb5d7de86f37d81c129fc8090e13f6687713dc37",
+  "maximum_frames": 120,
+  "continuous": true,
+  "production_FAST": true,
+  "checkpoints": false,
+  "driver_hashes": false,
+  "per_frame_diagnostics": false,
+  "automatic_retry": false,
+  "actual_client_pid": 18437,
+  "supervisor_pid": 18390,
+  "exit": 0,
+  "controls_after": {
+    "remesa_memory_enabled": "N",
+    "remesa_retained_lab_enabled": "N",
+    "remesa_stream_enabled": "N"
+  },
+  "client_stderr_tail": "GEARS_PROFILE FAST; FAST is not LAB approval\nGEARS_INSTALL error=0 CPU_RECORD_ONLY=0 GPU_submissions=0; full-frame physical qualification still required\nGEARS_PROFILE_BOUND_REACHED swaps=120 signal=0; inspect receipts/pixels before claiming success\nGEARS_ENGINE_FINAL frames=120 GPU_submissions=120 queued=0 maps=1 host_bos=4 fences=1 legacy_submits=0 error=0 offline=0\nGEARS_BOOTSTRAP_CLOSE error=0 offline=0\n",
+  "client_stdout_tail": "GL_RENDERER   = reMESA SGX535\nGL_VERSION    = 1.3 Mesa 25.2.0\nGL_VENDOR     = reMESA\nGL_EXTENSIONS = GL_ARB_multisample GL_EXT_abgr GL_EXT_bgra GL_EXT_blend_color GL_EXT_blend_minmax GL_EXT_blend_subtract GL_EXT_copy_texture GL_EXT_subtexture GL_EXT_texture_object GL_EXT_vertex_array GL_EXT_compiled_vertex_array GL_EXT_texture GL_EXT_texture3D GL_IBM_rasterpos_clip GL_ARB_point_parameters GL_EXT_draw_range_elements GL_EXT_packed_pixels GL_EXT_point_parameters GL_EXT_rescale_normal GL_EXT_separate_specular_color GL_EXT_texture_edge_clamp GL_SGIS_generate_mipmap GL_SGIS_texture_border_clamp GL_SGIS_texture_edge_clamp GL_SGIS_texture_lod GL_ARB_multitexture GL_IBM_multimode_draw_arrays GL_IBM_texture_mirrored_repeat GL_ARB_texture_cube_map GL_ARB_texture_env_add GL_ARB_transpose_matrix GL_EXT_blend_func_separate GL_EXT_fog_coord GL_EXT_multi_draw_arrays GL_EXT_secondary_color GL_EXT_texture_env_add GL_EXT_texture_lod_bias GL_INGR_blend_func_separate GL_NV_blend_square GL_NV_light_max_exponent GL_NV_texgen_reflection GL_NV_texture_env_combine4 GL_SUN_multi_draw_arrays GL_ARB_texture_border_clamp GL_ARB_texture_compression GL_EXT_framebuffer_object GL_EXT_texture_env_combine GL_EXT_texture_env_dot3 GL_MESA_window_pos GL_NV_packed_depth_stencil GL_NV_texture_rectangle GL_ARB_depth_texture GL_ARB_occlusion_query GL_ARB_texture_env_combine GL_ARB_texture_env_crossbar GL_ARB_texture_env_dot3 GL_ARB_texture_mirrored_repeat GL_ARB_window_pos GL_ATI_fragment_shader GL_EXT_stencil_two_side GL_EXT_texture_cube_map GL_NV_fog_distance GL_NV_half_float GL_APPLE_packed_pixels GL_ARB_draw_buffers GL_ARB_fragment_program GL_ARB_fragment_shader GL_ARB_shader_objects GL_ARB_vertex_program GL_ARB_vertex_shader GL_ATI_draw_buffers GL_ATI_texture_env_combine3 GL_EXT_stencil_wrap GL_MESA_pack_invert GL_ARB_half_float_pixel GL_ARB_point_sprite GL_ARB_shading_language_100 GL_ARB_sync GL_ARB_vertex_buffer_object GL_OES_read_format GL_ARB_pixel_buffer_object GL_ARB_texture_rectangle GL_EXT_pixel_buffer_object GL_EXT_texture_rectangle GL_EXT_framebuffer_blit GL_EXT_packed_depth_stencil GL_ARB_vertex_array_object GL_ATI_separate_stencil GL_EXT_gpu_program_parameters GL_OES_EGL_image GL_ARB_copy_buffer GL_ARB_half_float_vertex GL_ARB_map_buffer_range GL_ARB_ES2_compatibility GL_ARB_debug_output GL_ARB_draw_elements_base_vertex GL_ARB_explicit_attrib_location GL_ARB_fragment_coord_conventions GL_ARB_provoking_vertex GL_ARB_sampler_objects GL_EXT_provoking_vertex GL_EXT_texture_storage GL_NV_copy_image GL_ARB_get_program_binary GL_ARB_robustness GL_ARB_separate_shader_objects GL_EXT_direct_state_access GL_ARB_compressed_texture_pixel_storage GL_ARB_internalformat_query GL_ARB_map_buffer_alignment GL_ARB_texture_storage GL_AMD_shader_trinary_minmax GL_ARB_clear_buffer_object GL_ARB_explicit_uniform_location GL_ARB_invalidate_subdata GL_ARB_program_interface_query GL_ARB_vertex_attrib_binding GL_KHR_debug GL_ARB_clear_texture GL_ARB_internalformat_query2 GL_ARB_multi_bind GL_ARB_shading_language_include GL_EXT_debug_label GL_ARB_get_texture_sub_image GL_KHR_context_flush_control GL_ARB_parallel_shader_compile GL_KHR_no_error GL_KHR_parallel_shader_compile GL_EXT_EGL_image_storage GL_EXT_EGL_sync GL_EXT_EGL_image_storage_compression GL_NV_ES1_1_compatibility \nVisualID 33, 0x21\n40 frames in 5.1 seconds =  7.912 FPS\n45 frames in 5.0 seconds =  8.982 FPS\n",
+  "legacy_capsule_unchanged": true,
+  "capture_files": []
+}

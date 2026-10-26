@@ -1,0 +1,31 @@
+{
+  "command": [
+    "make",
+    "-C",
+    "/home/gama/sgx535-offline/antix-kbuild-preparation-20260930/source-unpack/linux-5.10.240-antix.1-486-smp",
+    "O=/home/gama/sgx535-offline/antix-kbuild-successor-20260930/output",
+    "ARCH=x86",
+    "CROSS_COMPILE=/home/gama/sgx535-offline/gcc14-i686-qualification-20260930/root/usr/bin/i686-linux-gnu-",
+    "CC=/home/gama/sgx535-offline/gcc14-i686-qualification-20260930/root/usr/bin/i686-linux-gnu-gcc-14 --sysroot=/home/gama/sgx535-offline/gcc14-i686-qualification-20260930/root",
+    "LD=/home/gama/sgx535-offline/gcc14-i686-qualification-20260930/root/usr/bin/i686-linux-gnu-ld.bfd",
+    "AS=/home/gama/sgx535-offline/gcc14-i686-qualification-20260930/root/usr/bin/i686-linux-gnu-as",
+    "HOSTCC=/usr/bin/gcc-14",
+    "-j2",
+    "CONFIG_DRM_GMA500=m",
+    "M=/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/module",
+    "KBUILD_EXTRA_SYMBOLS=/home/gama/sgx535-offline/gears-depth-less-single-clear-20261026T160400Z/observer/Module.symvers",
+    "modules"
+  ],
+  "exit": 0,
+  "compiled_profile": {
+    "status": "COMPILED_ELF_PROFILE_BYTE_EXACT_PASS",
+    "module_sha256": "21a829b6d94d065506c6804a04c7b748515fcb93c05fdaf1207abaa4080a421b",
+    "symbol": "gears_stream_profile_asset",
+    "symbol_bytes": 5844,
+    "profile_sha256": "e2edc3cad2e32af279d7089a25a532d31014b0dcc4dede210b8e8df4a3012252",
+    "expected_compiled_profile_sha256": "9725bb4ecd7a47f96ab95988125a7e7f27cf03fa970db2b0ad533d9693efbfe0",
+    "actual_compiled_profile_sha256": "9725bb4ecd7a47f96ab95988125a7e7f27cf03fa970db2b0ad533d9693efbfe0",
+    "GPU_submissions": 0
+  },
+  "GPU_submissions": 0
+}

@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "GPU_operations": 0,
+  "scope": "Actual provider, owner_flush and trusted bridge with synthetic full PFN metadata and one-page CPU/GPU cache model per BO; no hardware coherence claim",
+  "tests": [
+    {
+      "mode": "native",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_cache_domains.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-cache-domains-native"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\n",
+      "GPU_operations": 0
+    },
+    {
+      "mode": "ubsan",
+      "exit": 0,
+      "command": [
+        "cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O1",
+        "-fsanitize=undefined",
+        "-fno-sanitize-recover=all",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_cache_domains.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-cache-domains-ubsan"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\n",
+      "GPU_operations": 0
+    },
+    {
+      "mode": "i386",
+      "exit": 0,
+      "command": [
+        "/home/gama/sgx535-offline/phase9-real-mesa-20261008/wrappers/cc",
+        "-std=c99",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "-Wno-unused-function",
+        "-Wno-misleading-indentation",
+        "-I/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests",
+        "-I/home/gama/sgx535-gfx/include",
+        "-O2",
+        "-static",
+        "-march=i486",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/tests/test_ta_cache_domains.c",
+        "-o",
+        "/home/gama/sgx535-offline/gears-single-clear-borrowed-publisher-20261026T164400Z/test-ta-cache-domains-i386"
+      ],
+      "stdout": "PASS actual GEM/ownerflush/trustedbridge: 4 providerchecks/job, first3 fullTA, jobs4-6 defer, READ lazy-sync before bytes + next prefire, other9/LAB7 full, end sync, EPERM/PTE/fault quarantine; fake PFN/cache/MMIO data model GPU0 queries=2107746\n",
+      "GPU_operations": 0
+    }
+  ]
+}
