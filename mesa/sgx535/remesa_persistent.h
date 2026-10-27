@@ -7,6 +7,7 @@
 #include "remesa_program_registers.h"
 #include "remesa_pds.h"
 #include "remesa_ta_scene.h"
+#include "remesa/scene_dpm.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -566,6 +567,28 @@ struct remesa_persistent_linked_event_auxiliary_backing {
 };
 int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *,
  void *bo,struct remesa_persistent_linked_event_auxiliary_backing *);
+/* Own a CPU DPM load plan and retain two live storage allocations. Uses only
+ * the already demonstrated fixed32MiB table/parameter capacity profile.
+ * Table belongs to SURFACE40000000..ffffffff, parameter to RASTER30000000..
+ * 3fffffff with1MiB alignment. Addresses derive from this endpoint's BOs.
+ * No table/parameter map, clear or sync is performed; their initialization
+ * and GPU access still need the native job contract. This is NOT MMIO or
+ * permission to execute a load. Native completion must retain mask15, never
+ * substitute original CPU wait argument7. Plan DATA240/page4096 only.
+ * Shares references safely; no per-frame allocation, hashing or readback.
+ * Existing ownership, leases, provider sync, error/quarantine rules apply.
+ */
+int remesa_persistent_linked_dpm_prepare(struct remesa_device *,void *table,
+ void *parameter,void **bo);
+struct remesa_persistent_linked_dpm_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,table_access,parameter_access;
+ size_t allocation_bytes,data_bytes;
+ struct remesa_persistent_memory_backing table,parameter;
+ struct remesa_lab_dpm_control plan;
+};
+int remesa_persistent_linked_dpm_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_dpm_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

@@ -705,3 +705,70 @@ table data selected at1010acfc, not executable OR arithmetic. This does not
 rule out shift/table-based producers or other modules and does not justify
 embedding the old complete CODE84. The event, native admission and API rendering
 therefore remain incomplete despite owned auxiliaries.
+
+## Owned DPM load plan with reusable storage
+
+`remesa_persistent_linked_dpm_prepare()` now binds the demonstrated fixed32MiB
+table and32MiB parameter profile to live BOs from the same endpoint. It accepts
+BO identities, not caller raw addresses or register/value pairs. Existing
+original CPU info/load arithmetic derives the13 cookie words and22 load pairs.
+The table must lie in40000000..ffffffff and the1MiB-aligned parameter storage
+in30000000..3fffffff; capacity, registry generation, pin/map state, ownership
+and leases are checked before publication. Broader capacities remain unsupported.
+
+A separate immutable RASTER allocation holds240 bytes of plan DATA, rounded
+to one page. Only that small allocation is uploaded, verified and synchronized
+once at preparation. The64MiB storage is neither mapped nor cleared by this
+operation. No per-frame allocation, full-buffer comparison, hash or readback
+is introduced. Snapshots use metadata and original CPU arithmetic only, with
+no provider I/O. Multiple plan owners may share storage; final disposal waits
+for all references and CPU leases. Uncertain plan map/unmap/sync/unpin effects
+retain the table and parameter backing in the existing quarantine mechanism.
+
+The plan and storage are distinct: this resource does not initialize table
+contents, execute MMIO, start DPM loads, establish requester permissions or
+create native job/fence holds. Those are still required before submission.
+Both storage roles are conservatively marked READ|WRITE. Original CPU wait
+argument7 remains separate from retained completion mask15; the former cannot
+weaken the qualified four-completion requirement. Effective240-byte DATA and
+page capacity do not establish a hardware fetch extent or imply that all
+reserved64MiB is GPU-consumed.
+
+The new typed plan rejects public write maps, the legacy color-submit ABI and
+render-target reinterpretation. Its references are dropped only after confirmed
+unmap/unpin/destroy, using the same dependency-disposal path as the other owners.
+General event CODE84, COLOR initialization/load, complete raster/native job
+admission and GL/GLES rendering are still incomplete.
+
+The focused test consumes the retained original Xpsb CPU oracle text from
+`/home/gama/sgx535-offline/depth-dpm-load-20261023/dpm-oracles.txt`. It checks
+two relocated original info/load results, shared and lease-delayed disposal,
+zero-I/O snapshots, untouched storage sentinels, padding, ordinary rollback
+and uncertain quarantine. The first fixture failed only its immediate EOF
+expectation on the newline-terminated text input; that log is preserved in
+`owned-dpm/`. It was corrected to skip trailing whitespace.
+The actual Mesa flags additionally required a prototype for the renamed
+fixture entry point; the failed test compile is retained in
+`private-mesa-owned-dpm/`. Only the fixture declaration changed. Final source
+qualification is `owned-dpm-v3/result.json`: native/UBSan/i386 pass14,101 new
+DPM-fixture checks each, plus the reused persistent checks.
+`private-mesa-owned-dpm-v2/RESULT.json` records the passing i386 test against
+a private archive compiled with actual Mesa flags, preserving the original
+cached archive and every referenced object. `owned-dpm-regressions/RESULT.json`
+records eleven passing existing owner/Gallium/NIR regressions against that same
+archive, including event auxiliaries, background, attachments and TA. All use
+injected providers; no physical DPM load, GPU submission or FPS result follows.
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_linked_dpm.c --cache "$MESA_CACHE" --output /tmp/remesa-owned-dpm \
+  < /home/gama/sgx535-offline/depth-dpm-load-20261023/dpm-oracles.txt
+```
+
+The separate `event-other-producers/` scan pins five additional original
+EMGD API/service modules and extends the earlier search with MOV-register
+class bases. Its Windows candidates10010d80 and101065f8 are jump-table bytes,
+selected at10010bbd and1010618b respectively; OGL140d49 emits the already known
+E6 record-last arithmetic. No new CF/C7/F7/87/event-lowE0 encoder follows.
+These narrow static patterns do not exclude shift/table-driven generators or
+other modules and do not justify importing the original complete event blob.
