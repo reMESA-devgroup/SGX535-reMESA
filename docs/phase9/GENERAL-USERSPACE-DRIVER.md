@@ -77,6 +77,13 @@ permission and change no selected runtime module.
 | Installation | Mesa loader/EGL overlays exist; current qualified runtime is private | Reproducible i686 build and isolated package with an explicit matching DRM dependency and uninstall/rollback |
 | 2D and X11 | X11 presentation currently copies completed GPU pixels | GPU 2D drawing/blits and later window-system integration; copying pixels to X11 is not desktop acceleration |
 
+The current user priority is the driver/2D path rather than further
+disassembler searches. [Native2D copy preparation](TWOD-DRIVER-COPY-20261027.md)
+now matches the original kernel FIFO packets and is included in future Mesa
+overlays. The typed kernel endpoint, hardware completion/readback qualification
+and Gallium acceleration dispatch remain pending; CPU packet tests are not a
+new2D hardware-acceleration claim.
+
 ## First common implementation increment
 
 `remesa_shader_linkage_prepare()` owns validated VS/FS semantic snapshots and
