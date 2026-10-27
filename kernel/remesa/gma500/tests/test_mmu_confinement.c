@@ -122,4 +122,5 @@ int main(void)
  reset();memset(f.tables,0,sizeof f.tables);memset(f.pages[0].words,0,4096);
  CHECK(!psb_mmu_audit_unbound_pd(&f.pd,NULL,0,space,REMESA_MMU_AUDIT_OVERHEAD_WORDS));
  CHECK(downs==ups&&!maps&&!active);printf("PASS %u checks; %u locked snapshots; %u sorts; no hardware operations\n",checks,downs,sorts);
+ return 0;
 }

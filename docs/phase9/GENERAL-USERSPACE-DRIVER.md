@@ -61,6 +61,10 @@ The [unbound private-PD auditor](PRIVATE-MMU-AUDIT-20261027.md) now passes
 native/UBSan/i386 CPU-model tests and compiles in the original antiX MMU
 translation unit. It is not wired into the selected module and provides no
 context binding, submission permission or physical isolation qualification.
+An [unbound-PD owner](PRIVATE-MMU-OWNER-20261027.md) now copies the page bindings,
+retains backing pages and rolls back failed construction before releasing them;
+its CPU fault tests and real kernel-object build likewise grant no execution
+permission and change no selected runtime module.
 
 | Layer | Current evidence | Required next behavior |
 | --- | --- | --- |
