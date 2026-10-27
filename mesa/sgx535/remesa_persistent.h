@@ -484,6 +484,28 @@ struct remesa_persistent_zclear_prefix_backing {
 };
 int remesa_persistent_zclear_prefix_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_zclear_prefix_backing *);
+/* Immutable TA command owner: generated Z-clear28 + dynamic body, including
+ * its close12. Retains both owners and checks their dimensions/bank agreement.
+ * Does not yet own attachments, raster/background/EOT/DPM or authorize a job.
+ * The allocation list describes the complete command-referenced READ set,
+ * not measured hardware fetch lengths; backing capacity is reported explicitly.
+ * Original body storage is retained for lifecycle but is not referenced by
+ * the combined GPU stream. No ioctl/readback/hash occurs during snapshots.
+ * Mapping/owner access is externally serialized. */
+int remesa_persistent_linked_ta_prepare(struct remesa_device *,void *zclear,
+ void *body,void **bo);
+struct remesa_persistent_linked_ta_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,width,height,draw_count,read_allocation_count;
+ size_t allocation_bytes,command_bytes,draw_offset,close_offset;
+ struct {
+  uint64_t generation,gpu_va;
+  uint32_t handle,access; /* REMESA_ACCESS_READ only */
+  size_t allocation_bytes;
+ } reads[REMESA_PERSISTENT_BUFFERS];
+};
+int remesa_persistent_linked_ta_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_ta_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

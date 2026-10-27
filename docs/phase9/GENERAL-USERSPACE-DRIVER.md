@@ -398,3 +398,41 @@ Evidence in the current artifact directory is `zclear-prefix-v1/result.json`,
 `zclear-single-retained-oracle/RESULT.json`. The last is a fresh exact comparison
 against the previously qualified candidate's geometry, with source/reference
 identities retained. These are prerequisites, not API rendering approval.
+
+## Combined TA owner and referenced read allocations
+
+`remesa_persistent_linked_ta_prepare()` now joins the generated Z-clear28 and
+the ordered draw body with its close12. A one-draw stream commits68 bytes;
+the current sixteen-draw bound fits488 bytes, separately from page capacity.
+The constructor regenerates the clear references from its live owner and
+copies the body's immutable command snapshot, without remapping/readback or
+re-encoding shaders. All cross-component dimensions and bank values must agree
+before allocation. No arbitrary command/VA input is accepted.
+
+The combined allocation retains the prefix and body; their existing owner
+edges retain states, close, shader CODE, PDS and geometry. Shared combined
+streams survive release of all caller references until their last read lease
+and owner are released. Uncertain upload or unpin retains the full closure.
+The body keeps its original command backing for lifecycle, but the new GPU
+stream references its copied bytes rather than that old command allocation.
+
+`remesa_persistent_linked_ta_snapshot()` enumerates unique currently live READ
+allocations reachable from the commands. The one-draw test has seven: combined
+TA, Z-clear, close, draw state, PDS, CODE and geometry. It excludes the original
+body command allocation. Each entry carries handle, generation, VA, read access
+and allocation capacity. These are bounds for future job validation, not a
+measurement that the GPU consumes every byte. Snapshotting performs no IO,
+hashing or whole-buffer comparison and grants no kernel job hold or permission.
+
+Attachments and raster/background/EOT/DPM allocations are still outside this
+list; the eventual complete job must add their READ/WRITE uses and retain all
+of them through authenticated retirement and release. A read list alone is not
+a render submission. Neither rendering API has been enabled by this increment.
+
+`test_linked_ta.c` passed native/UBSan/i386 and the actual Mesa compilation
+model, including exact clear/body/close order, deduplicated references,
+dimension/bank/type rejection, source-owner release, shared-stream/lease
+lifetime, no-IO metadata, ordinary rollback and uncertain closure retention.
+Its three size cases are CPU storage tests, not rendering. Evidence is
+`linked-ta-v1/result.json` and `private-mesa-linked-ta/RESULT.json` in the
+current artifact directory. Earlier private archive variants remain intact.
