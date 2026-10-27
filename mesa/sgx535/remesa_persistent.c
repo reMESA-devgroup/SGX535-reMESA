@@ -2071,3 +2071,27 @@ int remesa_persistent_linked_pds_snapshot(const struct remesa_device *device,voi
  linked_geometry_metadata(d,p->geometry,&value.geometry);
  *out=value;return 0;
 }
+
+int remesa_persistent_linked_index_encode(const struct remesa_device *device,void *pds,
+ uint32_t first_index,uint32_t index_count,uint8_t out[20])
+{
+ int e=depth_output_check(device,out,20);if(e)return e;
+ struct remesa_persistent_linked_pds_backing backing;
+ e=remesa_persistent_linked_pds_snapshot(device,pds,&backing);if(e)return e;
+ const struct remesa_persistent_linked_geometry_backing *g=&backing.geometry;
+ if(index_count<3||index_count%3)return ENOTSUP;
+ if(first_index>g->index_count||index_count>g->index_count-first_index)return ERANGE;
+ /* This closure currently admits only the three independent float4 sources
+  * and POSITION4+COLOR0 outputs, already checked at program/PDS preparation. */
+ if(g->stride_bytes!=48||backing.plans[0].data_bytes!=48||
+    backing.plans[0].request.profile!=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3||
+    backing.plans[1].request.profile!=REMESA_PDS_SELECTED_FS_INPUT_COL0)return ENOTSUP;
+ const struct remesa_ta_index_request request={
+  .index_bo_gpu_va=g->gpu_va,.index_bo_bytes=g->index_offset+g->index_bytes,
+  .index_byte_offset=g->index_offset,.first_index=first_index,.index_count=index_count,
+  .pds_bo_gpu_va=backing.gpu_va,.pds_bo_bytes=backing.allocation_bytes,
+  .pds_byte_offset=backing.object_offset[0],.pds_object_bytes=backing.image_bytes[0],
+  .pds_data_dwords=backing.plans[0].data_bytes/4,
+  .descriptor_a_field10=g->stride_bytes/4,.descriptor_b_field38=32};
+ return remesa_ta_index_compiled_position_color_triangles_encode(&request,out);
+}

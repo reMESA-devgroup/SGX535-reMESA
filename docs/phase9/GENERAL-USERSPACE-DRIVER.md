@@ -178,12 +178,40 @@ pair restriction and native execution guards remain in place.
 i386 source builds, including the inherited persistent/linkage regressions,
 unchanged vertex bytes, bounded indices, encoded PDS bytes, zero padding,
 metadata with no provider IO, dependency lifetime and ordinary failure rollback.
-Results are at
-`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/geometry-pds-owner-v1/result.json`.
+The expanded lifetime/failure regression also covers two simultaneous PDS
+closures, foreign-owner rejection and retention of all three allocations after
+uncertain map/unmap or failed unpin. Results are at
+`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/geometry-pds-owner-v2/result.json`.
 The older CODE owner regression also passed all three source variants under
 `geometry-pds-preregression-v1/result.json` in the same artifact directory.
 
-This increment has not been rebuilt into the private Mesa archive or tested
-physically. The earlier physical resource evidence belongs to the earlier
-CODE-only build. Typed dynamic submission and actual desktop/GLES rendering
-through these new owners remain the next integration requirements.
+An isolated private archive variant passed the i386 test using the actual Mesa
+compile model (`private-mesa-geometry-pds/RESULT.json` in the same directory).
+This is not a complete rebuilt DRI driver and has not been tested physically.
+The earlier physical resource evidence belongs to the earlier CODE-only build.
+
+`remesa_persistent_linked_index_encode()` now feeds the existing compiled
+POSITION4+COLOR0 TA serializer from that live PDS closure. It derives both GPU
+references and descriptor fields from owned geometry/program metadata. Draw
+subranges must fit the immutable index payload, rather than spare allocation
+capacity. It emits exactly 20 bytes, without IO, transforms or execution
+permission; the caller must retain the PDS owner while building the scene.
+Its descriptor tail matches the retained whole-original stride12/output32
+oracle in `lambert-vs-minimal-20261023T221500Z/TA12_ORACLES.json` under the
+offline artifact root. That existing shader profile also has separate retained
+physical light-direction evidence in
+`native1280-white-lambert-depth-bif-candidate-20261023T223200Z/hardware/LIGHT_DIFFERENTIAL_CONFIRMATION.json`;
+it does not validate these new allocations or commands on the GPU.
+
+The combined owner/index regression passed native, UBSan, i386 and the actual
+Mesa compilation model. Evidence is `geometry-pds-index-owner-v1/result.json`
+and `private-mesa-geometry-pds-index/RESULT.json` in the current artifact
+directory. The latter independently rechecked the original Mesa objects and
+the candidate/fixture source identities. Previous artifacts remain unchanged.
+
+Next, integrate the common link with Gallium's bound shader objects, construct
+owned fragment/viewport/scene state around the indexed command, and connect
+typed dynamic submission with complete job holds and fences. The current
+physical stream ABI still admits only the fixed eleven-role, twelve-draw gears
+scene. Neither this index encoder nor the private archive lifts that admission
+guard or establishes desktop/GLES rendering.

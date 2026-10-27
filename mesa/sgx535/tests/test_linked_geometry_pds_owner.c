@@ -62,6 +62,21 @@ int main(void)
   for(unsigned i=64;i<192;i++)CHECK(!encoded[i]&&!known[i]);
   for(unsigned i=252;i<256;i++)CHECK(!encoded[i]&&!known[i]);
   unsigned maps=f.cpu_maps,reads=f.reads,writes=f.writes;
+  uint8_t ta[20],saved_ta[20];
+  CHECK(!remesa_persistent_linked_index_encode(&d,pds,0,6,ta));
+  CHECK(shader_pds_le32(ta)==0x81400006&&shader_pds_le32(ta+4)==g.gpu_va+g.index_offset);
+  CHECK(!shader_pds_le32(ta+8)&&shader_pds_le32(ta+12)==p.gpu_va/16);
+  /* Tail matches the retained whole-original TA12 oracle: DATA12,
+   * source descriptor12, POSITION+COLOR output32: bytes03030010. */
+  CHECK(shader_pds_le32(ta+16)==0x10000303);
+  CHECK(!remesa_persistent_linked_index_encode(&d,pds,3,3,ta));
+  CHECK(shader_pds_le32(ta)==0x81400003&&shader_pds_le32(ta+4)==g.gpu_va+g.index_offset+6);
+  memcpy(saved_ta,ta,20);
+  CHECK(remesa_persistent_linked_index_encode(&d,pds,4,3,ta)==ERANGE&&!memcmp(saved_ta,ta,20));
+  CHECK(remesa_persistent_linked_index_encode(&d,pds,0,9,ta)==ERANGE&&!memcmp(saved_ta,ta,20));
+  CHECK(remesa_persistent_linked_index_encode(&d,pds,0,4,ta)==ENOTSUP&&!memcmp(saved_ta,ta,20));
+  CHECK(remesa_persistent_linked_index_encode(&d,pds,UINT32_MAX,3,ta)==ERANGE&&!memcmp(saved_ta,ta,20));
+  CHECK(remesa_persistent_linked_index_encode(&d,pds,0,3,d.priv)==EINVAL);
   for(unsigned i=0;i<100;i++)CHECK(!remesa_persistent_linked_pds_snapshot(&d,pds,&p));
   CHECK(f.cpu_maps==maps&&f.reads==reads&&f.writes==writes);
   void *cpu=(void *)1;CHECK(d.ops->map(d.priv,pds,true,&cpu)==ENOTSUP&&!cpu);
@@ -69,6 +84,7 @@ int main(void)
   /* The closure outlives callers' original references, then a read lease. */
   d.ops->destroy_bo(d.priv,code);d.ops->destroy_bo(d.priv,geometry);
   CHECK(!f.destroys&&!remesa_persistent_linked_pds_snapshot(&d,pds,&p));
+  CHECK(!remesa_persistent_linked_index_encode(&d,pds,0,3,ta));
   CHECK(!d.ops->map(d.priv,pds,false,&cpu)&&cpu);
   d.ops->destroy_bo(d.priv,pds);CHECK(!f.destroys);
   CHECK(remesa_persistent_close(&d)==EBUSY);
@@ -155,6 +171,6 @@ int main(void)
   for(unsigned n=1;n<=3;n++)CHECK(get(&f,n)->live&&get(&f,n)->pinned);
   CHECK(remesa_persistent_close(&d)==EBUSY);
  }
- puts("PASS raw geometry/PDS owners: unchanged vertex bytes, LE bounded indices, derived bindings, effective/reserved distinction, zero padding, metadata without IO, shared dependency/lease lifetime, foreign-owner rejection, ordinary rollback and uncertain closure retention; GPU0");
+ puts("PASS raw geometry/PDS owners: unchanged vertex bytes, LE bounded indices, derived bindings/TA20, exact index payload limits, effective/reserved distinction, zero padding, metadata without IO, shared dependency/lease lifetime, foreign-owner rejection, ordinary rollback and uncertain closure retention; GPU0");
  return 0;
 }

@@ -412,6 +412,15 @@ struct remesa_persistent_linked_pds_backing {
 };
 int remesa_persistent_linked_pds_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_pds_backing *);
+/* Encode the existing POSITION4+COLOR0 triangle command from a live PDS
+ * closure. No caller-supplied VA, descriptor word, stride or output format.
+ * Bounds are the immutable index payload, not the allocation's spare capacity.
+ * The caller must retain the PDS owner and serialize access until the command
+ * is consumed by a separately owned scene. This is not a complete TA stream,
+ * fragment/viewport state, native job, fence or execution permission.
+ * Positive errno; disjoint output remains unchanged on failure. */
+int remesa_persistent_linked_index_encode(const struct remesa_device *,void *pds,
+ uint32_t first_index,uint32_t index_count,uint8_t out[20]);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
