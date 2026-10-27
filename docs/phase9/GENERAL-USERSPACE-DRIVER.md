@@ -85,7 +85,11 @@ and Gallium acceleration dispatch remain pending; CPU packet tests are not a
 new2D hardware-acceleration claim.
 The [retained GEM preflight](TWOD-GEM-PREFLIGHT-20261027.md) now authenticates
 that request against held kernel allocations and reconstructs the shared packet.
-Native2D issue, its distinct IRQ/completion contract and physical validation
+The [separate 2D GEM lifecycle](TWOD-JOB-LIFECYCLE-20261027.md) now implements
+issue, owned-event receipt validation, visibility and retirement around trusted
+native adapter callbacks, with uncertainty holds and buffer reuse. CPU tests
+and real kernel-object compilation pass; no native MMIO adapter is installed.
+Native2D FIFO emission, pre-ACK IRQ capture and physical validation
 remain pending; the existing3D lifecycle mask is unchanged.
 
 ## First common implementation increment
