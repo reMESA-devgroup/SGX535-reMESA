@@ -1,105 +1,233 @@
 # SGX535-reMESA
+`SGX535-reMESA` an Open-source Mesa/Gallium 3D graphics driver for Intel Poulsbo (GMA 500 / PowerVR SGX535) on Linux
 
-Reverse engineering the PowerVR SGX535 used in Intel Poulsbo / GMA 500.
+<table>
+<tr>
+<td width="115" valign="middle"><img src="assets/pipocahello.gif" width="100" alt="Pipoca saying hello"></td>
+<td valign="middle">
 
-I started working on this on September 16, 2026. The goal is to independently reconstruct the GPU and build a Mesa/Gallium driver for it.
+**Introduction**
 
-There isn't much useful public documentation for the SGX535, so most of the work so far has involved old drivers, DDK files, register definitions and testing things on real hardware.
+Hey! I'm Pipoca, the official SGX535-reMESA mascot.
+
+Welcome to a project involving an old Atom processor, a rather mysterious GPU, far too much assembly, and a developer who apparently doesn't know when to give up.
+
+</td>
+</tr>
+</table>
+
+I started SGX535-reMESA on September 16, 2026, with one goal: understand the SGX535 well enough to write an independent, open-source Mesa/Gallium driver for it.
+
+The SGX535 isn't exactly well documented. Most of what I've learned has come from studying old Windows drivers, Intel EMGD, historical DDK material, register definitions, disassembly, and lots of experiments on real hardware.
+
+Some things worked on the first try. Most didn't.
+
+## What works so far
+
+The GPU is rendering again. I have verified triangles and an indexed square on the SGX535 itself, and on October 21 I got an OpenGL `glDrawArrays` call through Gallium and onto the hardware. That test produced 136 green pixels in a 32×32 target, exactly where they were supposed to be.
+
+I've also displayed a GPU readback in an X11 window. That earlier test published pixels from a previous submission. Since then, the original `glxgears` has completed a qualified, bounded **600-frame / 600-GPU-submission** run at **1280×800** on the real SGX535. A separate six-operation physical test checked the new production transport and X11 presentation against the retained images.
+
+Repeated submissions, synchronization and direct read-only GEM FD/X11 shared-memory presentation are now qualified for this restricted 1280×800 path. Unbounded continuity and general application compatibility still need qualification. OpenGL 2.1 is the target, not something I'm claiming to support already.
+
+If you're looking for the actual evidence rather than my word for it, start with the [October 27 physical results](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md), the [earlier development update](docs/phase9/DEVELOPMENT-UPDATE.md) and the [reproduction notes](docs/reproduction/TRIANGLE.md).
 
 ## Current status
 
-The test machine is a Dell Inspiron Mini 12 with an Atom Z520 and SGX535 rev121.
+<img src="assets/pipocajumping.gif" align="right" width="105" alt="Pipoca jumping">
 
-On October 6 I got the first triangle back from the GPU.
+My test machine is a Dell Inspiron Mini 12, powered by an Intel Atom Z520 and a PowerVR SGX535 rev121.
 
-The next test used two indexed triangles and produced a 16x16 square.
+On October 6, I finally got my first triangle rendered by the actual GPU. That was followed by two indexed triangles forming a 16×16 square. Both experiments produced results I could verify rather than just hoping the GPU had done what I asked.
 
-The restricted experimental path now runs the original GLXGears on real hardware at **1280×800**. The latest completed qualification recorded **600 frames / 600 GPU submissions**, with a mean of **16.1345 FPS** over six steady five-second windows (15.915–16.376 FPS, about 61.979 ms/frame). This is an observed 11.29% improvement over the earlier 14.4983 FPS snapshot run. The comparison combines kernel and presentation changes with uncontrolled CPU DVFS; it does not isolate individual optimizations.
+Since then, I've moved much further into Mesa/Gallium.
 
-The tested private build presents retired GPU COLOR through a cached read-only GEM FD and X11 shared memory. A separate six-operation physical smoke test checked full COLOR, defined Z24 bits, five input images and every X11 RGB pixel, with completion, lease revocation and teardown checks. The 600-frame application run kept diagnostic capture empty and ended cleanly.
+One of the biggest milestones came on October 21: an OpenGL-originated `glDrawArrays` call went through my Gallium path and reached the physical SGX535. The GPU completed the job, and the readback matched the expected result: **136 green pixels and 888 untouched pixels** in a 32×32 target.
 
-This remains a restricted experimental driver. The 30–60 FPS goal, unbounded continuity and general OpenGL conformance are unqualified. These results do not establish execution of every current NIR/VS/PDS candidate or a release-ready general Mesa driver. See the [October 27 physical results and evidence boundaries](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md).
+That was a pretty big moment for me. I was no longer just submitting a diagnostic job by hand: I'd demonstrated a connection between an OpenGL operation, my driver code, and the GPU.
 
-## The historic Git commit — 0x07000345
+I've also been working on X11 presentation, front/back buffers, framebuffer binding, memory allocation, and the rather unpleasant details involved in moving from tiny test images to a real desktop resolution. I got a verified readback onto an X11 window too. That part worked, although it reused pixels from an earlier GPU run rather than submitting a new job.
 
-After roughly 26 days arguing with that DWORD, I gave it a place in Git history too: [070003454e7f938661170abcc57a551ae68c931c](https://github.com/gabrieelgama/SGX535-reMESA/commit/070003454e7f938661170abcc57a551ae68c931c). Yes, the actual commit SHA starts with `07000345`. Apparently being a mysterious hexadecimal wasn't enough; now it has a branch too.
+And yes, **I finally got `glxgears` running at 1280×800!**
 
-The commit preserves the independently written Mesa implementation and its offline qualification work. The hash is a tribute, not evidence of shader execution. ALWAYS. 🗿
+The latest completed qualification went further: **600 frames and 600 GPU submissions**, with **16.1345 FPS** averaged over six steady five-second windows (15.915–16.376 FPS, about 61.979 ms/frame). The run ended with no queued work, engine or presentation errors, legacy submissions or offline fallback, and its diagnostic capture stayed empty.
+
+That's an observed **11.29% FPS improvement** over the earlier 14.4983 FPS snapshot run. The comparison combines the cached-Z/fault64 kernel, direct read-only GEM FD/XSHM presentation and paired GC work. CPU DVFS and workload were uncontrolled, so I can't attribute that gain to any one change.
+
+A separate six-operation physical smoke test checked full COLOR, defined Z24 bits, all five input images and every X11 RGB pixel. It also checked completion before lease release and detach before FD/GEM close. Those readbacks belong to the separate LAB harness; the normal FAST run doesn't add per-frame hashes, pixel checks or dumps. This remains restricted qualification, not full GL conformance or LAB approval.
+
+There's more to do before I can call this a usable everyday graphics driver. Still, considering where this project was a month ago, I'm pretty happy with the progress.
+
+The next headache is reaching the **30–60 FPS goal**, qualifying longer continuous operation and expanding beyond this restricted path. The [current technical report](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md) records the measurements, evidence and remaining limits.
+
+<br clear="all">
+
+## The historic Git commit — `0x07000345`
+
+<img src="assets/pipocaohno.gif" align="right" width="110" alt="Pipoca reacting to 0x07000345">
+
+If you've followed this project for a while, you've probably seen me complain about `0x07000345`. A lot.
+
+After roughly 26 days of investigating that one DWORD, I decided it deserved a permanent place in the repository's history.
+
+So I made this commit: [**070003454e7f938661170abcc57a551ae68c931c**](https://github.com/gabrieelgama/SGX535-reMESA/commit/070003454e7f938661170abcc57a551ae68c931c).
+
+Yes, the actual Git commit hash starts with `07000345`.
+
+The commit preserves my independently written Mesa implementation and the offline qualification work around it. The hash itself is just a tribute to the hexadecimal number that has consumed an unreasonable amount of my time.
+
+**ALWAYS.**
+
+<br clear="all">
 
 ## Documentation
 
-Most of the technical details are in [`docs/`](docs/).
+<img src="assets/pipocaconfering.gif" align="right" width="105" alt="Pipoca checking documentation">
 
-Reproduction notes:
+I try to document the work as I go, including failures, unresolved questions, and experiments that didn't produce the result I expected.
+
+Most of the technical documentation lives in [`docs/`](docs/).
+
+If you want to reproduce some of the earlier hardware experiments, start here:
 
 - [Triangle](docs/reproduction/TRIANGLE.md)
 - [Square](docs/reproduction/SQUARE.md)
 - [Display](docs/reproduction/DISPLAY.md)
 
-Historical raw results and hashes are in the repository as well. The [current physical results](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md) separate application measurements, physical smoke tests and offline qualification, and identify the retained local evidence. The [October 14 technical update](docs/phase9/DEVELOPMENT-UPDATE.md) records an earlier implementation checkpoint; the [full historical triangle README](docs/history/README-TRIANGLE-07000345.md) is preserved separately.
+The repository also contains historical raw results, hashes, and supporting evidence. For the latest technical breakdown and the retained local evidence paths, see the [October 27 physical results](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md). The [October 14 development update](docs/phase9/DEVELOPMENT-UPDATE.md) records an earlier implementation checkpoint. I've also kept the [original triangle-era README](docs/history/README-TRIANGLE-07000345.md) for anyone interested in how this started.
 
-## Driver OpenGL
-My compatibility target is desktop OpenGL 2.1, with OpenGL 3.0 as an experimental research goal. Neither is verified compatibility yet.
-Based on my analysis, OpenGL 3.0 may be possible, but I still need evidence for its requirements. The first games I want to test are: Minecraft, which achieved an impressive average of 30 fps on the original Windows 7 driver, CS 1.6, Super Tux Kart, and browser games.
-It will also have Wayland support (except for KDE Plasma; who uses that on an Atom that struggles to open 5 tabs?), In addition to extended driver support, REMESA will cover all operating systems that run on 32-bit and Intel processors, but don't expect to see me playing GTA SA on it because it was already a tortoise when it was born; even my cockatiel runs GTA SA faster. 
+I make an effort to distinguish CPU tests, offline validation, application integration, X11 publication, and actual GPU execution. Passing a thousand tests on the CPU is useful, but it doesn't mean the SGX535 has executed anything.
 
-And of course! Everything documented point by point (references, uff)
+<br clear="all">
+
+## OpenGL and future plans
+
+<img src="assets/pipocarunningright.gif" align="right" width="105" alt="Pipoca running right">
+
+My main compatibility target is **desktop OpenGL 2.1**.
+
+I'm also researching OpenGL 3.0, although I don't want to promise support for something I haven't properly verified yet.
+
+The first applications and games I want to test include **Minecraft Java**, Counter-Strike 1.6, SuperTuxKart, and some older browser games.
+
+Minecraft is particularly interesting because I previously saw it average around 30 FPS with the original Windows 7 driver. I'd love to see what an independently written Linux driver can eventually do.
+
+Wayland support is also part of the plan. KDE Plasma on an Atom Z520, though? That might be asking a little too much from a processor that already struggles with five browser tabs.
+
+I'm not expecting miracles. The GMA 500 was slow even when it was new. And don't expect me to play GTA San Andreas on this thing. Even my cockatiel could probably run it faster.
+
+The longer-term goal is to make this useful on supported 32-bit Intel hardware, not just on my own Dell Mini 12.
+
+<br clear="all">
 
 ## Development setup
 
-Most development is done on a Galaxy Tab S7 running Linux through Termux/PRoot. Builds for the Mini 12 are cross-compiled for i686.
+<img src="assets/pipocaidle.gif" align="right" width="105" alt="Pipoca resting">
 
-It wasn't supposed to become my main development machine but here we are.
+Here's something that still makes me laugh: most of this driver is being developed on a **Samsung Galaxy Tab S7**.
 
-## Recent Findings — USSE Compiler Reverse Engineering
+I run Linux through Termux/PRoot and cross-compile the driver for i686. The resulting builds are then tested on the Mini 12.
 
-I've been digging deeper into the original SGX535 userspace shader compiler, trying to understand how it builds and encodes USSE instructions.
+I originally set up the tablet as a convenient development environment. Somehow, it became my main computer. At this point, I don't even question it anymore.
 
-What started with investigating the mysterious "0x07000345" word ended up revealing quite a bit more about the compiler itself.
+<br clear="all">
 
-I managed to trace parts of the instruction encoding process, including register field placement, MOV instruction handling, and parts of the compiler's finalization process. This was enough to start writing my own restricted USSE encoder and decoder, rather than relying on proprietary shader binaries.
+## Reverse engineering the USSE compiler
 
-One of the more recent findings is that assembler flag bit 0 maps to bit 23 of the second encoded instruction word. The mapping is visible in the CPU-side compiler logic, although its exact meaning when executed by the GPU is still unknown.
+<img src="assets/pipocathinking.gif" align="right" width="110" alt="Pipoca thinking about USSE instructions">
 
-I also traced the compiler's cleanup callback, stored at offset "+0x630", through "_mesa_free" to the imported "free" function. The identity-MOV removal routine releases 11 referenced allocations and the instruction node itself. Two additional cleanup lists appear to manage recycled auxiliary records, but I haven't yet established whether their allocations are completely independent of instructions that remain alive.
+One of the hardest parts of this project has been figuring out how the original SGX535 drivers generate shader instructions.
 
-That historical compiler ownership question remains unresolved. It isn't a prerequisite for qualifying my independently written restricted shader path, which is where I'm focusing now.
+The SGX535 uses the USSE architecture, and understanding its instruction encoding has meant spending a lot of time in Ghidra, assembly listings, and old compiler code.
 
-At that investigation checkpoint, the independently written codec passed 447 offline test cases in each of three environments: native Linux, UBSan, and i386/QEMU. Additional evidence checks and symbolic constraint tests have also passed.
+The infamous `0x07000345` was one of the starting points.
 
-This doesn't mean the USSE instruction set is fully decoded. Several important details, including hardware register banks, instruction termination, PDS fetch behavior, and the full meaning of "0x07000345", still need verification.
+While tracing the original compiler, I recovered parts of its instruction encoding logic, including register field placement, MOV handling, instruction finalization, and some of the surrounding memory-management behavior.
 
-At that historical compiler checkpoint, the findings were being used to build and validate an original implementation offline; no new GPU shader submissions were enabled by that work. The current physical GLX results above are a later, separately qualified milestone.
+That gave me enough information to begin implementing my own restricted USSE encoder and decoder rather than embedding proprietary shader binaries.
 
-The interesting part is that investigating a single 32-bit word has gradually exposed much of the surrounding compiler machinery. There's still a lot to understand, but the picture is getting clearer.
+One finding was that assembler flag bit 0 maps to bit 23 of the second encoded instruction word. I can demonstrate that mapping in the CPU-side compiler logic, but its precise meaning during GPU execution still needs investigation.
+
+I also traced a cleanup callback at offset `+0x630` through `_mesa_free` to the imported `free` function.
+
+The identity-MOV cleanup routine releases 11 referenced allocations plus the instruction node itself. Two additional cleanup lists seem to manage recycled auxiliary records, although I haven't fully established their ownership relationships.
+
+Not every mystery in the original compiler needs to be solved before my own restricted shader path can move forward.
+
+At one checkpoint, the independent codec passed **447 offline tests** in each of three environments: native Linux, UBSan, and i386/QEMU.
+
+Since then, the work has expanded into PDS encoding, program storage, relocations, shader preparation, and physical execution.
+
+There's still plenty I don't know. Register-bank behavior, termination rules, PDS fetch details, and parts of the instruction encoding remain open questions. I'd rather leave those questions documented than pretend the entire architecture has been decoded.
+
+And somehow, after all this work, `0x07000345` is still finding ways to annoy me.
+
+<br clear="all">
 
 ## Contributing
 
-If you have old Poulsbo/SGX535 documentation, drivers, hardware, or information about historical DDK releases, feel free to open an issue.
+<img src="assets/pipocawaitingyou.gif" align="right" width="110" alt="Pipoca waiting for contributors">
 
-A note on previous SGX535 driver work
+If you have old Poulsbo hardware, SGX535 documentation, historical Intel drivers, DDK information, or anything else that might help, feel free to open an issue. Testing on other compatible hardware would also be valuable.
 
-I was recently contacted by email about another project that had reportedly achieved a working Mesa/Gallium driver for Poulsbo.
+### A note on earlier SGX535 driver projects
 
-While looking into the project, I came across references to some files whose origins I couldn't independently verify. One example was "sgxdefs.h", which appeared to contain over 8,000 lines, compared to the roughly 106-line version included in a historical distribution I had access to.
+I was contacted by email about another project that reportedly had a working Mesa/Gallium driver for Poulsbo.
 
-That difference caught my attention, although it doesn't establish where the larger file came from or whether it was distributed with permission.
+While looking into it, I found references to files whose origins I couldn't independently establish.
 
-For SGX535-reMESA, I'm taking a different approach: independently reconstructing the necessary hardware behavior and writing original driver code, without incorporating proprietary DDK implementations of uncertain provenance.
+One example was an `sgxdefs.h` file reportedly containing more than 8,000 lines, whereas a historical distribution available to me contained a version of roughly 106 lines.
 
-I'm happy to learn about previous efforts and collaborate where possible, but I want to keep the project's code origins clear and verifiable.
-Information about other PowerVR Series5 GPUs is useful too, Our goal is to get to the mainline MESA and Mainline Kernel Patch. 
+That difference raised questions for me, but it doesn't prove anything about the larger file's origin, licensing, or redistribution rights.
+
+For SGX535-reMESA, I want to keep the approach straightforward: study the hardware and historical software behavior, document the evidence, and write original implementations without incorporating proprietary DDK code of uncertain provenance.
+
+I'm open to collaboration and learning from earlier work. I just want the code's origins to remain clear, especially if this project eventually reaches upstream Mesa.
+
+Information about other PowerVR Series5 GPUs is welcome too. The long-term goal is to contribute a maintainable Mesa driver and suitable mainline Linux kernel patches.
+
+<br clear="all">
 
 ## Thanks
 
-Thanks to Simon Fenney for pointing me towards Intel EMGD. That helped a lot.
+Thanks to **Simon Fenney** for pointing me toward Intel EMGD. That turned out to be extremely useful.
 
-## Special Thanks 
+Thanks also to everyone who has read the documentation, shared information, tested something, or simply followed along while I tried to convince a nearly two-decade-old GPU to draw triangles again.
 
-Thanks, "0x07000345", aka Xpsb_emit_pixel_shader I hate you, 20 days of reverse engineering, countless solver runs, one mysterious hexadecimal. And after all that... ALWAYS. The real "0x07000345" was the friends we made along the way 🥀
-edit: A funny fact: I didn't discover error 0x07000345 using the Tab S7, but rather using my cell phone; the final boss couldn't get it😂💀
+## Special thanks
 
-## Another thanks
-Thank you to everyone who is viewing the project! Our path will be glorious, always adding humor to documentation that should be at a PhD level. 
+<img src="assets/pipocajumping.gif" align="right" width="110" alt="Pipoca celebrating">
 
-And of course, without using files with 8,000 lines! 
+And finally, a special thanks to `0x07000345`.
+
+I hate you.
+
+Twenty days of reverse engineering, countless solver runs, and one mysterious hexadecimal value.
+
+All that work eventually led me to `Xpsb_emit_pixel_shader` and a much better understanding of the surrounding compiler machinery.
+
+And after all that...
+
+**ALWAYS.**
+
+Maybe the real `0x07000345` was the friends we made along the way 🥀
+
+Fun fact: one of my important discoveries about this value wasn't even made on the Tab S7. I was using my phone. Apparently, the final boss wasn't prepared for that. 😂💀
+
+<br clear="all">
+
+## One last thing
+
+<img src="assets/pipocarunningleft.gif" align="right" width="110" alt="Pipoca running left">
+
+Thanks for stopping by!
+
+This started as an attempt to understand a forgotten GPU and somehow turned into one of the most interesting projects I've ever worked on.
+
+I'll keep documenting the progress, including the strange parts, the failures, and the occasional hexadecimal-induced breakdown.
+
+The goal is serious. The documentation doesn't always have to be.
+
+**And yes, I'll keep the cockatiel GIFs.**
+
+— Gama
