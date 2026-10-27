@@ -589,6 +589,24 @@ struct remesa_persistent_linked_dpm_backing {
 };
 int remesa_persistent_linked_dpm_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_dpm_backing *);
+/* Dimension-bound region owner for a live COLOR/Z/TA target chain. Reuses
+ * the original option0 layout and existing scene allocator's one-time zero
+ * policy. Holds targets through leases and uncertain disposal; public writes
+ * and legacy color submission remain rejected. No raw VA/dimensions accepted.
+ * Snapshots derive7 TA register/value pairs and the separate408 pair from
+ * the live region base plus original cookie offsets. They do no I/O/hash/sync.
+ * This is CPU storage/register-plan metadata, not MMIO permission, tile-list
+ * generation, native job holds or GPU execution. No cookie15 is invented.
+ */
+int remesa_persistent_linked_region_prepare(struct remesa_device *,void *targets,
+ void **bo);
+struct remesa_persistent_linked_region_backing {
+ struct remesa_persistent_scene_backing region;
+ struct remesa_persistent_linked_targets_backing targets;
+ uint32_t ta_scene[14],raster_scene[2],access;
+};
+int remesa_persistent_linked_region_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_region_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

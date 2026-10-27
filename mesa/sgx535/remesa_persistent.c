@@ -55,6 +55,7 @@ struct memory {
  bool isp_update,scene_close,raw_geometry,shader_program,shader_pds;
  struct linked_dpm *linked_dpm;
  bool linked_event_auxiliary;
+ bool linked_region;
  uint32_t event_pixel_bank;
  struct remesa_use_entry_plan state_use_entry;
  unsigned state_kind;
@@ -2846,4 +2847,62 @@ int remesa_persistent_linked_dpm_snapshot(const struct remesa_device *device,voi
   .allocation_bytes=b->allocated,.data_bytes=240};
  e=dpm_plan_metadata(d,b->linked_dpm->table,b->linked_dpm->parameter,false,&value);if(e)return e;
  *out=value;return 0;
+}
+int remesa_persistent_linked_region_prepare(struct remesa_device *device,void *targets_object,
+ void **out)
+{
+ if((uintptr_t)out%_Alignof(void *))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct memory *targets=targets_object;
+ struct remesa_persistent_linked_targets_backing tm;
+ e=background_targets_metadata(d,targets,true,&tm);if(e)return e;
+ struct remesa_scene_layout layout;
+ e=remesa_scene_layout_encode(tm.commands.width,tm.commands.height,0,&layout);if(e)return e;
+ if(targets->refs==UINT32_MAX)return EBUSY;
+ void *object=NULL;size_t before=d->allocated;
+ e=allocate_class(d,layout.required_bytes,&object,REMESA_VA_SURFACE);
+ if(e)return d->failed||d->allocated!=before?EOWNERDEAD:e;
+ struct memory *b=object;b->scene_hw=true;b->linked_region=true;b->scene_layout=layout;
+ b->depth_width=tm.commands.width;b->depth_height=tm.commands.height;
+ b->linked_dependency=targets;targets->refs++;
+ if(b->va<UINT64_C(0x40000000)||b->va+b->allocated>UINT64_C(0x100000000)){e=ENOTSUP;goto fail;}
+ /* Preserve the existing scene allocator's one-time full zero initialization.
+  * These bytes are region storage, not invented CODE or generated tile lists. */
+ const uint8_t zero=0;
+ e=owned_image_lease(d,b,&zero,1,true);if(e)goto fail;
+ e=owned_image_lease(d,b,&zero,1,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
+ return d->failed?EOWNERDEAD:e;
+}
+int remesa_persistent_linked_region_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_region_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_region_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->linked_region||!b->scene_hw||!b->linked_dependency)return EINVAL;
+ struct remesa_persistent_linked_region_backing value={0};
+ e=background_targets_metadata(d,b->linked_dependency,false,&value.targets);if(e)return e;
+ if(b->depth_width!=value.targets.commands.width||b->depth_height!=value.targets.commands.height)return ESTALE;
+ const struct remesa_scene_layout *layout=&b->scene_layout;
+ if(b->va<UINT64_C(0x40000000)||b->va+b->allocated>UINT64_C(0x100000000)||
+    layout->required_bytes>b->allocated||layout->cookie[7]>=b->allocated||layout->cookie[8]>=b->allocated)return EPROTO;
+ value.region=(struct remesa_persistent_scene_backing){.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.region_gpu_va=b->va+layout->cookie[7],
+  .handle=b->handle,.width=b->depth_width,.height=b->depth_height,
+  .allocation_bytes=b->allocated,.layout=*layout};
+ const uint32_t base=(uint32_t)b->va;
+ const uint32_t ta[14]={0x220,base+layout->cookie[8],0x208,layout->cookie[2],
+  0x20c,layout->cookie[3],0x214,layout->cookie[4],0x210,layout->cookie[5],
+  0x248,layout->cookie[6],0x21c,base+layout->cookie[7]};
+ memcpy(value.ta_scene,ta,sizeof(ta));value.raster_scene[0]=0x408;
+ value.raster_scene[1]=base+layout->cookie[7];
+ value.access=REMESA_ACCESS_READ|REMESA_ACCESS_WRITE;*out=value;return 0;
 }

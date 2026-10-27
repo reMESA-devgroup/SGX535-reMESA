@@ -772,3 +772,62 @@ selected at10010bbd and1010618b respectively; OGL140d49 emits the already known
 E6 record-last arithmetic. No new CF/C7/F7/87/event-lowE0 encoder follows.
 These narrow static patterns do not exclude shift/table-driven generators or
 other modules and do not justify importing the original complete event blob.
+
+## Target-bound region storage and scene register metadata
+
+`remesa_persistent_linked_region_prepare()` now obtains dimensions from the
+live COLOR/Z/TA target owner, uses the existing original option0 scene-layout
+encoder, and allocates region storage in the SURFACE address domain. It retains
+the target and its full dependency closure through ordinary ownership changes,
+CPU leases and uncertain map/unmap/sync/unpin disposal. Public write mapping,
+legacy color submission and render-target reinterpretation remain rejected.
+No caller raw VA, dimensions or cookie are accepted.
+
+Preparation preserves the existing scene allocator's one-time full zeroing,
+verification and synchronization policy. These are storage bytes, not CODE or
+proof of generated tile lists. The original requested clear-page extent, logical
+required bytes and rounded allocation capacity remain separate metadata. This
+does not add per-frame clearing or readback and does not initialize COLOR/Z.
+
+`remesa_persistent_linked_region_snapshot()` reports the live region binding,
+READ|WRITE access, target metadata, seven TA register/value pairs and the separate
+408 raster pair. In particular21c and408 use base+cookie7, not a fixed1000
+offset. Snapshot checks and pair construction do not invoke provider I/O,
+hashing, readback or synchronization. Word15 of the historical cookie is still
+absent, not invented or submitted as zero.
+
+The independent original CPU replay is
+`linked-region-contract/REPLAY.py` and `RESULT.json`. It reuses the pinned Xpsb
+loader, executes the revision-selector fixture and whole scene-info producer,
+then the bounded fresh TA prefix. A separate raster slice41f0..4202 receives
+explicit reaching register/frame values and writes408 only in private RAM.
+Neither the revision fixture nor those RAM writes are physical GPU evidence.
+At1280x800 the original region offset is10000;640x640 and641x479 use4000.
+The three original cookies0..14, allocation/clear extents and TA/raster values
+are supplied on stdin to the owner test, with region VAs matching live BOs.
+
+`linked-region-qualified/result.json` records native/UBSan/i386 passes. The
+combined fixture reports7,430 checks, including its reused persistent fixture;
+it also runs the existing common linkage fixture. It checks all three storage
+sizes, exact original CPU results, untouched COLOR/Z, zero-I/O repeated snapshots,
+typed/alias/alignment refusal, shared references, lease-delayed disposal,
+ordinary rollback and uncertain retention of target/attachment/command owners.
+No API rendering or physical result is implied by those storage dimensions.
+`private-mesa-linked-region/RESULT.json` records the same fixture passing i386
+against a private archive built with actual Mesa flags, with the original
+cached archive and every referenced object unchanged. Twelve existing
+owner/Gallium/NIR regressions pass against that archive, including DPM and
+event auxiliaries, in `linked-region-regressions/RESULT.json`.
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_linked_region.c --cache "$MESA_CACHE" \
+  --output /tmp/remesa-linked-region < "$REGION_EVIDENCE/oracles.txt"
+```
+
+The fresh normal scene action planner explicitly does not consume an external
+XHW descriptor or unwritten cookie15. The old frozen XHW bind/fire wire is a
+different, deliberately unqueued CPU request contract. Allocating or copying an
+XHW page would not establish general context ownership, MMU admission or GPU
+execution. Full event CODE84, native context/job ownership, complete raster and
+COLOR initialization/load remain required; all execution gates stay closed.
