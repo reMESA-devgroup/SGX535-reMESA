@@ -378,4 +378,21 @@ struct remesa_pds_event_data_request {
 int remesa_pds_structure_encode_event_data(
  const struct remesa_pds_event_data_request *,uint8_t *bytes,uint8_t *known_mask,
  size_t capacity,size_t *written);
+/* Separate original psb_dri392ab event DATA64 profile (CODE84 follows it).
+ * Unlike Xpsb7eb0 above, this has TWO USE links: end-task at DATA0 and
+ * transfer auxiliary at DATA4; target DATA16 is addressed from DATA2.
+ * Recovered direct stores3959a..3965a put8 at DATA8, not zero. The producer
+ * leaves DATA6/7/15 unwritten: policy zero/mask0, not consumed-size evidence.
+ * Both lower19 inputs must derive from owned canonical USE entry plans;
+ * numeric ranges alone authenticate no mapping or code. No CODE is emitted,
+ * and the still-unimplemented84-byte event body is not replaced by zeros or
+ * primary/secondary instructions. Existing Xpsb profile remains unchanged.
+ */
+struct remesa_pds_psb_event_data_request {
+ uint64_t source_allocation_address,source_allocation_bytes,source_offset;
+ uint32_t end_use_lower19,transfer_use_lower19;
+};
+int remesa_pds_structure_encode_psb_event_data(
+ const struct remesa_pds_psb_event_data_request *,uint8_t *bytes,uint8_t *known_mask,
+ size_t capacity,size_t *written);
 #endif

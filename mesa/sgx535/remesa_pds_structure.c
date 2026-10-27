@@ -1073,3 +1073,37 @@ int remesa_pds_structure_encode_event_data(
  memcpy(bytes,image,sizeof(image));memcpy(known_mask,mask,sizeof(mask));
  *written=sizeof(image);return 0;
 }
+
+int remesa_pds_structure_encode_psb_event_data(
+ const struct remesa_pds_psb_event_data_request *request,uint8_t *bytes,
+ uint8_t *known_mask,size_t capacity,size_t *written)
+{
+ if(!request||!written||
+    (uintptr_t)request%_Alignof(struct remesa_pds_psb_event_data_request)||
+    (uintptr_t)written%_Alignof(size_t)||!range_valid(request,sizeof(*request))||
+    !range_valid(written,sizeof(*written))||!range_valid(bytes,capacity)||!range_valid(known_mask,capacity))return EINVAL;
+ if(!disjoint(request,sizeof(*request),bytes,capacity)||
+    !disjoint(request,sizeof(*request),known_mask,capacity)||
+    !disjoint(request,sizeof(*request),written,sizeof(*written))||
+    !disjoint(bytes,capacity,known_mask,capacity)||!disjoint(bytes,capacity,written,sizeof(*written))||
+    !disjoint(known_mask,capacity,written,sizeof(*written)))return EINVAL;
+ const struct remesa_pds_psb_event_data_request r=*request;
+ if(r.end_use_lower19>0x7ffffu||r.transfer_use_lower19>0x7ffffu)return ERANGE;
+ if(!r.source_allocation_address||r.source_allocation_address>UINT32_MAX||
+    (r.source_allocation_address&3u)||(r.source_offset&3u))return EINVAL;
+ if(!r.source_allocation_bytes||r.source_allocation_bytes>UINT64_C(0x100000000)-r.source_allocation_address)return EOVERFLOW;
+ if(r.source_offset>r.source_allocation_bytes||16>r.source_allocation_bytes-r.source_offset)return ENOSPC;
+ if(capacity<64)return ENOSPC;
+ uint8_t image[64]={0},mask[64]={0};
+ /* Original relocation destinations39585/395ce/3961e and direct DATA stores,
+  * not instruction words or a claim about PDS dispatch semantics. */
+ const uint32_t data[16]={r.end_use_lower19,0,
+  (uint32_t)(r.source_allocation_address+r.source_offset),UINT32_C(0x80000003),
+  UINT32_C(0x200000)|r.transfer_use_lower19,0,0,0,8,0,2,UINT32_C(0x10000000),
+  UINT32_C(0x7f800),UINT32_C(0x07f00000),UINT32_C(0x08000000),0};
+ for(unsigned i=0;i<16;i++){
+  store_le32(image+i*4,data[i]);
+  if(i<6||(i>=8&&i<=14))memset(mask+i*4,0xff,4);
+ }
+ memcpy(bytes,image,64);memcpy(known_mask,mask,64);*written=64;return 0;
+}

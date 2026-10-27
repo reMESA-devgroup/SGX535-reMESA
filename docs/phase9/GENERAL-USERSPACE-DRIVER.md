@@ -536,3 +536,61 @@ target/TA/clear/body/attribute/geometry/state/NIR regressions against this same
 new archive. Original Mesa objects and protected physical artifacts remain
 unchanged. These qualifications use fake resource providers and simulated
 fences, with zero GPU submissions and zero GL/EGL API contexts.
+
+## Event/EOT: identify the exact producer before ownership
+
+The retained physical scene uses the psb_dri392ab event, with64 bytes DATA
+followed by84 bytes CODE,148 committed bytes total. Its7 recorded relocation
+contributions affect only three DATA words: end-task USE at offset0, target
+DATA address at offset8, and transfer USE at offset16. The referenced auxiliary
+programs occupy8 and16 bytes respectively. This is distinct from the Xpsb7eb0
+DATA profile already supported by `remesa_pds_structure_encode_event_data()`.
+Substituting that encoder would put references and constants in wrong words.
+
+`remesa_pds_structure_encode_psb_event_data()` now provides the separate
+original DATA64 constructor. It checks source16-byte extent and both lower19
+numeric inputs, emits the original direct stores including DATA8=8, and marks
+DATA6/7/15 as unknown/policy-zero.52 bytes are defined:40 direct-store bytes and
+12 symbolic-reference bytes. It does not emit the84-byte CODE, add filler or
+grant upload/execution permission. The original Xpsb API is unchanged.
+
+A fresh bounded original-i386 replay of39537..39661 passed three symbolic
+cases, with the target binary digest checked. All three relocation calls are
+explicit mocked ABI cuts; the result proves direct DATA stores, not original
+relocation execution or the whole constructor. A separate audit matches the
+retained CODE84 to the earlier two-base original CPU replay, and records the
+actual wire relocations and auxiliary spans. Retained program bytes remain
+comparison oracles, consistent with the README's original-implementation
+policy; no proprietary event program is embedded into this driver.
+
+The focused test passes native/UBSan/i386,635 checks per variant, comparing
+direct-store oracles, symbolic references, the retained physical DATA64,
+unwritten/policy bytes, separate Xpsb layout, and transactional range/alias
+failures. It also passes using the actual Mesa compile model. Ten earlier
+owner/Gallium/NIR regressions pass against that same new archive. The first
+test harness had a missing relative-path fixture, then one wrong expected
+errno for an unaligned maximal offset; both failures are retained. The encoder
+checks were not relaxed.
+
+Evidence under the current artifact directory is:
+
+- `psb-event-contract/ORIGINAL_DATA_RESULTS.json` and `REPLAY_DATA.py`;
+- `psb-event-contract/RETAINED_EVENT_AUDIT.json`;
+- `psb-event-contract/qualified-v3/RESULT.json` and `standard-runner/result.json`;
+- `private-mesa-psb-event-data/RESULT.json` and `psb-event-data-regressions/RESULT.json`.
+
+The standard focused command accepts the recorded three-row oracle input:
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_psb_event_data.c --cache "$MESA_CACHE" --output /tmp/remesa-psb-event \
+  < "$EVENT_EVIDENCE/original-data-oracles.txt"
+```
+
+Concrete remaining event work is the original complete CODE84 and both USE
+auxiliary contracts, then owned relocation/closure and native qualification.
+The existing event forward-index encoder covers only the two demonstrated
+position-relative words; it does not complete the other instruction classes.
+Do not import the old binary as an independently implemented event, infer
+unproved operands, or enable the native gate because DATA64 matches. DPM,
+complete raster/submission and API rendering remain unqualified.
