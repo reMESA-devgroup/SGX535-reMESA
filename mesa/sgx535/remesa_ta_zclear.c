@@ -37,3 +37,15 @@ int remesa_ta_zclear_geometry_encode(const struct remesa_ta_zclear_request *requ
  }
  memcpy(out,&value,sizeof(value));return 0;
 }
+int remesa_ta_zclear_single_geometry_encode(const struct remesa_ta_zclear_request *request,
+ struct remesa_ta_zclear_geometry *out)
+{
+ if(!span(request,sizeof(*request))||!span(out,sizeof(*out)))return EINVAL;
+ uintptr_t a=(uintptr_t)request,b=(uintptr_t)out;
+ if(a<=b?b-a<sizeof(*request):a-b<sizeof(*out))return EINVAL;
+ struct remesa_ta_zclear_geometry value;
+ int e=remesa_ta_zclear_geometry_encode(request,&value);if(e)return e;
+ float_le(value.positions+16,2.0f*(float)request->depth_width);
+ float_le(value.positions+36,2.0f*(float)request->depth_height);
+ memcpy(out,&value,sizeof(value));return 0;
+}

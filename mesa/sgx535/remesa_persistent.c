@@ -6,6 +6,7 @@
 #include "remesa_pds.h"
 #include "remesa_pds_structure.h"
 #include "remesa_ta_index.h"
+#include "remesa_ta_zclear.h"
 #include "remesa_depth_scene_image.h"
 #include "remesa_resource_layout.h"
 #include "remesa/shader_request.h"
@@ -52,6 +53,7 @@ struct memory {
  struct linked_pds *linked_pds;
  struct memory *linked_dependency;
  struct linked_body *linked_body;
+ struct remesa_persistent_zclear_prefix_backing *zclear_prefix;
  uint8_t state_pds_known[REMESA_PDS_STRUCTURE_STATE_BYTES];
  uint32_t depth_width,depth_height,depth_pitch,depth_cpp;
 };
@@ -450,7 +452,7 @@ static void dispose(struct persistent *d,struct memory *b)
  if(b->linked_body)for(unsigned i=0;i<b->linked_body->dependency_count;i++)
   linked_dependencies[3+i]=b->linked_body->dependencies[i];
  d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);free(b->linked_program);
- free(b->linked_geometry);free(b->linked_pds);free(b->linked_body);memset(b,0,sizeof(*b));
+ free(b->linked_geometry);free(b->linked_pds);free(b->linked_body);free(b->zclear_prefix);memset(b,0,sizeof(*b));
  for(unsigned i=0;i<REMESA_LINKED_BODY_MAX_DRAWS+4;i++)if(linked_dependencies[i]){
   struct memory *held=linked_dependencies[i];
   if(!held->live||!held->refs){quarantine(d,held);d->failed=true;continue;}
@@ -552,7 +554,7 @@ static int map_bo(void *data,void *object,bool write,void **out)
  if(!owns_memory(d,b)) return EINVAL;
  if(!b->live || b->quarantined) return EIO;
  if(!b->owner) return EINVAL;
- if(write&&(b->linked_body||b->scene_hw||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image))return ENOTSUP;
+ if(write&&(b->zclear_prefix||b->linked_body||b->scene_hw||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image))return ENOTSUP;
  if(b->cpu_mapped || b->refs==UINT32_MAX) return EBUSY;
  if(remesa_registry_snapshot(&d->registry,b->token,&r)!=REMESA_OK) return EINVAL;
  if(r.state!=REMESA_MAPPED) return EBUSY;
@@ -606,7 +608,7 @@ static int submit(void *data,void *object,const struct remesa_draw_packet *packe
  if(!b->owner) return EINVAL;
  if(b->cpu_mapped || b->refs==UINT32_MAX) return EBUSY;
  if(b->bytes!=4096 || remesa_draw_packet_validate(packet)!=REMESA_PACKET_OK) return EINVAL;
- if(b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image) return ENOTSUP; /* No typed data through color ABI. */
+ if(b->zclear_prefix||b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||b->shader_pds||b->scene_image||b->control_image) return ENOTSUP; /* No typed data through color ABI. */
  for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++) if(!d->jobs[i].live) {j=&d->jobs[i];break;}
  if(!j) return EBUSY;
  *j=(struct submission){.target=b,.live=true};j->packet=*packet;++b->refs;
@@ -1373,7 +1375,7 @@ int remesa_persistent_render_target_snapshot(const struct remesa_device *device,
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  struct persistent *d=device->priv;struct memory *b=object;
  if(!owns_memory(d,b)||!b->live||!b->owner)return EINVAL;
- if(b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||
+ if(b->zclear_prefix||b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||b->shader_program||
     b->shader_pds||b->scene_image||b->control_image)return ENOTSUP;
  if(b->quarantined||!b->pinned||!b->gpu_mapped)return EIO;
  struct remesa_resource resource;
@@ -2272,4 +2274,112 @@ int remesa_persistent_linked_body_snapshot(const struct remesa_device *device,vo
   .gpu_va=b->va,.handle=b->handle,.draw_count=body->draw_count,.dependency_count=body->dependency_count,
   .allocation_bytes=b->allocated,.command_bytes=body->bytes,.close_offset=body->draw_count*28};
  return 0;
+}
+
+static int zclear_entry(const struct memory *b,size_t offset,size_t length,uint32_t bank,
+ enum remesa_use_data_master master,struct remesa_use_entry_plan *plan,uint32_t *fixup)
+{
+ const struct remesa_use_entry_request q={.allocation_address=b->va,.allocation_bytes=b->allocated,
+  .entry_offset=offset,.program_bytes=length,.bank=bank,.data_master=master};
+ int e=remesa_use_entry_prepare(&q,plan);if(e)return e;
+ return remesa_use_entry_preview_fixup(plan,fixup);
+}
+static void zclear_word(uint8_t *out,uint32_t v)
+{for(unsigned i=0;i<4;i++)out[i]=(uint8_t)(v>>(i*8));}
+int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
+ uint32_t width,uint32_t height,float depth,uint32_t vertex_bank,
+ uint32_t pixel_bank,uint32_t state_bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ const struct remesa_ta_zclear_request clear={width,height,width,height,depth};
+ struct remesa_ta_zclear_geometry geometry;
+ e=remesa_ta_zclear_single_geometry_encode(&clear,&geometry);if(e)return e;
+ uint32_t ignored;
+ const uint32_t banks[3]={vertex_bank,pixel_bank,state_bank};
+ for(unsigned i=0;i<3;i++){e=remesa_use_base_offset(banks[i],&ignored);if(e)return e;}
+ if(vertex_bank==pixel_bank||pixel_bank==state_bank)return EBUSY;
+ uint8_t image[444]={0};size_t n=0;
+ struct remesa_shader_ir ir={.schema=REMESA_SHADER_IR_SCHEMA,.stage=REMESA_IR_VERTEX,.count=2};
+ ir.instructions[0]=(struct remesa_ir_instruction){.op=REMESA_IR_INPUT,.components=4,.type=REMESA_IR_FLOAT32};
+ ir.instructions[1]=(struct remesa_ir_instruction){.op=REMESA_IR_POSITION,
+  .components=4,.type=REMESA_IR_FLOAT32,.dst=REMESA_SHADER_IR_NO_REGISTER};
+ struct remesa_shader_program vs,fs;
+ e=remesa_shader_program_prepare(&ir,&vs);if(e)return e;
+ e=remesa_shader_program_prepare_color(UINT32_C(0xff00ff00),&fs);if(e)return e;
+ struct remesa_usse_vertex_mapping mapping={0};
+ for(unsigned i=0;i<4;i++){
+  mapping.input[i]=(struct remesa_usse_cpu_register){2,i};mapping.output[i]=(struct remesa_usse_cpu_register){1,i};
+ }
+ e=remesa_usse_vertex_candidate(&vs.usse,&mapping,image,16,&n);if(e)return e;
+ if(n!=16)return EPROTO;
+ e=remesa_shader_program_encode(&fs,image+16,8,&n);if(e)return e;
+ if(n!=8)return EPROTO;
+ const struct remesa_usse_cpu_move move={.source={2,0},.destination={1,0},.control12=10,.control21=1,.control23=1};
+ const struct remesa_usse_cpu_three_source tail={.source={{0,0},{2,11},{2,0}},
+  .source_extension={0,1,1},.word0_control21=1,.word1_control18=1};
+ e=remesa_usse_cpu_move_encode(&move,image+32,8,&n);if(e)return e;
+ e=remesa_usse_cpu_three_source_encode(&tail,image+40,8,&n);if(e)return e;
+ memcpy(image+64,geometry.positions,64);memcpy(image+128,geometry.indices,12);
+ struct remesa_persistent_zclear_prefix_backing *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
+ struct persistent *d=device->priv;void *object=NULL;size_t before=d->allocated;
+ e=allocate_class(d,sizeof(image),&object,REMESA_VA_PROGRAM);
+ if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
+ struct memory *b=object;b->zclear_prefix=owned;
+ uint32_t fixup[3];
+ for(unsigned i=0;i<3;i++){
+  size_t at=i==0?0:i==1?16:32,length=i==1?8:16;
+  e=zclear_entry(b,at,length,banks[i],i==1?REMESA_USE_PIXEL:REMESA_USE_VERTEX,&owned->entries[i],&fixup[i]);if(e)goto fail;
+ }
+ if(vertex_bank==state_bank&&owned->entries[0].register_word!=owned->entries[2].register_word){e=EBUSY;goto fail;}
+ const struct remesa_pds_vertex_image_request vertex={b->va,b->allocated,64,4,fixup[0]};
+ uint8_t mask[64];
+ e=remesa_pds_structure_encode_vertex_image(&vertex,image+160,mask,64,&n);if(e)goto fail;
+ if(n!=64){e=EPROTO;goto fail;}
+ const struct remesa_pds_structure_request fragment={.code_policy=REMESA_PDS_STRUCTURE_CODE_CPU_COMPLETE};
+ struct remesa_pds_structure fp;
+ e=remesa_pds_structure_encode(&fragment,&fp);if(e)goto fail;
+ e=remesa_pds_structure_serialize(&fp,image+224,mask,56,&n);if(e)goto fail;
+ if(n!=56||fp.relocation_count!=1||fp.relocations[0].data_cell||fp.relocations[0].background){e=EPROTO;goto fail;}
+ zclear_word(image+224,fixup[1]);
+ const struct remesa_pds_code_instruction secondary={REMESA_PDS_STRUCTURE_CPU_EMPTY_SECONDARY_AF,
+  REMESA_PDS_STRUCTURE_NO_CELL,REMESA_PDS_STRUCTURE_NO_CELL};
+ e=remesa_pds_structure_encode_code(&secondary,1,image+288,4,&n);if(e)goto fail;
+ const struct remesa_ta_fragment_binding_request binding={.address_window_base=b->va&UINT64_C(0xf0000000),
+  .primary={b->va,b->allocated,224,56,12,0,0},.secondary={b->va,b->allocated,288,4,0,0,0},
+  .profile=REMESA_TA_FRAGMENT_SCENE_ZCLEAR};
+ e=remesa_ta_scene_zclear_state_encode(&binding,image+304);if(e)goto fail;
+ const struct remesa_pds_state_image_request sp={.source_allocation_address=b->va,
+  .source_allocation_bytes=b->allocated,.source_offset=304,.state_dwords=11,.use_lower19=fixup[2]};
+ e=remesa_pds_structure_encode_state_image(&sp,image+352,mask,60,&n);if(e)goto fail;
+ e=remesa_ta_state_reference_encode(b->va+352,11,false,image+416);if(e)goto fail;
+ const struct remesa_ta_index_request index={.index_bo_gpu_va=b->va,.index_bo_bytes=134,
+  .index_byte_offset=128,.index_count=3,.pds_bo_gpu_va=b->va,.pds_bo_bytes=b->allocated,
+  .pds_byte_offset=160,.pds_object_bytes=64,.pds_data_dwords=12,
+  .descriptor_a_field10=4,.descriptor_b_field38=4};
+ e=remesa_ta_index_triangles_encode(&index,image+424);if(e)goto fail;
+ *owned=(struct remesa_persistent_zclear_prefix_backing){.owner=d->cfg.context,.generation=b->token.generation,
+  .gpu_va=b->va,.handle=b->handle,.width=width,.height=height,.index_count=3,.allocation_bytes=b->allocated,
+  .used_bytes=sizeof(image),.vertex_offset=64,.index_offset=128,
+  .vertex_capacity_bytes=64,.vertex_referenced_bytes=48,.index_capacity_bytes=12,.index_referenced_bytes=6,
+  .use_offset={0,16,32},.use_bytes={16,8,16},.pds_offset={160,224,288,352},.pds_bytes={64,56,4,60},
+  .state_offset=304,.state_bytes=44,.ta_offset=416,.ta_bytes=28,
+  .entries={owned->entries[0],owned->entries[1],owned->entries[2]}};
+ e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
+}
+int remesa_persistent_zclear_prefix_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_zclear_prefix_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->zclear_prefix)return EINVAL;
+ *out=*b->zclear_prefix;return 0;
 }

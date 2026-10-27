@@ -462,6 +462,28 @@ struct remesa_persistent_linked_body_backing {
 };
 int remesa_persistent_linked_body_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_body_backing *);
+/* Self-contained immutable storage for the existing selected Z-clear draw:
+ * generated POSITION VS16/green FS8, full-target single-triangle geometry,
+ * primary/secondary PDS, special54c5 state and its per-count auxiliary/PDS,
+ * and TA28. No attachment, raster/EOT program, job or physical admission.
+ * Green is the existing state-constructor dependency; this is not a COLOR
+ * clear. Caller must establish real COLOR/Z backing and initialization policy.
+ * All program addresses derive from this allocation, banks are explicit.
+ */
+int remesa_persistent_zclear_prefix_prepare(struct remesa_device *,
+ uint32_t width,uint32_t height,float depth,uint32_t vertex_bank,
+ uint32_t pixel_bank,uint32_t state_bank,void **bo);
+struct remesa_persistent_zclear_prefix_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,width,height,index_count;
+ size_t allocation_bytes,used_bytes,vertex_offset,index_offset;
+ size_t vertex_capacity_bytes,vertex_referenced_bytes,index_capacity_bytes,index_referenced_bytes;
+ size_t use_offset[3],use_bytes[3],pds_offset[4],pds_bytes[4];
+ size_t state_offset,state_bytes,ta_offset,ta_bytes;
+ struct remesa_use_entry_plan entries[3];
+};
+int remesa_persistent_zclear_prefix_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_zclear_prefix_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

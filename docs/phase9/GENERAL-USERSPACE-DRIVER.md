@@ -360,3 +360,41 @@ rollback and uncertain retention. The first fixture failed compilation because
 of a nested `main` macro; its original log remains preserved in `linked-body-v1`.
 The independent corrected fixture results are `linked-body-v2/result.json` and
 `private-mesa-linked-body/RESULT.json` in the current artifact directory.
+
+## Owned full-target Z-clear prefix
+
+`remesa_ta_zclear_single_geometry_encode()` now exposes the same covering
+triangle used by the retained physical full-frame depth-clear correction:
+`(0,0), (2W,0), (0,2H)`. It preserves the fourth reserved vertex and six-index
+storage, while the command references three vertices and three indices only.
+The original quad encoder is unchanged. At 1280×800 the new 64 vertex bytes
+match the retained `typed-single-clear-native-verified.bin` artifact exactly.
+
+`remesa_persistent_zclear_prefix_prepare()` owns the clear draw in one PROGRAM
+allocation and generates all CODE through existing encoders: POSITION VS16,
+green FS8, state auxiliary USE16, primary vertex PDS64, fragment PDS56, empty
+secondary PDS4 and state-upload PDS60. It generates the existing special54c5
+state DATA44 and TA28, resolves every address from the allocator and checks
+bank compatibility. Logical storage ends at byte444 in a page allocation.
+VBO capacity is64 bytes with48 referenced; index capacity is12 with6 referenced.
+Remaining alignment gaps and page tail are zero, without padding instructions.
+
+This is specifically a Z-clear draw. It does not clear COLOR, own attachments,
+construct raster/background/EOT programs or establish all initial scene state.
+The new relocated object is not physically qualified by the older triangle
+result. It must be integrated with the dynamic draw body, complete scene
+dependencies and a typed native submission before testing either API.
+
+`test_zclear_prefix.c` passed native/UBSan/i386 and the actual Mesa compilation
+model, including all pixel-centre coverage at the paired and odd sizes,
+generated source references, exact special state/TA descriptor fields, zero
+padding, immutable publication, metadata without IO, deferred read-lease
+destruction, ordinary rollback and uncertain retention. It also runs the
+5506-check original persistent-shader fixture. Providers are simulated and
+perform no GPU operation.
+
+Evidence in the current artifact directory is `zclear-prefix-v1/result.json`,
+`private-mesa-zclear-prefix/RESULT.json` and
+`zclear-single-retained-oracle/RESULT.json`. The last is a fresh exact comparison
+against the previously qualified candidate's geometry, with source/reference
+identities retained. These are prerequisites, not API rendering approval.

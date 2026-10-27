@@ -19,4 +19,12 @@ struct remesa_ta_zclear_geometry {
  * No outputs change on error; input/output ranges must be disjoint. */
 int remesa_ta_zclear_geometry_encode(const struct remesa_ta_zclear_request *,
  struct remesa_ta_zclear_geometry *);
+/* Covering single triangle used by the retained physical full-frame depth
+ * clear: (0,0),(2W,0),(0,2H). Fourth record and six-index capacity are kept
+ * byte-compatible with the quad encoder, but a consumer MUST issue exactly
+ * three indices (48 vertex bytes / 6 index bytes referenced). No shader CODE
+ * or padding instruction is added. Coverage is of pixel centres inside the
+ * requested target; this does not establish clipping or GPU execution. */
+int remesa_ta_zclear_single_geometry_encode(const struct remesa_ta_zclear_request *,
+ struct remesa_ta_zclear_geometry *);
 #endif
