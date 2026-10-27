@@ -31,4 +31,7 @@ struct remesa_twod_reservation {
  */
 int remesa_twod_reserve(struct drm_psb_private *,struct remesa_twod_reservation *);
 int remesa_twod_release(struct drm_psb_private *,struct remesa_twod_reservation *);
+/* Native retire only, with lock_2d AND shared IRQ lock already held, in that
+ * order. Allows final quiet/restore/drop to be one uninterrupted interval. */
+int remesa_twod_release_locked(struct drm_psb_private *,struct remesa_twod_reservation *);
 #endif

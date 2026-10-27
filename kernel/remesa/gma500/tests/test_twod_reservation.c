@@ -40,7 +40,7 @@ static void gma_power_end(struct drm_device *dev)
 {CHECK(dev->power_holds);dev->power_holds--;}
 static u32 model_read(struct drm_psb_private *p,u32 reg)
 {
- CHECK(p->lock_2d.held);p->reads++;
+ CHECK(p->lock_2d.held||irq_lock_held);p->reads++;
  switch(reg){
  case PSB_CR_2D_SOCIF:jiffies++;return p->fifo;
  case PSB_CR_2D_BLIT_STATUS:return p->blit;

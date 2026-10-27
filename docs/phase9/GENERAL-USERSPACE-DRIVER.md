@@ -89,8 +89,7 @@ The [separate 2D GEM lifecycle](TWOD-JOB-LIFECYCLE-20261027.md) now implements
 issue, owned-event receipt validation, visibility and retirement around trusted
 native adapter callbacks, with uncertainty holds and buffer reuse. CPU tests
 and real kernel-object compilation pass; no native MMIO adapter is installed.
-Native2D FIFO emission, pre-ACK IRQ capture and physical validation
-remain pending; the existing3D lifecycle mask is unchanged.
+The existing3D lifecycle mask is unchanged.
 The [native producer reservation](TWOD-PRODUCER-RESERVATION-20261027.md) now
 integrates with the original console submit path under its own lock, prevents
 FIFO/reset interference while reserved and requires the saved request base
@@ -98,8 +97,12 @@ restored before release. This has CPU and real kernel-object build evidence;
 it has not been installed or physically qualified.
 The [shared IRQ ownership and pre-ACK capture](TWOD-IRQ-OWNERSHIP-20261027.md)
 now retain 2D events separately, exclude concurrent 3D/2D owners and keep the
-reservation on incomplete or unexpected events. Actual FIFO emission and
-hardware boundary/coherency/retirement integration are still required.
+reservation on incomplete or unexpected events.
+The [native MMIO adapter candidate](TWOD-NATIVE-MMIO-20261027.md) now implements
+root/core authentication, stale-event handling, FIFO writes, polling, visibility
+and atomic state restoration around the retained job. It passes CPU models and
+a full antiX module build with the old gears profile byte-exact. It is not
+installed; the LAB entry point and physical copy qualification remain pending.
 
 ## First common implementation increment
 

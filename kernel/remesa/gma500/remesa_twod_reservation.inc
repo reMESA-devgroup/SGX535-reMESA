@@ -31,18 +31,29 @@ int remesa_twod_reserve(struct drm_psb_private *dev_priv,struct remesa_twod_rese
  done:sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);return error;
 }
+int remesa_twod_release_locked(struct drm_psb_private *dev_priv,struct remesa_twod_reservation *r)
+{
+ int error;
+ if(!dev_priv||!r||!dev_priv->sgx_reg||!dev_priv->dev)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held(&dev_priv->lock_2d);
+#endif
+ if(!gma_power_is_on(dev_priv->dev))return -EIO;
+ if(dev_priv->remesa_twod_owner!=r||!r->held||r->device!=dev_priv)return -ENOENT;
+ if(!remesa_twod_idle_locked(dev_priv)||
+    PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE)!=r->saved_base)return -EBUSY;
+ error=remesa_twod_irq_drop_locked(r);if(error)return error;
+ dev_priv->remesa_twod_owner=NULL;memset(r,0,sizeof(*r));
+ return 0;
+}
 int remesa_twod_release(struct drm_psb_private *dev_priv,struct remesa_twod_reservation *r)
 {
- unsigned long flags,irq_flags;int error=0;
+ unsigned long flags,irq_flags;int error;
  if(!dev_priv||!r||!dev_priv->sgx_reg||!dev_priv->dev)return -EINVAL;
  if(!gma_power_is_on(dev_priv->dev))return -EIO;
  spin_lock_irqsave(&dev_priv->lock_2d,flags);
  irq_flags=sgx535_gma500_fixed_irq_lock();
- if(dev_priv->remesa_twod_owner!=r||!r->held||r->device!=dev_priv){error=-ENOENT;goto done;}
- if(!remesa_twod_idle_locked(dev_priv)||
-    PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE)!=r->saved_base){error=-EBUSY;goto done;}
- error=remesa_twod_irq_drop_locked(r);if(error)goto done;
- dev_priv->remesa_twod_owner=NULL;memset(r,0,sizeof(*r));
- done:sgx535_gma500_fixed_irq_unlock(irq_flags);
+ error=remesa_twod_release_locked(dev_priv,r);
+ sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);return error;
 }

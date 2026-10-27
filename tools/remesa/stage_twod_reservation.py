@@ -16,6 +16,10 @@ PINNED = {
     'gma500_fixed_backend.c': '12d908c2b99c6f89eff92b9b1c69b7d0779ca7c430bfc14347c5cc67e476afd7',
     'psb_reg.h': 'a340d4fb7bb9df2403eb196639d930b8c56463ddc7a3754d152e6ed7ab1daef7',
     'psb_irq.c': '5b9962aa29ec24f844297bb2d0e4fa9b00fc3021ed46d00afbeaa26b326b3025',
+    'mmu.c': 'cc722d7566ea3b2fa77252d96bc6eaff7166bd4331592f59d5d3bbc290c1a596',
+    'mmu.h': '2f5a6b3edde79741234fa08fbc0b1e14045e42ae472a6e90ea6cb64f1c8b9514',
+    'remesa_gem_memory.c': '0569fb6831a33ccef68fa6ba20995688ae2891a6bf22486ec9d3adb9573216c6',
+    'remesa_gem_memory.h': 'c205d6a54962aab65f9f1cfa60a38c48eb04eb2f3c46f15bc5f70d25b7c3461b',
 }
 
 
@@ -37,7 +41,8 @@ def patched_sources(native):
     accel = replace_once((native / 'accel_2d.c').read_text(),
         '#include "gma500_source_snapshot.h"\n',
         '#include "gma500_source_snapshot.h"\n'
-        '#include "remesa_twod_reservation.inc"\n')
+        '#include "remesa_twod_reservation.inc"\n'
+        '#include "remesa_twod_native.inc"\n')
     accel = replace_once(accel,
         '\tspin_lock_irqsave(&dev_priv->lock_2d, flags);\n\twhile (size > 0) {',
         '\tspin_lock_irqsave(&dev_priv->lock_2d, flags);\n'
@@ -77,8 +82,11 @@ def patched_sources(native):
         '        !remesa_route_source_begin(backend, owner->dev))')
     fixed = replace_once(fixed, '    if (fixed_irq_owner) {\n',
         '    if (fixed_irq_owner || remesa_twod_irq_busy_locked()) {\n')
+    mmu = (native / 'mmu.c').read_text() + '\n#include "remesa_mmu_verify_access.inc"\n#include "remesa_mmu_default_root.inc"\n'
+    gem = (native / 'remesa_gem_memory.c').read_text() + '\n#include "remesa_twod.c"\n#include "remesa_gem_twod.inc"\n#include "remesa_gem_twod_job.inc"\n'
     return {'psb_drv.h': header, 'accel_2d.c': accel,
-            'gma500_fixed_backend.c': fixed}
+            'gma500_fixed_backend.c': fixed, 'mmu.c': mmu,
+            'remesa_gem_memory.c': gem}
 
 
 def stage(native, output):
@@ -90,6 +98,14 @@ def stage(native, output):
     components = {name: (additions / name).read_bytes() for name in
                   ['remesa_twod_reservation.h', 'remesa_twod_reservation.inc',
                    'remesa_twod_irq.h', 'remesa_twod_irq.inc']}
+    for name in ['remesa_twod_native.h', 'remesa_twod_native.inc',
+                 'remesa_mmu_default_root.h', 'remesa_mmu_default_root.inc',
+                 'remesa_mmu_verify_access.h', 'remesa_mmu_verify_access.inc',
+                 'remesa_gem_twod.h', 'remesa_gem_twod.inc',
+                 'remesa_gem_twod_job.h', 'remesa_gem_twod_job.inc']:
+        components[name] = (additions / name).read_bytes()
+    for name in ['remesa_twod.c', 'remesa_twod.h']:
+        components[name] = (root / 'mesa/sgx535' / name).read_bytes()
     output.mkdir(parents=True)
     for source in native.iterdir():
         if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
@@ -103,7 +119,7 @@ def stage(native, output):
         'native_source': str(native.resolve()), 'pinned_inputs': PINNED,
         'output_sha256': {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
                           for name in [*patched, *components]},
-        'scope': 'Producer reservation and pre-ACK IRQ ledger; no executor, ioctl or installation',
+        'scope': 'Native 2D MMIO candidate, GEM/IRQ/MMU integration; no ioctl registration or installation',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
