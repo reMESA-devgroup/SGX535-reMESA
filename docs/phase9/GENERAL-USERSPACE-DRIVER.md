@@ -91,6 +91,11 @@ native adapter callbacks, with uncertainty holds and buffer reuse. CPU tests
 and real kernel-object compilation pass; no native MMIO adapter is installed.
 Native2D FIFO emission, pre-ACK IRQ capture and physical validation
 remain pending; the existing3D lifecycle mask is unchanged.
+The [native producer reservation](TWOD-PRODUCER-RESERVATION-20261027.md) now
+integrates with the original console submit path under its own lock, prevents
+FIFO/reset interference while reserved and requires the saved request base
+restored before release. This has CPU and real kernel-object build evidence;
+it has not been installed or physically qualified.
 
 ## First common implementation increment
 
