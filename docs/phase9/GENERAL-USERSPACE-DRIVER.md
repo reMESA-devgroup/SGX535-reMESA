@@ -894,3 +894,18 @@ ASCII/UTF16 identifier scans found only PDS buffer labels, not an identifiable
 decoder. One selected compiler path was a dangling symlink and was recorded
 as missing, not silently replaced. No unlabeled decoder is ruled out and no
 event CF/C7/F7/87/lowE0 encoder was admitted from these bounded searches.
+
+The next bounded event experiment is documented in
+[LAB-EVENT-OPERAND-PROBE.md](LAB-EVENT-OPERAND-PROBE.md). The original finalization
+audit executed CODE stores, real commit and metadata publication at two private
+RAM bases with148/160/400 capacity cuts:21 CODE writes, zero later CODE writes,
+148 effective bytes and field0c16 in each case. Only400 is the original requested
+capacity; the other cuts do not qualify a different allocation policy or GPU
+fetch length. The retained event relocation journal modifies DATA0/8/16 only.
+
+The separate LAB tool generates twelve pinned-oracle hypothesis edits with
+copy-only and original-zero controls. Its four test methods passed, including
+rejection of all148 one-byte reference corruptions and refusal to overwrite
+evidence. The generated files are not launchable or physically approved and
+cannot supply a production instruction encoder. No Mesa/kernel code, FAST
+runtime, geometry, shader implementation or execution gate changed in this step.
