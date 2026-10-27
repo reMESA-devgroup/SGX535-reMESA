@@ -14,13 +14,11 @@ On October 6 I got the first triangle back from the GPU.
 
 The next test used two indexed triangles and produced a 16x16 square.
 
-So far this is low-level experimental code, not a usable graphics driver.
+The restricted experimental path now runs the original GLXGears on real hardware at **1280×800**. The latest completed qualification recorded **600 frames / 600 GPU submissions**, with a mean of **16.1345 FPS** over six steady five-second windows (15.915–16.376 FPS, about 61.979 ms/frame). This is an observed 11.29% improvement over the earlier 14.4983 FPS snapshot run. The comparison combines kernel and presentation changes with uncontrolled CPU DVFS; it does not isolate individual optimizations.
 
-I'm already working in Mesa/Gallium now. The restricted NIR path creates and retains original shader candidates, with checked program storage, relocations, resource lifetime and draw preparation. An explicit, default-disabled laboratory path connects my NIR-generated fragment shader to the retained diagnostic job while keeping its historical VS/PDS carrier unchanged.
+The tested private build presents retired GPU COLOR through a cached read-only GEM FD and X11 shared memory. A separate six-operation physical smoke test checked full COLOR, defined Z24 bits, five input images and every X11 RGB pixel, with completion, lease revocation and teardown checks. The 600-frame application run kept diagnostic capture empty and ended cleanly.
 
-Those paths have passed offline qualification on native Linux, UBSan, i386/QEMU and the actual Mesa-built archive. That is real driver integration work, but it is not a new GPU execution result. My current original VS/PDS pipeline still needs hardware qualification, and I haven't demonstrated an accelerated OpenGL application through it.
-
-I think SGX535-reMESA is getting close to release. That's my development estimate, not a release date: I'm still working on the remaining issues, validation and optimizations. A more detailed update is coming soon.
+This remains a restricted experimental driver. The 30–60 FPS goal, unbounded continuity and general OpenGL conformance are unqualified. These results do not establish execution of every current NIR/VS/PDS candidate or a release-ready general Mesa driver. See the [October 27 physical results and evidence boundaries](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md).
 
 ## The historic Git commit — 0x07000345
 
@@ -38,7 +36,7 @@ Reproduction notes:
 - [Square](docs/reproduction/SQUARE.md)
 - [Display](docs/reproduction/DISPLAY.md)
 
-The raw results and hashes are in the repository as well. The [current technical update](docs/phase9/DEVELOPMENT-UPDATE.md) separates implementation, offline tests and hardware results; the [full historical triangle README](docs/history/README-TRIANGLE-07000345.md) is preserved separately.
+Historical raw results and hashes are in the repository as well. The [current physical results](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md) separate application measurements, physical smoke tests and offline qualification, and identify the retained local evidence. The [October 14 technical update](docs/phase9/DEVELOPMENT-UPDATE.md) records an earlier implementation checkpoint; the [full historical triangle README](docs/history/README-TRIANGLE-07000345.md) is preserved separately.
 
 ## Driver OpenGL
 My compatibility target is desktop OpenGL 2.1, with OpenGL 3.0 as an experimental research goal. Neither is verified compatibility yet.
@@ -71,7 +69,7 @@ At that investigation checkpoint, the independently written codec passed 447 off
 
 This doesn't mean the USSE instruction set is fully decoded. Several important details, including hardware register banks, instruction termination, PDS fetch behavior, and the full meaning of "0x07000345", still need verification.
 
-For now, the findings are being used to build and validate an original implementation offline. No new GPU shader submissions have been enabled.
+At that historical compiler checkpoint, the findings were being used to build and validate an original implementation offline; no new GPU shader submissions were enabled by that work. The current physical GLX results above are a later, separately qualified milestone.
 
 The interesting part is that investigating a single 32-bit word has gradually exposed much of the surrounding compiler machinery. There's still a lot to understand, but the picture is getting clearer.
 

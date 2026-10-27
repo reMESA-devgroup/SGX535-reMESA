@@ -1,5 +1,7 @@
 # Mesa/Gallium integration status
 
+> **Historical structural-pipeline checkpoint.** Later restricted original GLXGears hardware results are documented in the [October 27 physical status](PHYSICAL-GLX-STATUS-20261027.md). Statements below about unsupported execution describe this earlier path/checkpoint; they are not a current project-wide hardware status or general OpenGL conformance claim.
+
 **IMPLEMENTED_OFFLINE**, Mesa25.2.0. The new CODE subset is available through
 explicit host pipeline preparation, with the existing shader lifecycle and
 ownership checks. A complete executable PDS and functional OpenGL context are

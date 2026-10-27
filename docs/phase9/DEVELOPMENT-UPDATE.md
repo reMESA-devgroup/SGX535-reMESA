@@ -1,5 +1,7 @@
 # Phase 9 development update — October 14, 2026
 
+> **Historical checkpoint — October 14, 2026.** Later restricted original GLXGears hardware results are documented in the [October 27 physical status](PHYSICAL-GLX-STATUS-20261027.md). Statements below about unsupported execution describe this earlier path/checkpoint; they are not a current project-wide hardware status or general OpenGL conformance claim.
+
 SGX535-reMESA is getting close to release. This is a development estimate;
 remaining issues, validation and optimizations are still being worked on.
 The previous README commit predates the current Mesa implementation. A more
