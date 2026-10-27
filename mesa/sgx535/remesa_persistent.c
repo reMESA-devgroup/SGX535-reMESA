@@ -13,6 +13,11 @@
 #include <stdlib.h>
 #include <string.h>
 #define PAGE_BYTES 4096u
+struct linked_program {
+ struct remesa_shader_linkage linkage;
+ size_t offset[2],bytes[2],reserved[2];
+ struct remesa_use_entry_plan entry[2];
+};
 struct memory {
  struct remesa_token token;uint32_t handle;uint64_t va;
  size_t bytes,allocated;unsigned refs;
@@ -26,6 +31,7 @@ struct memory {
  unsigned state_kind;
  size_t state_bytes,state_use_offset,state_pds_offset,state_ta_offset,state_ta_bytes;
  struct shader_upload *shader_dependency;
+ struct linked_program *linked_program;
  uint8_t state_pds_known[REMESA_PDS_STRUCTURE_STATE_BYTES];
  uint32_t depth_width,depth_height,depth_pitch,depth_cpp;
 };
@@ -417,7 +423,7 @@ static void dispose(struct persistent *d,struct memory *b)
   quarantine(d,b);return;
  }
  struct shader_upload *dependency=b->shader_dependency;
- d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);memset(b,0,sizeof(*b));
+ d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);free(b->linked_program);memset(b,0,sizeof(*b));
  if(dependency) {
   if(!dependency->state_refs){shader_quarantine(d,dependency);return;}
   --dependency->state_refs;
@@ -1796,4 +1802,75 @@ int remesa_persistent_control_verify(struct remesa_device *device,void *object)
  e=owned_image_lease(d,b,b->control_image,REMESA_CONTROL_IMAGE_BYTES,false);
  if(e)memory_error(d,b,e);
  return e;
+}
+int remesa_persistent_linked_program_prepare(struct remesa_device *device,
+ const struct remesa_shader_linkage *link,const uint32_t banks[2],void **out)
+{
+ if(!link||!banks||!out||(uintptr_t)banks%_Alignof(uint32_t)||
+    overlaps(out,sizeof(*out),link,sizeof(*link))||
+    overlaps(out,sizeof(*out),banks,2*sizeof(*banks)))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ e=remesa_shader_linkage_validate(link);if(e)return e;
+ const uint32_t bank[2]={banks[0],banks[1]};uint32_t registers[2];
+ for(unsigned i=0;i<2;i++){e=remesa_use_base_offset(bank[i],&registers[i]);if(e)return e;}
+ if(registers[0]==registers[1])return EBUSY;
+ const struct remesa_shader_program *programs[2]={&link->vertex,&link->fragment};
+ struct remesa_shader_selected_resources resources[2];
+ /* This is a software staging bound, not an SGX instruction/resource limit. */
+ uint8_t image[512]={0};size_t offset[2],length[2],used=0;
+ for(unsigned i=0;i<2;i++){
+  e=remesa_shader_program_selected_resources(programs[i],&resources[i]);if(e)return e;
+  if(resources[i].host_alignment!=32||!resources[i].logical_use_bytes||!resources[i].reserved_use_bytes||
+     resources[i].logical_use_bytes>resources[i].reserved_use_bytes)return EPROTO;
+  used=(used+31u)&~(size_t)31u;offset[i]=used;
+  if(used>sizeof(image)||resources[i].reserved_use_bytes>sizeof(image)-used)return E2BIG;
+  e=remesa_shader_program_encode(programs[i],image+used,resources[i].reserved_use_bytes,&length[i]);
+  if(e)return e;
+  if(length[i]!=resources[i].logical_use_bytes)return EPROTO;
+  used+=resources[i].reserved_use_bytes;
+ }
+ struct linked_program *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
+ owned->linkage=*link;
+ for(unsigned i=0;i<2;i++){
+  owned->offset[i]=offset[i];owned->bytes[i]=length[i];owned->reserved[i]=resources[i].reserved_use_bytes;
+ }
+ struct persistent *d=device->priv;void *object=NULL;const size_t before=d->allocated;
+ e=allocate_class(d,used,&object,REMESA_VA_PROGRAM);
+ if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
+ struct memory *b=object;b->shader_program=true;b->linked_program=owned;
+ struct remesa_use_entry_request requests[2];
+ for(unsigned i=0;i<2;i++)requests[i]=(struct remesa_use_entry_request){
+  .allocation_address=b->va,.allocation_bytes=b->allocated,.entry_offset=offset[i],
+  .program_bytes=length[i],.bank=bank[i],.data_master=i?REMESA_USE_PIXEL:REMESA_USE_VERTEX};
+ e=remesa_use_entry_pair_prepare(requests,owned->entry);if(e)goto fail;
+ e=owned_image_lease(d,b,image,used,true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,used,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);
+ if(b->live){*out=b;return EOWNERDEAD;}
+ return e;
+}
+int remesa_persistent_linked_program_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_program_backing *out)
+{
+ struct remesa_persistent_memory_backing memory;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ e=remesa_persistent_memory_snapshot(device,object,&memory);if(e)return e;
+ struct memory *b=object;
+ if(!b->shader_program||!b->linked_program)return EINVAL;
+ if(!b->readable)return EAGAIN;
+ const struct linked_program *owned=b->linked_program;
+ struct remesa_persistent_linked_program_backing value={
+  .owner=memory.owner,.generation=memory.generation,.gpu_va=memory.gpu_va,
+  .handle=memory.handle,.allocation_bytes=memory.allocation_bytes};
+ for(unsigned i=0;i<2;i++){
+  value.program_offset[i]=owned->offset[i];value.program_bytes[i]=owned->bytes[i];
+  value.reserved_bytes[i]=owned->reserved[i];value.entry[i]=owned->entry[i];
+ }
+ *out=value;return 0;
 }

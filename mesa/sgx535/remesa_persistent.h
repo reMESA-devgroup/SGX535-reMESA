@@ -350,6 +350,28 @@ struct remesa_persistent_shader_gpu_backing {
  * is unchanged on failure and requires external serialization with teardown. */
 int remesa_persistent_shader_gpu_backing(const struct remesa_device *,void *token,
  struct remesa_persistent_shader_gpu_backing *);
+struct remesa_shader_linkage;
+/* Common shader CODE ownership, independent of the legacy shader-image token.
+ * Generates bytes from the owned semantic pair using the selected-resource
+ * compiler, then allocates/pins/maps in the existing PROGRAM VA domain.
+ * Reserved capacity is zeroed but is never counted as effective CODE.
+ * No PDS task, bank lease, job, submission or execution permission is granted.
+ * Empty disjoint output required. Destroy through device.ops->destroy_bo.
+ * Uncertain failures retain backing; a non-NULL output transfers ownership
+ * even on error. Endpoint close may refuse until known-good recovery.
+ */
+int remesa_persistent_linked_program_prepare(struct remesa_device *,
+ const struct remesa_shader_linkage *,const uint32_t banks[2],void **bo);
+struct remesa_persistent_linked_program_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t allocation_bytes,program_offset[2],program_bytes[2],reserved_bytes[2];
+ struct remesa_use_entry_plan entry[2];
+};
+/* Bounded metadata only, without hashing/readback. Caller serializes object
+ * destruction and must acquire kernel job holds before GPU use. */
+int remesa_persistent_linked_program_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_program_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

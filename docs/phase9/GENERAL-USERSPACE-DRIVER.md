@@ -6,6 +6,13 @@ comes later. The initial physical target remains antiX i686 on the Dell Mini
 12, PCI 8086:8108, SGX535 rev121. No OpenGL version/conformance or general
 acceleration is currently claimed.
 
+The user requires paired 1280×800 and 640×640 validation for rendering
+candidates, on both desktop OpenGL and GLES 2.0. Exercise 641×479 occasionally
+for odd dimensions, pitch, tile boundaries and clipping. Record each API/size
+result separately: a pass at one size cannot approve another, and the retained
+1280×800 gears results do not establish the other sizes. Initial checks remain
+offscreen; X11 window integration is later work.
+
 ## Reuse the physical results
 
 The restricted gears path establishes real GPU execution, vertex processing,
@@ -78,3 +85,64 @@ OpenGL and GLES contexts independently through the same backend; a successful
 CPU fixture, context creation, software fallback or X11 image is not physical
 GPU validation. Initial offscreen tests must prove submit, retirement, expected
 readback and released backing on the SGX535 before packaging is promoted.
+
+## Linked program CODE ownership
+
+`remesa_persistent_linked_program_prepare()` now accepts the common semantic
+link, generates CODE through the existing selected-resource compiler, and
+publishes an immutable PROGRAM-domain GEM allocation through the existing
+owner/VA/lease machinery. Its metadata snapshot performs no ioctl or buffer
+comparison. Destruction still defers while a CPU lease survives; uncertain
+provider effects retain quarantine and prevent forced cleanup.
+
+For the currently admitted producer, VS CODE is 64 effective bytes in 144
+reserved bytes. The constant FS has 8 effective/reserved bytes; the varying
+COLOR0 FS has 8 effective bytes in 16 reserved bytes. The second entry begins
+at byte 160 after alignment. Reserved bytes and padding are zero, not extra
+instructions. These sizes do not claim how many bytes an untested GPU launch
+would fetch.
+
+The focused owner regression includes the older persistent-shader regression:
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py \
+  --source-only --test test_linked_program_owner.c \
+  --cache "$MESA_CACHE" --output /tmp/remesa-linked-owner
+```
+
+Native, UBSan and i386 source tests passed, as did a private archive variant
+using the actual Mesa compilation model. The original Mesa cache/archive and
+its referenced objects were retained unchanged. The resource probe is
+`tools/remesa/linked_program_resource_probe.c`; it is a separate qualification
+tool, not an installed renderer or launcher.
+
+On the physical Mini 12, the exact probe completed 84 memory ioctls, full CODE
+readback, PTE ownership checks, two final empty GEM INFO results and context
+close. A varying program remained allocated while COLOR/Z storage was created
+and destroyed for all three selected sizes:
+
+| Size | COLOR stride | COLOR allocation | Z allocation |
+| --- | --- | --- | --- |
+| 1280×800 | 5120 B | 4,096,000 B | 4,096,000 B |
+| 640×640 | 2560 B | 1,638,400 B | 1,638,400 B |
+| 641×479 | 2688 B | 1,290,240 B | 1,290,240 B |
+
+This was **resource-only**: zero GPU submissions and zero GL/EGL contexts.
+It does not approve rendering at these dimensions or either API. The 400
+program metadata snapshots generated no additional ioctls. Independent cleanup
+confirmed the client had exited, N/N/N controls, quiet source state, stock next
+boot, unchanged legacy capsule and no new kernel warnings.
+
+Local evidence is retained under
+`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/`:
+`LINKED_CODE_PHYSICAL_RESULTS.json`, `RESOURCE_TRANSCRIPT_RESULTS.json`,
+`hardware/resource-ended/FINAL_AUDIT.json` and
+`hardware/RESOURCE_EVIDENCE_MANIFEST.json`. The transcript auditor and nine
+negative tamper cases are in `tools/remesa/verify_linked_program_resources.py`
+and `mesa/sgx535/tests/test_linked_resource_transcript.py`. Their scope is
+memory ownership/upload and cleanup, not instruction execution or conformance.
+
+Next, derive PDS and raw geometry bindings from these live owners, retain the
+complete fetched allocation set until retirement, and connect typed dynamic
+submission. Do not lift the fixed gears-profile guard, activate the historical
+CPU transform route, or advertise general GL/GLES capability to skip that work.
