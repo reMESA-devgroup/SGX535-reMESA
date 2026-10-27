@@ -62,6 +62,10 @@ The next headache is reaching the **30–60 FPS goal**, qualifying longer contin
 
 <br clear="all">
 
+## Reproducing GLXGears
+
+The [GLXGears reproduction guide](docs/reproduction/GLXGEARS.md) separates public checkout/build checks from the qualified kernel, private bundle and actual GPU command used for the 1280×800 run. The current direct-FD build and boot artifacts are not yet published as a complete reproducible package; cloning this repository alone does not reproduce the measured 16.1345 FPS. The guide records the exact requirements and remaining publication gaps.
+
 ## The historic Git commit — `0x07000345`
 
 <img src="assets/pipocaohno.gif" align="right" width="110" alt="Pipoca reacting to 0x07000345">
