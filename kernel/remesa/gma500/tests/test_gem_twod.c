@@ -10,6 +10,10 @@ static void *kvcalloc(size_t n,size_t size,int flags)
 static void kvfree(void *p){free(p);}
 static void sort(void *p,size_t n,size_t size,int(*cmp)(const void*,const void*),void *swap)
 {assert(!swap);qsort(p,n,size,cmp);}
+static int access_bad;
+/* The exact raw-PTE implementation is exercised separately by the MMU model. */
+int psb_mmu_verify_cached_rw_pages(struct psb_mmu_pd *pd,u64 va,struct page **pages,u32 n)
+{return access_bad?-EACCES:psb_mmu_verify_pages(pd,va,pages,n);}
 #include "../remesa_gem_twod.inc"
 static unsigned checks;
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"failure line%d: %s\n",__LINE__,#x);abort();}}while(0)
@@ -71,7 +75,7 @@ static void one(unsigned width,unsigned height,int same)
   struct remesa_memory_ticket wrong=ticket;wrong.generation++;negative(s,wrong,-ENOENT);
   /* Faults stay in child CPU models; no device backing is discarded as if
    * it had retired. Parent joins each process and retains its valid fixture. */
-  for(unsigned mode=0;mode<2;mode++){
+  for(unsigned mode=0;mode<3;mode++){
    pid_t child=fork();CHECK(child>=0);
    if(!child){
     unsigned at;for(at=0;at<4096;at++)if(test_pt[at].live&&test_pt[at].va==a->va.start)break;
@@ -81,7 +85,8 @@ static void one(unsigned width,unsigned height,int same)
      negative(s,ticket,-EACCES);CHECK(a->holds==1&&b->holds==1);
     }else{
      struct remesa_twod_copy_plan unchanged,previous;enum remesa_job_state state;
-     memset(&unchanged,0xa5,sizeof unchanged);previous=unchanged;test_pt[at].pfn^=1;
+     memset(&unchanged,0xa5,sizeof unchanged);previous=unchanged;
+     if(mode==1)test_pt[at].pfn^=1;else access_bad=1;
      CHECK(validate(s,ticket,&unchanged)==-EIO);CHECK(!memcmp(&unchanged,&previous,sizeof unchanged));
      CHECK(!remesa_gem_job_state(s,ticket,&state)&&state==REMESA_JOB_QUARANTINED);
      CHECK(a->holds==1&&b->holds==1);CHECK(remesa_gem_job_cancel(s,ticket)==-EBUSY);

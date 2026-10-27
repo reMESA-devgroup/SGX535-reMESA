@@ -12,12 +12,15 @@ and binding count, GPU VAs, complete BO lengths and initialized source backing.
 Same-BO overlap holds one allocation. Different BOs require two matching
 bindings, in source/destination order; high bits cannot truncate into an ID.
 
-The existing binding verifier authenticates every PTE/PFN and ownership hold.
-This verifier checks VALID/PFN identity, **not all access/cache flag bits**;
-permission/cache validation remains part of the unfinished native issue
-contract. The backing service itself creates cached read/write mappings and
-does not expose caller-selected PTE flags. This preflight grants no execution
-permission based solely on those constructor facts.
+The 2D preflight now authenticates ownership holds and exact cached read/write
+mappings through `psb_mmu_verify_cached_rw_pages`. Under the MMU read semaphore
+and table spinlock it checks the complete PDE and PTE words, table ownership,
+index/count and 20-bit physical frame bounds. It rejects permission, cache,
+unknown-bit and frame changes. This matches the existing cached-RW mapping
+constructor; it does not change the older generic 3D verifier. It reads tables
+without modifying them, allocating, publishing a TLB or granting execution.
+CPU/GPU coherency and authentication of the hardware-selected root remain
+part of native issue integration.
 
 The pinned-frame alias check sorts PFNs from the held page arrays. This checks
 a distinct property rather than repeating the virtual-to-PFN walk. It rejects
@@ -86,3 +89,30 @@ holds, followed by physical readback/guards on rev121. No new acceleration is
 advertised before that evidence. One read-only Mini12 availability check timed
 out; the user subsequently reported that it was off and would turn it on.
 No MMIO, upload, boot change or GPU operation occurred in this step.
+
+
+## Exact mapping-access follow-up
+
+Evidence: `/home/gama/sgx535-offline/twod-native-20261027/RESULT.json`.
+Native, UBSan and i386 each pass 614 checks executing the actual new MMU
+verifier with explicit CPU page/locking shims, plus 147 GEM preflight checks.
+Coverage includes cross-directory boundaries, the last 32-bit page, all bit
+mutations in sampled PDE/PTE words, missing/foreign tables, bad counts, NULL
+pages and out-of-range PFNs. Full fixture snapshots remain unchanged and
+map/lock calls balance. A third joined GEM child injects access failure and
+confirms quarantine and retained holds. These are CPU tests, not GPU execution.
+
+Both complete original antiX GEM and MMU translation units compile in a private
+copy using their retained actual i686 build commands. Original source and
+command hashes remain unchanged. No executor or ioctl is registered.
+
+Mini12 is reachable again: `MINI12_READONLY_BOOT.json` records boot
+`2df880f9-ae95-4c98-963f-543398a19b58`, kernel
+`5.10.240-antix.1-486-smp` and PCI 8086:8108. This is metadata only; PCI
+revision is not a new SGX core-revision measurement. No module installation,
+MMIO or GPU job was performed by that check.
+
+The IRQ source confirms that `psb_sgx_interrupt` acknowledges the complete
+observed status words. The future owned 2D event capture therefore must happen
+before that acknowledgment, under the existing shared IRQ lock. The FENCE
+packet word alone does not establish completion, visibility or retirement.

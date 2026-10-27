@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Include in the existing GEM memory service translation unit. */
 #include "remesa_gem_twod.h"
+#include "remesa_mmu_verify_access.h"
 #ifdef __KERNEL__
 #include <linux/sort.h>
 #endif
@@ -32,7 +33,15 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
  if(j->count!=count||command.copy.source.allocation_id!=j->ids[0]||
     command.copy.destination.allocation_id!=j->ids[count-1])return -EACCES;
  /* One existing PTE/hold authentication pass, no extra virtual-to-PFN walk. */
- error=verify_job_bindings(s,j,uses);if(error)return job_fault(s,j,error);
+ for(i=0;i<count;i++){
+  b=&s->bo[j->ids[i]&31];
+  if(!b->live||b->generation!=j->ids[i]>>5||b->quarantine||!b->holds||
+     b->lease||!b->pinned||!b->reserved||b->inserted!=b->gem.size/PAGE_SIZE)
+   return job_fault(s,j,-EIO);
+  error=psb_mmu_verify_cached_rw_pages(s->pd,b->va.start,b->pages,b->inserted);
+  if(error)return job_fault(s,j,-EIO);
+  uses[i]=(struct remesa_memory_binding){j->ids[i],b->va.start,b->gem.size};
+ }
  source=&s->bo[j->ids[0]&31];destination=&s->bo[j->ids[count-1]&31];
  if(command.copy.source.gpu_address!=uses[0].va||command.copy.source.bytes!=uses[0].bytes||
     command.copy.destination.gpu_address!=uses[count-1].va||
