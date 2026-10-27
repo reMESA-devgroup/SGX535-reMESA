@@ -325,3 +325,38 @@ against the same new archive. The strict no-NIR Gallium regression passed in
 `linked-vertex-no-nir-regression/result.json` before the final NIR-only early
 user-index alias guard. All test providers are simulated: zero GPU submissions,
 zero GL/EGL API contexts and no new physical rendering approval.
+
+## Ordered dynamic TA draw body
+
+`remesa_persistent_linked_body_prepare()` assembles owned draw-state references
+and indexed commands in application order, then emits the existing owned
+scene-close command. Each draw contributes exactly 28 bytes (state reference8
+and index command20), followed by close12. One draw therefore commits 40 bytes;
+sixteen commit 460 bytes, in a page allocation. The unused space stays zero.
+The bound of sixteen draws is a preparation policy, not a GPU capability.
+
+The constructor takes live state/close owners and index subranges, rather than
+caller addresses or raw command words. It checks framebuffer dimensions and
+all shader/state/close bank register values across the body before allocation.
+It deduplicates dependency holds, supports multiple bodies sharing states,
+and retains the full state→PDS→CODE/geometry chain through CPU read leases and
+uncertain upload/disposal failures. A prior release of the public CODE/PDS/
+geometry references does not invalidate the state owner's retained closure.
+Writable mappings, legacy color submission and render-target reinterpretation
+remain rejected for this new command object.
+
+This is a **draw body**, not a complete executable scene: initial bounds/clear
+commands, attachments, auxiliary raster programs and native submission are
+still absent. Appending the original close command does not prove completion
+or authorize a GPU launch. No fixed-profile kernel guard or capability flag
+has changed.
+
+`mesa/sgx535/tests/test_linked_body.c` passed native/UBSan/i386 and the actual
+Mesa compilation model. It covers all three chosen dimensions as storage
+tests, repeated and distinct states, exact ordering and command sizes,
+deduplicated/shared owner lifetime, zero padding, metadata without IO,
+dimension/bank conflict rejection before allocation, index limits, ordinary
+rollback and uncertain retention. The first fixture failed compilation because
+of a nested `main` macro; its original log remains preserved in `linked-body-v1`.
+The independent corrected fixture results are `linked-body-v2/result.json` and
+`private-mesa-linked-body/RESULT.json` in the current artifact directory.

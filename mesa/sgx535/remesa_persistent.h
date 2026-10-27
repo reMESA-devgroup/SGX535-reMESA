@@ -443,6 +443,25 @@ struct remesa_persistent_linked_state_backing {
 };
 int remesa_persistent_linked_state_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_state_backing *);
+/* Ordered dynamic draw-body storage: (state reference8 + indexed draw20)*N
+ * followed by the owned scene-close12. Not an initial scene: bounds/clears,
+ * attachments, auxiliary raster programs and native submission are separate.
+ * The stream retains each distinct state and close owner; states transitively
+ * retain PDS/CODE/geometry. No user VA, raw command bytes or GPU permission.
+ * All state/shader banks must agree across the complete body; incompatible
+ * register values reject before allocation. Caller serializes owner access.
+ */
+#define REMESA_LINKED_BODY_MAX_DRAWS 16u
+struct remesa_linked_body_draw {void *state;uint32_t first_index,index_count;};
+int remesa_persistent_linked_body_prepare(struct remesa_device *,
+ const struct remesa_linked_body_draw *,size_t count,void *scene_close,void **bo);
+struct remesa_persistent_linked_body_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,draw_count,dependency_count;
+ size_t allocation_bytes,command_bytes,close_offset;
+};
+int remesa_persistent_linked_body_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_body_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
