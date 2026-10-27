@@ -23,6 +23,19 @@ struct remesa_usse_cpu_control_ee {
 };
 int remesa_usse_cpu_control_ee_encode(const struct remesa_usse_cpu_control_ee *,
  void *,size_t,size_t *written);
+/* Original PSB event auxiliary CPU producers, distinct from selector EE.
+ * end: one zero-initialized record from ELF30422 + finalizer30fb7, eight
+ * effective bytes. transfer: ELF391e0, sixteen effective bytes; admits only
+ * the caller392ab modes 0/1/3 (surface tags other/2/1 respectively).
+ * These names identify constructor roles, not inferred ISA semantics.
+ * No reservation/fetch-width, execution permission or new GPU qualification
+ * follows from successful encoding. No copied executable template is used.
+ * Output and written remain unchanged on all errors; padding is untouched. */
+#define REMESA_USSE_PSB_EVENT_END_BYTES 8u
+#define REMESA_USSE_PSB_EVENT_TRANSFER_BYTES 16u
+int remesa_usse_psb_event_end_encode(void *,size_t,size_t *written);
+int remesa_usse_psb_event_transfer_encode(uint32_t mode,void *,size_t,
+ size_t *written);
 #define REMESA_USSE_HOST_HEADER_BYTES 16u
 #define REMESA_USSE_HOST_INSTRUCTION_BYTES 24u
 

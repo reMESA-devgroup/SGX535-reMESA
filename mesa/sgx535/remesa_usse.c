@@ -258,6 +258,37 @@ int remesa_usse_cpu_move_encode(const struct remesa_usse_cpu_move *move,
  put32(bytes,first);put32(bytes+4,second);
  memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
 }
+int remesa_usse_psb_event_end_encode(void *out,size_t capacity,size_t *written)
+{
+ if((uintptr_t)written%_Alignof(size_t))return EINVAL;
+ int error=candidate_output_valid(out,capacity,8,written);if(error)return error;
+ /* Original zeroing slot allocator2fabd; writer30422 sets byte5 bit7,
+  * byte6 bits5:4 and byte7=f8; finalizer30fb7 adds byte6 bit2.
+  * This is not the existing selectorEE writer and not an invented END flag. */
+ unsigned char bytes[8];put32(bytes,0);
+ put32(bytes+4,(31u<<27)|(3u<<20)|(1u<<15)|(1u<<18));
+ memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
+}
+int remesa_usse_psb_event_transfer_encode(uint32_t mode,void *out,
+ size_t capacity,size_t *written)
+{
+ if((uintptr_t)written%_Alignof(size_t))return EINVAL;
+ int error=candidate_output_valid(out,capacity,16,written);if(error)return error;
+ if(mode!=0&&mode!=1&&mode!=3)return ENOTSUP;
+ /* Original CPU arithmetic391e0, not inferred physical register names.
+  * First pair numeric fields: sources [2,3,0], classes [1,2,0],
+  * word0 controls21/26; word1 major31/subgroup3/control21.
+  * Second pair derives disjoint fields from t=(mode<<6)|0x204.
+  * The assembly includes (t<<22)&0xfc00000: decompiler folding to
+  * a constant must not silently erase this producer contribution. */
+ uint32_t t=(mode<<6)|0x204u;
+ uint32_t first=(2u<<30)|(1u<<26)|(1u<<21)|(2u<<14)|(3u<<7);
+ uint32_t control=(31u<<27)|(3u<<24)|(1u<<21)|(1u<<2);
+ unsigned char bytes[16];put32(bytes,first);put32(bytes+4,control);
+ put32(bytes+8,(2u<<30)|(1u<<21)|(1u<<7)|((t<<22)&0x0fc00000u));
+ put32(bytes+12,control|(1u<<18)|((t<<10)&0x00c00000u)|((t>>3)&0x1f8u));
+ memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
+}
 int remesa_usse_cpu_move_decode(const void *bytes,size_t length,
  struct remesa_usse_cpu_move *out)
 {

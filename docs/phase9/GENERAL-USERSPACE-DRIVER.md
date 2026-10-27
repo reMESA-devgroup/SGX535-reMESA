@@ -6,6 +6,11 @@ comes later. The initial physical target remains antiX i686 on the Dell Mini
 12, PCI 8086:8108, SGX535 rev121. No OpenGL version/conformance or general
 acceleration is currently claimed.
 
+Video acceleration is a subsequent user-requested milestone after general
+3D/2D acceleration and the installable driver. Decoder capability, its separate
+hardware/firmware interfaces, API integration and physical playback must be
+qualified independently; SGX rendering does not establish video decoding.
+
 The user requires paired 1280×800 and 640×640 validation for rendering
 candidates, on both desktop OpenGL and GLES 2.0. Exercise 641×479 occasionally
 for odd dimensions, pitch, tile boundaries and clipping. Record each API/size
@@ -587,10 +592,60 @@ python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
   < "$EVENT_EVIDENCE/original-data-oracles.txt"
 ```
 
-Concrete remaining event work is the original complete CODE84 and both USE
-auxiliary contracts, then owned relocation/closure and native qualification.
+Concrete remaining event work is the original complete CODE84, then owned
+relocation/closure and native qualification. The auxiliary CPU codecs below
+do not qualify a complete event or its execution.
 The existing event forward-index encoder covers only the two demonstrated
 position-relative words; it does not complete the other instruction classes.
 Do not import the old binary as an independently implemented event, infer
 unproved operands, or enable the native gate because DATA64 matches. DPM,
 complete raster/submission and API rendering remain unqualified.
+
+## Original event USE auxiliaries
+
+`remesa_usse_psb_event_end_encode()` emits the eight effective bytes produced
+by the original zeroing slot allocator (`2fabd`), writer (`30422`) and separate
+finalizer (`30fb7`). The finalizer sets word1 bit18; no broader architectural
+meaning is assigned to that bit. This producer differs from selector EE, whose
+encoder remains unchanged.
+
+`remesa_usse_psb_event_transfer_encode()` implements the CPU field arithmetic
+of original PSB `391e0`. Only modes 0, 1 and 3 from caller `392ab` are accepted
+(surface tags other, 2 and 1 respectively). In particular BGRA tag4 uses mode0.
+The assembly derives a word0 field from `(t << 22) & 0x0fc00000`, with
+`t=(mode << 6)|0x204`; the decompiled constant does not describe that general
+arithmetic. The admitted modes currently produce the same value in that field.
+No additional modes, operand meanings or physical bank permissions are inferred.
+
+Both implementations build little-endian numeric fields, with no executable
+blob imported into the product. Capacity is separate from the 8/16 effective
+bytes: excess output remains untouched and is not additional CODE or proven
+GPU-consumed data. Unsupported modes, insufficient capacity and invalid or
+overlapping output/count ranges fail without mutation.
+
+Evidence is under the current artifact directory, `event-use-auxiliaries/`:
+`REPLAY.py`, `RESULT.json`, `oracles.txt`, `end-producer.asm`,
+`transfer-producer.asm`, and `qualified/result.json`. The replay executes the
+original writer/finalizer/commit and transfer constructor/commit with explicitly
+mocked CPU allocation or supplied builder-init fields. It admits bounded PCs,
+checks committed sizes and surrounding sentinels, and matches the retained
+physical role1 spans at offsets 0x100 (end8) and 0xe0 (mode0 transfer16).
+This is controlled CPU replay plus historical correspondence, not a new GPU
+test. Native, UBSan and i386 tests consume the four original records on stdin.
+Each variant passes 653 checks. A private seven-object variant built with the
+actual Mesa compilation model also passes the auxiliary test, followed by ten
+existing owner/Gallium/NIR regressions. Receipts are
+`private-mesa-event-auxiliaries/RESULT.json` and
+`event-auxiliaries-regressions/RESULT.json`. The original Mesa thin archive and
+every referenced original object remain unchanged; this is not an installable
+DRI build or a physical rendering result.
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_psb_event_auxiliaries.c --cache "$MESA_CACHE" \
+  --output /tmp/remesa-event-auxiliaries < "$EVENT_USE_EVIDENCE/oracles.txt"
+```
+
+No native submission gate, GL/GLES capability, geometry/shader profile or
+physical boot configuration is changed by these auxiliary encoders. The next
+event blocker is independently generating its complete CODE84.
