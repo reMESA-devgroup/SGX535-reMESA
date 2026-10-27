@@ -81,6 +81,32 @@ int remesa_shader_draw_programs_validate(const struct remesa_shader_draw_program
  * its normalized lowering and correlation identity are unchanged. */
 int remesa_shader_draw_programs_revalidate(const struct remesa_shader_draw_programs *,
  const struct remesa_shader_program *vertex,const struct remesa_shader_program *fragment);
+
+/* Common desktop-GL/GLES frontend linkage, independent of the legacy
+ * constant-fragment pipeline. These are owned semantic snapshots, not shader
+ * BOs, GPU addresses or permission to execute. The older pipeline API keeps
+ * its restrictions. Only currently understood IO profiles are linkable. */
+enum remesa_fragment_input_profile {
+ REMESA_FRAGMENT_CONSTANT = 1,
+ REMESA_FRAGMENT_COLOR0_SMOOTH,
+ REMESA_FRAGMENT_COLOR0_FLAT
+};
+struct remesa_shader_linkage {
+ struct remesa_shader_program vertex,fragment;
+ struct remesa_shader_vertex_layout vertex_layout;
+ enum remesa_fragment_input_profile fragment_input;
+ uint32_t fragment_argb; /* zero for varying input; never a replacement color */
+};
+/* Allocation-free and transactional. Requires POSITION4 and a matching
+ * COLOR0 float4 producer when FS consumes COLOR0. Flat interpolation still
+ * requires independently supported raster/provoking state at draw admission.
+ * Compilation, PDS/resource allocation and execution qualification remain
+ * separate; no legacy submit callback is enabled by a successful link. */
+int remesa_shader_linkage_prepare(const struct remesa_shader_program *vertex,
+ const struct remesa_shader_program *fragment,struct remesa_shader_linkage *);
+int remesa_shader_linkage_validate(const struct remesa_shader_linkage *);
+int remesa_shader_linkage_revalidate(const struct remesa_shader_linkage *,
+ const struct remesa_shader_program *vertex,const struct remesa_shader_program *fragment);
 /* Immutable preparation for the original native path. Owns the complete
  * semantic VS/FS pair and the independently serialized fragment CPU candidate.
  * Magenta/green prefer the one-record packed-constant candidate; the larger

@@ -264,6 +264,57 @@ int remesa_shader_draw_programs_revalidate(const struct remesa_shader_draw_progr
  error=remesa_shader_program_validate(fragment);if(error)return error;
  return same_program(&programs->vertex,vertex)&&same_program(&programs->fragment,fragment) ? 0 : ESTALE;
 }
+int remesa_shader_linkage_prepare(const struct remesa_shader_program *vertex,
+ const struct remesa_shader_program *fragment,struct remesa_shader_linkage *out)
+{
+ if(!vertex||!fragment||!out||overlaps(out,sizeof(*out),vertex,sizeof(*vertex))||
+    overlaps(out,sizeof(*out),fragment,sizeof(*fragment)))return EINVAL;
+ int error=remesa_shader_program_validate(vertex);if(error)return error;
+ error=remesa_shader_program_validate(fragment);if(error)return error;
+ if(vertex->semantic.stage!=REMESA_IR_VERTEX||fragment->semantic.stage!=REMESA_IR_FRAGMENT)
+  return ENOTSUP;
+ struct remesa_shader_linkage link={0};
+ error=remesa_shader_ir_vertex_layout(&vertex->semantic,&link.vertex_layout);
+ if(error)return error;
+ if(link.vertex_layout.position_components!=4)return ENOTSUP;
+ if(!remesa_shader_ir_fragment_flat_color_input(&fragment->semantic))
+  link.fragment_input=REMESA_FRAGMENT_COLOR0_FLAT;
+ else if(!remesa_shader_ir_fragment_color_input(&fragment->semantic))
+  link.fragment_input=REMESA_FRAGMENT_COLOR0_SMOOTH;
+ else {
+  error=remesa_shader_ir_fragment_color(&fragment->semantic,&link.fragment_argb);
+  if(error)return error;
+  link.fragment_input=REMESA_FRAGMENT_CONSTANT;
+ }
+ if(link.fragment_input!=REMESA_FRAGMENT_CONSTANT&&
+    (link.vertex_layout.color_components!=4||link.vertex_layout.output_dwords!=8))
+  return ENOTSUP;
+ link.vertex=*vertex;link.fragment=*fragment;*out=link;return 0;
+}
+int remesa_shader_linkage_validate(const struct remesa_shader_linkage *link)
+{
+ if(!link)return EINVAL;
+ struct remesa_shader_linkage current;
+ int error=remesa_shader_linkage_prepare(&link->vertex,&link->fragment,&current);
+ if(error)return error;
+ const struct remesa_shader_vertex_layout *a=&link->vertex_layout,*b=&current.vertex_layout;
+ if(link->fragment_input!=current.fragment_input||link->fragment_argb!=current.fragment_argb||
+    a->input_count!=b->input_count||a->stride_dwords!=b->stride_dwords||
+    a->position_components!=b->position_components||a->color_components!=b->color_components||
+    a->output_dwords!=b->output_dwords)return EPROTO;
+ for(unsigned i=0;i<3;i++)
+  if(a->input_slot[i]!=b->input_slot[i]||a->input_components[i]!=b->input_components[i])return EPROTO;
+ return 0;
+}
+int remesa_shader_linkage_revalidate(const struct remesa_shader_linkage *link,
+ const struct remesa_shader_program *vertex,const struct remesa_shader_program *fragment)
+{
+ if(!vertex||!fragment)return EINVAL;
+ int error=remesa_shader_linkage_validate(link);if(error)return error;
+ error=remesa_shader_program_validate(vertex);if(error)return error;
+ error=remesa_shader_program_validate(fragment);if(error)return error;
+ return same_program(&link->vertex,vertex)&&same_program(&link->fragment,fragment)?0:ESTALE;
+}
 struct remesa_shader_image {
  struct remesa_shader_draw_programs programs;
  struct remesa_shader_storage *fragment,*vertex;

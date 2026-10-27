@@ -7,6 +7,46 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+static void varying_linkage(void)
+{
+ const nir_shader_compiler_options options={0};
+ nir_builder vs=nir_builder_init_simple_shader(MESA_SHADER_VERTEX,&options,"common varying producer");
+ vs.shader->info.io_lowered=true;
+ nir_def *zero=nir_imm_int(&vs,0),*inputs[3];
+ for(unsigned n=0;n<3;n++)inputs[n]=nir_load_input(&vs,4,32,zero,.base=n,
+  .dest_type=nir_type_float32,.io_semantics={.location=VERT_ATTRIB_GENERIC0+n,.num_slots=1});
+ nir_def *light=nir_fsat(&vs,nir_fdot3(&vs,inputs[1],inputs[2]));
+ nir_store_output(&vs,inputs[0],zero,.base=0,.write_mask=15,.src_type=nir_type_float32,
+  .io_semantics={.location=VARYING_SLOT_POS,.num_slots=1});
+ nir_store_output(&vs,nir_vec4(&vs,light,light,light,light),zero,.base=1,
+  .write_mask=15,.src_type=nir_type_float32,.io_semantics={.location=VARYING_SLOT_COL0,.num_slots=1});
+ struct remesa_shader_ir ir;
+ struct remesa_shader_program vertex;
+ assert(!remesa_shader_ir_lower(vs.shader,&ir));
+ assert(!remesa_shader_program_prepare(&ir,&vertex));
+ ralloc_free(vs.shader);
+ for(unsigned flat=0;flat<2;flat++){
+  nir_builder fs=nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,&options,"common varying consumer");
+  nir_variable *in=nir_variable_create(fs.shader,nir_var_shader_in,glsl_vec4_type(),"color");
+  nir_variable *out=nir_variable_create(fs.shader,nir_var_shader_out,glsl_vec4_type(),"result");
+  in->data.location=VARYING_SLOT_COL0;
+  if(flat)in->data.interpolation=INTERP_MODE_FLAT;
+  out->data.location=FRAG_RESULT_DATA0;
+  nir_store_deref(&fs,nir_build_deref_var(&fs,out),nir_load_deref(&fs,nir_build_deref_var(&fs,in)),15);
+  struct remesa_shader_program fragment;
+  assert(!remesa_shader_ir_lower(fs.shader,&ir));
+  assert(!remesa_shader_program_prepare(&ir,&fragment));
+  ralloc_free(fs.shader);
+  struct remesa_shader_linkage link;
+  assert(!remesa_shader_linkage_prepare(&vertex,&fragment,&link));
+  assert(!remesa_shader_linkage_validate(&link));
+  assert(link.vertex_layout.input_count==3&&link.vertex_layout.output_dwords==8);
+  assert(link.fragment_input==(flat?REMESA_FRAGMENT_COLOR0_FLAT:REMESA_FRAGMENT_COLOR0_SMOOTH));
+  assert(!remesa_shader_linkage_revalidate(&link,&vertex,&fragment));
+  struct remesa_shader_pipeline legacy;
+  assert(remesa_shader_pipeline_prepare(&vertex,&fragment,&legacy)==ENOTSUP);
+ }
+}
 int main(void)
 {
  const nir_shader_compiler_options options={0};unsigned cases=0;glsl_type_singleton_init_or_ref();
@@ -68,5 +108,6 @@ int main(void)
   }else assert(error&&!memcmp(&p,&original,sizeof(p)));
   cases++;ralloc_free(b.shader);
  }
- glsl_type_singleton_decref();printf("PASS %u actual Mesa NIR lowering cases; admitted shaders preview PDS candidates, no GPU\n",cases);return 0;
+ varying_linkage();
+ glsl_type_singleton_decref();printf("PASS %u actual Mesa NIR lowering cases plus smooth/flat producer-consumer linking after NIR destruction; no GPU\n",cases);return 0;
 }
