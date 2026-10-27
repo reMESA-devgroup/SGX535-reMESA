@@ -15,6 +15,16 @@ int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *);
 struct pipe_context; struct pipe_resource; struct pipe_fence_handle;
 struct remesa_shader_program_report;
 struct remesa_shader_pipeline;
+struct remesa_shader_linkage;
+/* Copy the current context-owned VS/FS into the common desktop/GLES link.
+ * Includes POSITION/COLOR0 IO and interpolation metadata, independent of the
+ * older constant-fragment draw ABI. Uniform specialization needs synchronized
+ * draw resources and remains unsupported here. No state/error mutation,
+ * allocation, GPU upload, draw admission or capability change. The snapshot
+ * remains valid after shader deletion/context teardown. Output is disjoint
+ * from the context, screen and owned shader handles; unchanged on error. */
+int remesa_context_shader_linkage_snapshot(struct pipe_context *,
+ struct remesa_shader_linkage *);
 struct remesa_shader_pipeline_launch;struct remesa_pds_request;
 /* Latest create_vs/create_fs result, retained independently of transient
  * context_error resets by binds, transfers or draws. A successful semantic

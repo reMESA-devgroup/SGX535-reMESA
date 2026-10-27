@@ -44,6 +44,18 @@ static int map(void *p,void *o,bool w,void **out){(void)p;(void)o;(void)w;(void)
 static void unmap(void *p,void *o,bool w){(void)p;(void)o;(void)w;}
 static int submit(void *p,void *o,const struct remesa_draw_packet *q,void **f){(void)p;(void)o;(void)q;(void)f;assert(!"no submit");return ENOTSUP;}
 static int wait(void *p,void *o,uint64_t n,bool v){(void)p;(void)o;(void)n;(void)v;return ENOTSUP;}
+static nir_shader *linked_fragment(unsigned flat)
+{
+ static const nir_shader_compiler_options options={0};
+ nir_builder b=nir_builder_init_simple_shader(MESA_SHADER_FRAGMENT,&options,"bound common COLOR0");
+ nir_variable *in=nir_variable_create(b.shader,nir_var_shader_in,glsl_vec4_type(),"color");
+ nir_variable *out=nir_variable_create(b.shader,nir_var_shader_out,glsl_vec4_type(),"result");
+ in->data.location=VARYING_SLOT_COL0;
+ if(flat)in->data.interpolation=INTERP_MODE_FLAT;
+ out->data.location=FRAG_RESULT_DATA0;
+ nir_store_deref(&b,nir_build_deref_var(&b,out),nir_load_deref(&b,nir_build_deref_var(&b,in)),15);
+ nir_validate_shader(b.shader,"bound common linkage");return b.shader;
+}
 int main(int argc,char **argv)
 {
  glsl_type_singleton_init_or_ref();unsigned cases=0;
@@ -91,6 +103,9 @@ int main(int argc,char **argv)
  struct remesa_device dev={.ops=&ops,.offline_test_backend=true};
  struct pipe_screen *screen=remesa_screen_create(&dev);assert(screen);
  struct pipe_context *ctx=screen->context_create(screen,NULL,0);assert(ctx);
+ struct remesa_shader_linkage common,saved_common;
+ memset(&common,0xa5,sizeof(common));saved_common=common;
+ assert(remesa_context_shader_linkage_snapshot(ctx,&common)==ENODATA&&!memcmp(&common,&saved_common,sizeof(common)));
  struct pipe_shader_state state={.type=PIPE_SHADER_IR_NIR,.ir.nir=make(0)};
  void *vs=ctx->create_vs_state(ctx,&state);assert(vs);ctx->bind_vs_state(ctx,vs);assert(!remesa_context_error(ctx));
  struct remesa_shader_program_report report;
@@ -98,10 +113,40 @@ int main(int argc,char **argv)
  assert(report.status==REMESA_PROGRAM_COMPILE_OFFLINE&&report.binary_bytes==64&&report.launch_error==ENOTSUP);
  unsigned char bytes[64];n=0;
  assert(!remesa_context_shader_program_encode(ctx,PIPE_SHADER_VERTEX,vs,bytes,64,&n)&&n==64&&!memcmp(bytes,reference,64));cases++;
+ for(unsigned flat=0;flat<2;flat++){
+  state.ir.nir=linked_fragment(flat);void *fs=ctx->create_fs_state(ctx,&state);assert(fs);
+  ctx->bind_fs_state(ctx,fs);assert(!remesa_context_error(ctx));
+  assert(!remesa_context_shader_linkage_snapshot(ctx,&common));
+  assert(!remesa_shader_linkage_validate(&common)&&common.vertex_layout.input_count==3&&
+   common.vertex_layout.stride_dwords==12&&common.vertex_layout.output_dwords==8);
+  assert(common.fragment_input==(flat?REMESA_FRAGMENT_COLOR0_FLAT:REMESA_FRAGMENT_COLOR0_SMOOTH));
+  assert(common.vertex.status==REMESA_PROGRAM_COMPILE_OFFLINE&&common.fragment.status==REMESA_PROGRAM_COMPILE_OFFLINE);
+  assert(!remesa_context_error(ctx));
+  assert(remesa_context_shader_linkage_snapshot(ctx,(void *)ctx)==EINVAL);
+  assert(remesa_context_shader_linkage_snapshot(ctx,(void *)screen)==EINVAL);
+  assert(remesa_context_shader_linkage_snapshot(ctx,vs)==EINVAL);
+  assert(remesa_context_shader_linkage_snapshot(ctx,fs)==EINVAL);
+  struct remesa_shader_pipeline legacy;
+  assert(remesa_context_shader_pipeline_report(ctx,&legacy)==ENOTSUP);
+  struct pipe_context *foreign=screen->context_create(screen,NULL,0);assert(foreign);
+  foreign->bind_vs_state(foreign,vs);assert(remesa_context_error(foreign)==EINVAL);
+  foreign->bind_fs_state(foreign,fs);assert(remesa_context_error(foreign)==EINVAL);
+  saved_common=common;
+  assert(remesa_context_shader_linkage_snapshot(foreign,&common)==ENODATA&&!memcmp(&common,&saved_common,sizeof(common)));
+  foreign->destroy(foreign);
+  /* A compile failure must neither lose the bound pair nor erase its error. */
+  state.ir.nir=make(1);assert(!ctx->create_vs_state(ctx,&state)&&remesa_context_error(ctx)==ENOTSUP);
+  assert(!remesa_context_shader_linkage_snapshot(ctx,&common)&&remesa_context_error(ctx)==ENOTSUP);
+  assert(!memcmp(&common,&saved_common,sizeof(common)));
+  ctx->delete_fs_state(ctx,fs);
+  assert(remesa_context_shader_linkage_snapshot(ctx,&common)==ENODATA&&!memcmp(&common,&saved_common,sizeof(common)));
+  assert(!remesa_shader_linkage_validate(&saved_common));cases++;
+ }
  state.ir.nir=make(1);assert(!ctx->create_vs_state(ctx,&state)&&remesa_context_error(ctx)==ENOTSUP);cases++;
  /* A failed replacement must preserve the prior immutable shader. */
  assert(!remesa_context_shader_program_encode(ctx,PIPE_SHADER_VERTEX,vs,bytes,64,&n)&&n==64&&!memcmp(bytes,reference,64));cases++;
  ctx->delete_vs_state(ctx,vs);assert(remesa_context_shader_program_report(ctx,PIPE_SHADER_VERTEX,vs,&report)==EINVAL);cases++;
  ctx->destroy(ctx);screen->destroy(screen);
+ assert(!remesa_shader_linkage_validate(&saved_common));
  glsl_type_singleton_decref();printf("PASS %u real NIR/codegen/storage cases; COMPILE_OFFLINE only\n",cases);return 0;
 }

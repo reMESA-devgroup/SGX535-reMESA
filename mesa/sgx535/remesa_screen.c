@@ -910,6 +910,24 @@ int remesa_context_revalidate_shader_launch(struct pipe_context *p,
  return remesa_shader_pipeline_revalidate_launch(launch,&v->program,&f->program,vertex,fragment);
 }
 #endif
+int remesa_context_shader_linkage_snapshot(struct pipe_context *p,
+ struct remesa_shader_linkage *out)
+{
+ if(!p||p->draw_vbo!=draw||!out)return EINVAL;
+ if(s(p->screen)->closing)return ESHUTDOWN;
+#ifdef REMESA_WITH_NIR
+ struct context *ctx=c(p);
+ if(!context_output_valid(ctx,out,sizeof(*out)))return EINVAL;
+ if(!ctx->bound_vertex||!ctx->bound_fragment)return ENODATA;
+ struct vertex *v=find_vertex(ctx,ctx->bound_vertex);
+ struct fragment *f=find_fragment(ctx,ctx->bound_fragment);
+ if(!v||!f)return EINVAL;
+ if(f->uses_uniform)return ENOTSUP;
+ return remesa_shader_linkage_prepare(&v->program,&f->program,out);
+#else
+ return ENOTSUP;
+#endif
+}
 int remesa_context_shader_compile_status(struct pipe_context *p,unsigned stage,
  struct remesa_shader_compile_status *out)
 {
@@ -1421,11 +1439,13 @@ static void clear_target(struct pipe_context *p,struct pipe_surface *surface,
 }
 /* Whole-frame gears preparation never calls the legacy CPU transform/clip
  * path. Only the existing pre-VS snapshot and typed uniform encoder run. */
+#ifdef REMESA_WITH_NIR
 static int gears_reject(struct context *ctx,unsigned line,int error)
 {
  if(getenv("REMESA_GEARS_TRACE"))fprintf(stderr,"GEARS_DRIVER_REJECT line=%u error=%d clear=%x poisoned=%u viewport=%g,%g,%g/%g,%g,%g invalid=%u,%u,%u,%u fixed=%u,%u,%u\n",line,error,ctx->gears_clear_mask,ctx->gears_poisoned,ctx->viewport.scale[0],ctx->viewport.scale[1],ctx->viewport.scale[2],ctx->viewport.translate[0],ctx->viewport.translate[1],ctx->viewport.translate[2],ctx->invalid_viewport,ctx->invalid_scissor,ctx->invalid_constants,ctx->invalid_elements,ctx->invalid_fixed[0],ctx->invalid_fixed[1],ctx->invalid_fixed[2]);
  return error;
 }
+#endif
 static int queue_gears(struct pipe_context *p,const struct pipe_draw_info *info,unsigned drawid,
  const struct pipe_draw_indirect_info *indirect,const struct pipe_draw_start_count_bias *draws,unsigned count)
 {
