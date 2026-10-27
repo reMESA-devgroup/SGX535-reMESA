@@ -51,6 +51,12 @@ remains valid; subsequent window-resize refusals are not general window support.
 
 ## Concrete missing contracts
 
+An independent [original SDK USSE oracle](USSE-VENDOR-ORACLE-20261027.md) now
+decodes retained instructions and 17 existing generated-encoder cases (122
+instructions) using the SDK's SGX535/rev121 descriptor. This is offline compiler
+evidence only; it changes no rendering admission or physical qualification and
+does not resolve the separate PDS event CODE84 contract.
+
 | Layer | Current evidence | Required next behavior |
 | --- | --- | --- |
 | Shader IO and compilation | Typed encoders and restricted NIR profiles; old semantic pipeline links position + constant FS only | Common desktop/GLES linkage, then broader NIR operations and IO/resource allocation |
