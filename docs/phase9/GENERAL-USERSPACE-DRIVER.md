@@ -209,9 +209,9 @@ and `private-mesa-geometry-pds-index/RESULT.json` in the current artifact
 directory. The latter independently rechecked the original Mesa objects and
 the candidate/fixture source identities. Previous artifacts remain unchanged.
 
-The common link now reads Gallium's bound shader objects, and an owned draw
-state increment is described below. Next, transport the complete application
-attributes, assemble initial bounds/clear/draw/close state, and connect typed
+The common link now reads Gallium's bound shader objects, and owned draw state
+and the current three-input attribute transport are described below. Next,
+assemble initial bounds/clear/draw/close state and connect typed
 dynamic submission with complete job holds and fences. The current
 physical stream ABI still admits only the fixed eleven-role, twelve-draw gears
 scene. Neither this index encoder nor the private archive lifts that admission
@@ -274,3 +274,54 @@ Results are `linked-draw-state-v1/result.json` and
 geometry/PDS/index regression and actual bound-NIR callbacks against this same
 new archive. Original Mesa objects and prior physical artifacts remain intact;
 none of these tests submit to the GPU.
+
+## Application attribute transport
+
+`remesa_context_linked_vertex_inputs_snapshot()` now reads the application
+resources bound through actual Gallium callbacks for the current three-float4
+WHITE_LAMBERT3 link. The internal binding storage accepts a third VB/element;
+the advertised caps and old draw admission remain unchanged. The existing
+gears path still requires its exact one/two-element layout, and the old general
+draw route still rejects expanded layouts.
+
+The snapshot synchronizes source writers before any reads and maps each
+distinct VB/IB once, including when all three attributes and indices share
+one BO. Interleaved, separate and zero-stride sources are supported. It releases
+all acquired read maps on success, allocation failure or partial map failure.
+An active frontend map, malformed user-index range or output alias rejects
+without reading those indices. Imported writer timeout remains an error;
+tests exercise the later simulated retirement separately.
+
+`remesa_linked_vertex_inputs_create()` performs byte transport only: it copies
+the effective min..max source records once and rebases u8/u16/u32 indices into
+a host u16 list. It preserves repeated references, primitive/provoking order,
+all float component bits and source independence. Indexed bounds are checked
+before bias and addresses after bias. Nonindexed draws ignore index hints and
+bias, and incomplete triangle tails are ignored. There is no vertex shader,
+normalization, lighting, clipping, viewport computation or CPU rasterization.
+
+The current preparation policy bounds the source span to 4095 records and the
+index list to 65535 entries independently. Only exact float4 attributes for
+this selected shader layout are admitted; generic formats, instancing, restart
+and broader shader IO remain work for later compiler/transport integration.
+Successful snapshots feed the existing immutable GEM geometry, PDS and TA
+index owners without treating spare allocation capacity as consumed data.
+
+`test_linked_vertex_inputs.c` passed native/UBSan/i386, including NaN/negative
+zero bit preservation, strides/broadcasts, sparse/repeated indices, bias,
+overflow/aliases, high source IDs with zero stride, the independent index limit
+and the actual GEM/PDS/TA owner code with fake GEM callbacks. Actual Mesa NIR
+builder/Gallium tests additionally passed for three distinct VB sources, shared
+VB/IB, source updates, OOM, failed/null/partial maps, active-map rejection,
+writer timeout followed by simulated retirement, complete reference cleanup
+and continued refusal by the old draw route.
+
+Evidence under the current artifact directory is
+`linked-vertex-inputs-v1/result.json`,
+`private-mesa-linked-vertex-v2/RESULT.json` and
+`linked-vertex-regressions/RESULT.json`. The last also runs the original gears
+geometry regression, linked draw-state owner and bound smooth/flat NIR linkage
+against the same new archive. The strict no-NIR Gallium regression passed in
+`linked-vertex-no-nir-regression/result.json` before the final NIR-only early
+user-index alias guard. All test providers are simulated: zero GPU submissions,
+zero GL/EGL API contexts and no new physical rendering approval.

@@ -67,6 +67,17 @@ struct remesa_gears_geometry;
 int remesa_context_gears_geometry_snapshot(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  struct remesa_gears_geometry **);
+struct remesa_linked_vertex_inputs;
+/* Snapshot raw application POSITION/NORMAL/LIGHT float4 attributes for the
+ * bound WHITE_LAMBERT3 semantic link. Accept interleaved/independent resource
+ * sources, including zero-stride broadcasts. Synchronize writers before CPU
+ * reads; deduplicate aliased VB/IB resources and release all acquired maps.
+ * No CPU shader/transform, upload or GPU admission. The owned result remains
+ * independent of later source changes and can feed the linked GEM owner.
+ * Empty/disjoint output required. The caller serializes source/binding access. */
+int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ struct remesa_linked_vertex_inputs **);
 struct remesa_shader_host_pipeline_request;
 struct remesa_shader_host_pipeline;
 /* Snapshot the currently bound owned semantic pair into the original host

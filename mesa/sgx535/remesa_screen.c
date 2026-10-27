@@ -58,7 +58,7 @@ struct resource {
 enum fixed_kind { FIXED_BLEND,FIXED_DSA,FIXED_RASTER,FIXED_COUNT };
 struct fixed { struct fixed *next; enum fixed_kind kind; bool deleted,scissor,depth_clip,full_clip,recording_edge_proof;
  unsigned cull_face,depth_func;bool bottom_edge_rule,front_ccw,depth_clip_near,depth_clip_far,flat,flat_first,clamp_vertex_color,depth_enabled,depth_write; };
-struct elements { struct elements *next; struct pipe_vertex_element position,normal; unsigned count; bool deleted; };
+struct elements { struct elements *next; struct pipe_vertex_element position,normal,light; unsigned count; bool deleted; };
 struct vertex { struct vertex *next; unsigned input_slot; bool deleted;
 #ifdef REMESA_WITH_NIR
  struct remesa_shader_program program;
@@ -71,7 +71,7 @@ struct fragment { struct fragment *next; uint32_t argb; bool deleted,uses_unifor
  struct remesa_uniform_color uniform; };
 struct transfer;
 struct context {
- struct pipe_context base; struct pipe_vertex_buffer vb,second_vb; unsigned vb_count; struct pipe_vertex_element position;
+ struct pipe_context base; struct pipe_vertex_buffer vb,second_vb,third_vb; unsigned vb_count; struct pipe_vertex_element position;
  struct pipe_resource *target,*depth_target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
  int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies;
  bool failed_submission;
@@ -499,10 +499,12 @@ static void set_vb(struct pipe_context *p,unsigned count,const struct pipe_verte
 {
  struct context *ctx=c(p);remesa_resource_reference(&ctx->vb.buffer.resource,NULL);
  remesa_resource_reference(&ctx->second_vb.buffer.resource,NULL);
- memset(&ctx->vb,0,sizeof(ctx->vb));memset(&ctx->second_vb,0,sizeof(ctx->second_vb));ctx->vb_count=0;
+ remesa_resource_reference(&ctx->third_vb.buffer.resource,NULL);
+ memset(&ctx->vb,0,sizeof(ctx->vb));memset(&ctx->second_vb,0,sizeof(ctx->second_vb));
+ memset(&ctx->third_vb,0,sizeof(ctx->third_vb));ctx->vb_count=0;
  if(!count) return;
  /* Mesa 25.2 transfers these resource references to the callback. */
- int error=count<=2&&v?0:ENOTSUP;
+ int error=count<=3&&v?0:ENOTSUP;
  if(!error)for(unsigned i=0;i<count;i++) {
   struct pipe_resource *res=v[i].buffer.resource;
   if(v[i].is_user_buffer){error=ENOTSUP;break;}
@@ -523,20 +525,21 @@ static void set_vb(struct pipe_context *p,unsigned count,const struct pipe_verte
   }
   return;
  }
- ctx->vb=v[0];if(count==2)ctx->second_vb=v[1];ctx->vb_count=count;ctx->error=0;
+ ctx->vb=v[0];if(count>=2)ctx->second_vb=v[1];if(count==3)ctx->third_vb=v[2];
+ ctx->vb_count=count;ctx->error=0;
 }
 static void *create_elements(struct pipe_context *p,unsigned count,const struct pipe_vertex_element *e)
 {
  struct context *ctx=c(p);struct elements *out;
- bool valid=(count==1||count==2)&&e;
+ bool valid=(count>=1&&count<=3)&&e;
  if(valid)for(unsigned i=0;i<count;i++)if(!remesa_position_format_bytes(e[i].src_format)||
-    (i==1&&e[i].src_format==PIPE_FORMAT_R32G32_FLOAT)||e[i].vertex_buffer_index>=2||
+    (i>=1&&e[i].src_format==PIPE_FORMAT_R32G32_FLOAT)||e[i].vertex_buffer_index>=3||
     e[i].instance_divisor||e[i].dual_slot)valid=false;
  if(!valid) {
   ctx->invalid_elements=true;ctx->error=ENOTSUP;return NULL;
  }
  out=calloc(1,sizeof(*out));if(!out){ctx->invalid_elements=true;ctx->error=ENOMEM;return NULL;}
- out->position=*e;if(count==2)out->normal=e[1];out->count=count;
+ out->position=*e;if(count>=2)out->normal=e[1];if(count==3)out->light=e[2];out->count=count;
  out->next=ctx->elements;ctx->elements=out;ctx->error=0;return out;
 }
 static struct elements *find_elements(struct context *ctx,void *handle)
@@ -1291,7 +1294,7 @@ int remesa_context_gears_geometry_snapshot(struct pipe_context *p,
     !e||e->deleted||ctx->invalid_elements)return ENOTSUP;
  unsigned attr=v->program.semantic.instructions[0].input_slot;
  if(attr>1||e->count!=1+attr)return ENOTSUP;
- struct pipe_vertex_buffer *vb[2]={&ctx->vb,&ctx->second_vb};
+ struct pipe_vertex_buffer *vb[3]={&ctx->vb,&ctx->second_vb,&ctx->third_vb};
  const struct pipe_vertex_element *element[2]={&e->position,&e->normal};
  struct resource *resources[3]={0};void *bytes[3]={0};bool mapped[3]={0};
  unsigned resource_count=0,slot[2]={0},index_slot=0;
@@ -1351,6 +1354,94 @@ done:
  (void)p;(void)info;(void)draw_info;(void)out;return ENOTSUP;
 #endif
 }
+int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ struct remesa_linked_vertex_inputs **out)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw||!info||!draw_info||
+    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ uintptr_t at=(uintptr_t)out;
+ if(sizeof(*info)>UINTPTR_MAX-(uintptr_t)info||sizeof(*draw_info)>UINTPTR_MAX-(uintptr_t)draw_info||
+    (at<(uintptr_t)info+sizeof(*info)&&(uintptr_t)info<at+sizeof(*out))||
+    (at<(uintptr_t)draw_info+sizeof(*draw_info)&&(uintptr_t)draw_info<at+sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);struct remesa_shader_linkage link;
+ int error=remesa_context_shader_linkage_snapshot(p,&link);if(error)return error;
+ if(remesa_shader_ir_white_lambert(&link.vertex.semantic)||link.vertex_layout.input_count!=3||
+    link.vertex_layout.stride_dwords!=12)return ENOTSUP;
+ struct elements *el=ctx->bound_elements;
+ if(!el||el->deleted||ctx->invalid_elements||el->count!=3)return ENOTSUP;
+ const uint32_t count=draw_info->count-draw_info->count%3;
+ if(info->mode!=MESA_PRIM_TRIANGLES||info->start_instance||info->instance_count>1||
+    (info->index_size&&info->primitive_restart))return ENOTSUP;
+ if(!count||!info->instance_count)return ENODATA;
+ if(count>65535)return E2BIG;
+ if(info->index_size&&info->index_size!=1&&info->index_size!=2&&info->index_size!=4)return EINVAL;
+ size_t user_index_bytes=0;
+ if(info->index_size&&info->has_user_indices){
+  uint64_t n=((uint64_t)draw_info->start+count)*info->index_size;
+  uintptr_t base=(uintptr_t)info->index.user;
+  if(n>SIZE_MAX)return EOVERFLOW;
+  if(!base||n>UINTPTR_MAX-base||
+     (at<base+n&&base<at+sizeof(*out)))return EINVAL;
+  user_index_bytes=(size_t)n;
+ }
+ struct pipe_vertex_buffer *vb[3]={&ctx->vb,&ctx->second_vb,&ctx->third_vb};
+ const struct pipe_vertex_element *element[3]={&el->position,&el->normal,&el->light};
+ struct resource *resources[4]={0};void *bytes[4]={0};bool mapped[4]={0};
+ unsigned resource_count=0,slot[3]={0},index_slot=0;
+ for(unsigned a=0;a<3;a++){
+  if(link.vertex_layout.input_slot[a]!=a||element[a]->src_format!=PIPE_FORMAT_R32G32B32A32_FLOAT)return ENOTSUP;
+  unsigned b=element[a]->vertex_buffer_index;
+  if(b>=3||b>=ctx->vb_count||!vb[b]->buffer.resource)return ENODATA;
+  struct resource *res=r(vb[b]->buffer.resource);unsigned j;
+  for(j=0;j<resource_count&&resources[j]!=res;j++);
+  if(j==resource_count)resources[resource_count++]=res;
+  slot[a]=j;
+ }
+ if(info->index_size&&!info->has_user_indices){
+  struct pipe_resource *ib=info->index.resource;
+  if(!ib||ib->screen!=p->screen||ib->target!=PIPE_BUFFER||!(ib->bind&PIPE_BIND_INDEX_BUFFER))return EINVAL;
+  unsigned j;for(j=0;j<resource_count&&resources[j]!=r(ib);j++);
+  if(j==resource_count)resources[resource_count++]=r(ib);
+  index_slot=j;
+ }
+ for(unsigned j=0;j<resource_count;j++){
+  uintptr_t res=(uintptr_t)resources[j];
+  if(at<res+sizeof(*resources[j])&&res<at+sizeof(*out))return EINVAL;
+  if(resources[j]->maps)return EBUSY;
+ }
+ if(*out)return EBUSY;
+ for(unsigned j=0;j<resource_count;j++){
+  error=resource_sync(p->screen,resources[j],UINT64_MAX);if(error)goto done;
+ }
+ for(unsigned j=0;j<resource_count;j++){
+  error=s(p->screen)->device.ops->map(s(p->screen)->device.priv,resources[j]->bo,false,&bytes[j]);
+  mapped[j]=!error||bytes[j];if(error)goto done;
+  if(!bytes[j]){error=EPROTO;goto done;}
+ }
+ struct remesa_linked_attribute attributes[3];
+ for(unsigned a=0;a<3;a++){
+  unsigned b=element[a]->vertex_buffer_index;
+  attributes[a]=(struct remesa_linked_attribute){bytes[slot[a]],resources[slot[a]]->bytes,
+   (uint64_t)vb[b]->buffer_offset+element[a]->src_offset,element[a]->src_stride,element[a]->src_format};
+ }
+ const void *indices=NULL;size_t index_bytes=0;
+ if(info->index_size){
+  if(info->has_user_indices){
+   indices=info->index.user;index_bytes=user_index_bytes;
+  }else{indices=bytes[index_slot];index_bytes=resources[index_slot]->bytes;}
+ }
+ error=remesa_linked_vertex_inputs_create(info,draw_info,attributes,indices,index_bytes,out);
+done:
+ for(unsigned j=resource_count;j>0;j--)if(mapped[j-1])
+  s(p->screen)->device.ops->unmap(s(p->screen)->device.priv,resources[j-1]->bo,false);
+ return error;
+#else
+ (void)p;(void)info;(void)draw_info;(void)out;return ENOTSUP;
+#endif
+}
+
 static void stencil_ref(struct pipe_context *p,const struct pipe_stencil_ref reference)
 { (void)reference;c(p)->error=0; /* All admitted DSA states disable stencil. */ }
 static void blend_color(struct pipe_context *p,const struct pipe_blend_color *color)
@@ -1793,6 +1884,7 @@ static void destroy_context(struct pipe_context *p)
  while(ctx->transfers)unmap(p,&ctx->transfers->base);
  remesa_resource_reference(&ctx->vb.buffer.resource,NULL);
  remesa_resource_reference(&ctx->second_vb.buffer.resource,NULL);
+ remesa_resource_reference(&ctx->third_vb.buffer.resource,NULL);
  remesa_resource_reference(&ctx->target,NULL);
  remesa_resource_reference(&ctx->depth_target,NULL);
  remesa_resource_reference(&ctx->fragment_constants,NULL);

@@ -40,6 +40,37 @@ int remesa_gears_geometry_create(const struct pipe_draw_info *,
 int remesa_gears_geometry_inspect(const struct remesa_gears_geometry *,
  struct remesa_gears_geometry_view *);
 void remesa_gears_geometry_destroy(struct remesa_gears_geometry *);
+/* Raw attributes for the current three-float4 compiled vertex layout.
+ * Copies every component bit for bit, including NaN/zero representations;
+ * performs no shader, lighting, normalization, clipping or viewport work.
+ * Each source has its own offset/stride (zero stride broadcasts one record).
+ * Source mappings must remain immutable for the constructor call. */
+#define REMESA_LINKED_VERTEX_ATTRIBUTES 3u
+struct remesa_linked_attribute {
+ const void *data;size_t bytes;
+ uint64_t offset;uint32_t stride;
+ enum pipe_format format;
+};
+struct remesa_linked_vertex_inputs;
+struct remesa_linked_vertex_inputs_view {
+ const void *vertices;const uint16_t *indices; /* owned, host-native u16 */
+ size_t vertex_bytes,index_bytes;
+ uint32_t vertex_count,index_count,stride_bytes,min_source_vertex,max_source_vertex;
+};
+/* Triangle lists, one instance, u8/u16/u32 explicit index snapshots or
+ * nonindexed draws. Ignore incomplete trailing primitives; reject restart.
+ * Copy the referenced min..max source span once and rebase indices, preserving
+ * primitive/provoking order and repeated references. Indexed bounds are checked
+ * before bias; all effective source addresses after bias. No resource/index
+ * union pointer is adopted. Bounded preparation policy: 4095 source records,
+ * 65535 indices; not advertised SGX or OpenGL limits. Empty output required.
+ * Errors leave output untouched; output cannot overlap descriptors/payloads. */
+int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *,
+ const struct pipe_draw_start_count_bias *,const struct remesa_linked_attribute[3],
+ const void *indices,size_t index_bytes,struct remesa_linked_vertex_inputs **);
+int remesa_linked_vertex_inputs_inspect(const struct remesa_linked_vertex_inputs *,
+ struct remesa_linked_vertex_inputs_view *);
+void remesa_linked_vertex_inputs_destroy(struct remesa_linked_vertex_inputs *);
 /* Original shader inputs, borrowed only during the backend submit call.
  * These are synchronized VB/IB snapshots before vertex shader evaluation,
  * clipping or viewport transformation. The diagnostic window-space packet

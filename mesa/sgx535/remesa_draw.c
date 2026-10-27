@@ -559,3 +559,82 @@ enum remesa_draw_status remesa_pack_triangle_draw(
  return remesa_pack_triangle_draw_vertex(info,draw,vertices,position,vertex_snapshot,vertex_bytes,
                                         index_snapshot,index_bytes,argb,NULL,packet);
 }
+
+struct remesa_linked_vertex_inputs {
+ struct remesa_linked_vertex_inputs_view view;
+ size_t storage_bytes;
+ unsigned char data[];
+};
+int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *info,
+ const struct pipe_draw_start_count_bias *draw,const struct remesa_linked_attribute attributes[3],
+ const void *indices,size_t index_bytes,struct remesa_linked_vertex_inputs **out)
+{
+ if(!info||!draw||!attributes||!out||
+    snapshot_overlap(out,sizeof(*out),info,sizeof(*info))||
+    snapshot_overlap(out,sizeof(*out),draw,sizeof(*draw))||
+    snapshot_overlap(out,sizeof(*out),attributes,3*sizeof(*attributes)))return EINVAL;
+ const struct pipe_draw_info in=*info;
+ const struct pipe_draw_start_count_bias d=*draw;
+ struct remesa_linked_attribute a[3];memcpy(a,attributes,sizeof(a));
+ for(unsigned k=0;k<3;k++){
+  if(snapshot_overlap(out,sizeof(*out),a[k].data,a[k].bytes))return EINVAL;
+  if(a[k].format!=PIPE_FORMAT_R32G32B32A32_FLOAT)return ENOTSUP;
+  if(!a[k].data||a[k].bytes>UINTPTR_MAX-(uintptr_t)a[k].data||
+     a[k].offset>a[k].bytes||16>a[k].bytes-a[k].offset)return EINVAL;
+ }
+ if(in.index_size&&snapshot_overlap(out,sizeof(*out),indices,index_bytes))return EINVAL;
+ if(*out)return EBUSY;
+ if(in.mode!=MESA_PRIM_TRIANGLES||in.start_instance||in.instance_count>1||
+    (in.index_size&&in.primitive_restart))return ENOTSUP;
+ const uint32_t count=d.count-d.count%3;
+ if(!count||!in.instance_count)return ENODATA;
+ if(count>65535)return E2BIG;
+ uint32_t min=UINT32_MAX,max=0;uint64_t first=0;
+ if(in.index_size){
+  if(in.index_size!=1&&in.index_size!=2&&in.index_size!=4)return EINVAL;
+  if(!indices||index_bytes>UINTPTR_MAX-(uintptr_t)indices||
+     snapshot_overlap(out,sizeof(*out),indices,index_bytes))return EINVAL;
+  first=(uint64_t)d.start*in.index_size;
+  if(first>index_bytes||(uint64_t)count*in.index_size>index_bytes-first)return EINVAL;
+  for(uint32_t i=0;i<count;i++){
+   uint32_t raw=read_index((const unsigned char *)indices+(size_t)first+(size_t)i*in.index_size,in.index_size);
+   if(in.index_bounds_valid&&(raw<in.min_index||raw>in.max_index))return EINVAL;
+   int64_t value=(int64_t)raw+d.index_bias;
+   if(value<0||value>UINT32_MAX)return EINVAL;
+   if((uint32_t)value<min)min=(uint32_t)value;
+   if((uint32_t)value>max)max=(uint32_t)value;
+  }
+ }else{
+  uint64_t end=(uint64_t)d.start+count;
+  if(end>(uint64_t)UINT32_MAX+1)return EINVAL;
+  min=d.start;max=(uint32_t)(end-1);
+ }
+ uint64_t records=(uint64_t)max-min+1;
+ if(records>4095)return E2BIG;
+ for(unsigned k=0;k<3;k++)if(a[k].stride&&max>(a[k].bytes-(size_t)a[k].offset-16)/a[k].stride)return EINVAL;
+ const size_t vb=(size_t)records*48,ib=(size_t)count*2;
+ struct remesa_linked_vertex_inputs *owned=malloc(sizeof(*owned)+vb+ib);
+ if(!owned)return ENOMEM;
+ *owned=(struct remesa_linked_vertex_inputs){.storage_bytes=vb+ib,
+  .view={.vertices=owned->data,.indices=(uint16_t *)(owned->data+vb),
+   .vertex_bytes=vb,.index_bytes=ib,.vertex_count=(uint32_t)records,.index_count=count,
+   .stride_bytes=48,.min_source_vertex=min,.max_source_vertex=max}};
+ for(uint32_t v=0;v<(uint32_t)records;v++)for(unsigned k=0;k<3;k++)
+  memcpy(owned->data+(size_t)v*48+k*16,(const unsigned char *)a[k].data+
+   (size_t)a[k].offset+(size_t)(min+v)*a[k].stride,16);
+ uint16_t *rebased=(uint16_t *)(owned->data+vb);
+ for(uint32_t i=0;i<count;i++){
+  uint32_t id=in.index_size?(uint32_t)((int64_t)read_index((const unsigned char *)indices+
+   (size_t)first+(size_t)i*in.index_size,in.index_size)+d.index_bias):d.start+i;
+  rebased[i]=(uint16_t)(id-min);
+ }
+ *out=owned;return 0;
+}
+int remesa_linked_vertex_inputs_inspect(const struct remesa_linked_vertex_inputs *owned,
+ struct remesa_linked_vertex_inputs_view *out)
+{
+ if(!owned||!out||snapshot_overlap(out,sizeof(*out),owned,sizeof(*owned)+owned->storage_bytes))return EINVAL;
+ *out=owned->view;return 0;
+}
+void remesa_linked_vertex_inputs_destroy(struct remesa_linked_vertex_inputs *owned)
+{free(owned);}
