@@ -209,9 +209,68 @@ and `private-mesa-geometry-pds-index/RESULT.json` in the current artifact
 directory. The latter independently rechecked the original Mesa objects and
 the candidate/fixture source identities. Previous artifacts remain unchanged.
 
-Next, integrate the common link with Gallium's bound shader objects, construct
-owned fragment/viewport/scene state around the indexed command, and connect
-typed dynamic submission with complete job holds and fences. The current
+The common link now reads Gallium's bound shader objects, and an owned draw
+state increment is described below. Next, transport the complete application
+attributes, assemble initial bounds/clear/draw/close state, and connect typed
+dynamic submission with complete job holds and fences. The current
 physical stream ABI still admits only the fixed eleven-role, twelve-draw gears
 scene. Neither this index encoder nor the private archive lifts that admission
 guard or establishes desktop/GLES rendering.
+
+## Bound Gallium shader linkage
+
+`remesa_context_shader_linkage_snapshot()` copies the actually bound,
+context-owned VS/FS into the common link. It accepts the existing constant,
+smooth COLOR0 and flat COLOR0 semantic forms without passing through the old
+constant-fragment draw ABI. It rejects missing stages, foreign handles,
+overlapping output and unsynchronized uniform specialization; it does not
+erase a prior compile error, change context state or enable a draw route.
+
+The expanded actual Mesa NIR builder/Gallium callback test exercises smooth and
+flat links, output aliases, foreign contexts, failed replacement and snapshot
+lifetime after shader/context destruction. The old pipeline still rejects the
+varying pair. It passed with the real Mesa compilation model in
+`private-mesa-bound-linkage-v2/RESULT.json` under the current artifact directory.
+The no-NIR Gallium regression also passed native/UBSan/i386 in
+`bound-linkage-no-nir-regression-v2/result.json`. Its first build exposed an
+older NIR-only `gears_reject` helper compiled outside its conditional; the
+helper is now conditional too. The original failed build log is preserved.
+
+## Owned linked draw state
+
+The PDS owner now includes the existing empty secondary constructor: 4 CODE
+bytes at offset 256 in a 32-byte reservation. The primary VS/FS offsets and
+effective/reserved sizes stay unchanged. The complete storage reservation is
+288 bytes; the three effective images total 128 bytes. Their remaining space
+is zero, without artificial instructions. This does not measure GPU fetching.
+
+`remesa_persistent_linked_state_prepare()` derives fragment references from
+that owner and composes the existing typed ISP, fragment, viewport and scalar
+encoders into 56 bytes of draw DATA. It reuses the existing per-count state
+auxiliary USE/PDS and TA-reference preparation: USE16, PDS60 and TA8, with
+explicit aligned offsets and zero gaps. State bank conflicts are checked
+against both shader entries. The linked PDS, CODE and geometry remain retained
+through state leases and post-binding uncertain failures; no forced cleanup is
+added. The old constant/clear/close interfaces keep their separate admission.
+
+This state is a draw delta. It does not supply initial scene bounds, attachment
+clears, scene close, native submission or retirement. MATRIX_WINDOW encoding
+is still a CPU contract here. Shader selection is restricted to the already
+selected WHITE_LAMBERT3/COLOR0 pair, and no additional capability is advertised.
+
+`mesa/sgx535/tests/test_linked_draw_state.c` passed native/UBSan/i386 and the
+actual Mesa compilation model. It compares the initial-zero F41 DATA, USE14
+auxiliary and TA-reference descriptor against the retained WHITE64 witness,
+relocating only the two fragment references. It also covers matrix-window
+serialization at all three chosen sizes, zero padding, read-only publication,
+100 metadata snapshots without IO, transitive dependency/lease lifetime,
+ordinary rollback and uncertain quarantine. These size checks are state
+preparation, **not rendering or API contexts**.
+
+Results are `linked-draw-state-v1/result.json` and
+`private-mesa-linked-state/RESULT.json` under
+`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/`.
+`linked-state-adapter-regressions/RESULT.json` additionally passes the older
+geometry/PDS/index regression and actual bound-NIR callbacks against this same
+new archive. Original Mesa objects and prior physical artifacts remain intact;
+none of these tests submit to the GPU.

@@ -197,7 +197,8 @@ int remesa_persistent_scene_close_snapshot(const struct remesa_device *,void *bo
 enum remesa_persistent_state_kind {
  REMESA_PERSISTENT_STATE_ISP_WORD0=1, REMESA_PERSISTENT_STATE_SCENE_CLOSE=2,
  REMESA_PERSISTENT_STATE_CONSTANT_DRAW=3, REMESA_PERSISTENT_STATE_SCENE_ZCLEAR=4,
- REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6
+ REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6,
+ REMESA_PERSISTENT_STATE_LINKED_DRAW=7
 };
 /* Explicit f41 draw delta /54c5 green clear state, not complete first-scene
  * state. All fragment references derive from this shader token's owned PDS;
@@ -404,11 +405,12 @@ int remesa_persistent_linked_pds_prepare(struct remesa_device *,void *program,
 struct remesa_persistent_linked_pds_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle;
- size_t allocation_bytes,object_offset[2],image_bytes[2],reserved_bytes[2];
+ /* VS primary, FS primary, empty FS secondary; only primaries have plans. */
+ size_t allocation_bytes,object_offset[3],image_bytes[3],reserved_bytes[3];
  struct remesa_persistent_linked_program_backing program;
  struct remesa_persistent_linked_geometry_backing geometry;
  struct remesa_pds_selected_plan plans[2];
- uint8_t known_mask[256];
+ uint8_t known_mask[288];
 };
 int remesa_persistent_linked_pds_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_pds_backing *);
@@ -421,6 +423,26 @@ int remesa_persistent_linked_pds_snapshot(const struct remesa_device *,void *bo,
  * Positive errno; disjoint output remains unchanged on failure. */
 int remesa_persistent_linked_index_encode(const struct remesa_device *,void *pds,
  uint32_t first_index,uint32_t index_count,uint8_t out[20]);
+/* Owned 14-DWORD ISP/fragment/viewport/scalar draw state for the currently
+ * selected POSITION4+COLOR0 pair. Derives primary/secondary references and
+ * scalar output layout from the live PDS owner. Retains that complete closure
+ * until actual disposal, including uncertain failures. Explicit typed ISP
+ * and viewport input only; no caller VA, shader bytes or descriptor words.
+ * This is a draw delta, NOT initial scene bounds, clear, close or native job.
+ * MATRIX_WINDOW bytes are a CPU contract until separately tested on the GPU.
+ * Empty/disjoint output required; uncertain errors may return a retained BO. */
+struct remesa_persistent_linked_state_request {
+ struct remesa_isp_opaque_triangle_request isp;
+ struct remesa_ta_window_viewport_request viewport;
+};
+int remesa_persistent_linked_state_prepare(struct remesa_device *,void *pds,
+ const struct remesa_persistent_linked_state_request *,uint32_t state_bank,void **bo);
+struct remesa_persistent_linked_state_backing {
+ struct remesa_persistent_isp_update_backing image;
+ struct remesa_persistent_linked_pds_backing dependencies;
+};
+int remesa_persistent_linked_state_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_state_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
