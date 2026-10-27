@@ -83,6 +83,10 @@ now matches the original kernel FIFO packets and is included in future Mesa
 overlays. The typed kernel endpoint, hardware completion/readback qualification
 and Gallium acceleration dispatch remain pending; CPU packet tests are not a
 new2D hardware-acceleration claim.
+The [retained GEM preflight](TWOD-GEM-PREFLIGHT-20261027.md) now authenticates
+that request against held kernel allocations and reconstructs the shared packet.
+Native2D issue, its distinct IRQ/completion contract and physical validation
+remain pending; the existing3D lifecycle mask is unchanged.
 
 ## First common implementation increment
 

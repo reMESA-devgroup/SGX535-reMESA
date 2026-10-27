@@ -1,7 +1,11 @@
 /* SPDX-License-Identifier: MIT */
 #ifndef REMESA_TWOD_H
 #define REMESA_TWOD_H
+#ifdef __KERNEL__
+#include <linux/types.h>
+#else
 #include <stdint.h>
+#endif
 #define REMESA_TWOD_ARGB8888 1u
 #define REMESA_TWOD_COPY_BYTES 40u
 struct remesa_twod_surface {
