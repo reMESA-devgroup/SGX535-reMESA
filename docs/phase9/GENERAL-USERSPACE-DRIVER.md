@@ -649,3 +649,59 @@ python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
 No native submission gate, GL/GLES capability, geometry/shader profile or
 physical boot configuration is changed by these auxiliary encoders. The next
 event blocker is independently generating its complete CODE84.
+
+## Owned event auxiliary resource
+
+`remesa_persistent_linked_event_auxiliary_prepare()` now places the generated
+transfer16 and end8 programs in one PROGRAM allocation, at offsets 0 and 32.
+Used extent is40 bytes, including16 zero reserved bytes between entries; the
+rounded4096-byte allocation is neither effective CODE nor a claimed GPU fetch
+length. No instruction is added to occupy padding. Only BGRA8/mode0 is selected,
+from the existing immutable COLOR/Z/TA target owner.
+
+The resource holds a strong reference to that target owner and its complete
+transitive closure. Both entry plans derive from its own live allocation and
+must agree with the TA's pixel-bank bindings. Public write mapping and the old
+color-submit ABI reject the typed resource. Ordinary preparation failures
+unwind; uncertain mapping, synchronization or unpin effects retain quarantine
+and the target/attachment/command resources. Existing CPU lease handling delays
+final disposal until the lease is released.
+
+`remesa_persistent_linked_event_auxiliary_snapshot()` reports allocation and
+effective spans separately, plus the two computed USE fixups and the live
+target DATA backing. It performs metadata checks without readback, hashing,
+provider ioctls or synchronization. Its fixups can feed the existing DATA64
+encoder without accepting caller-supplied executable bytes or raw GPU addresses.
+Preparation uses the existing one-time upload/verification/cache-ownership
+helpers; no diagnostic work is added to a rendering loop.
+
+The focused resource test consumes24 historical auxiliary bytes on stdin
+(role1[0xe0:0xf0] then role1[0x100:0x108]). Its three sizes test storage and
+lifetime only, not physical rendering or either graphics API. Two initial
+fixture failures are preserved: an unexposed private fake-provider pointer
+was incorrectly expected to be recognized as an output alias, and uninitialized
+COLOR hits EBUSY before the typed-target check. The corrected fixture tests
+owner-metadata alias rejection and preserves the existing live-state gate order.
+
+`owned-event-auxiliary-v3/result.json` records native/UBSan/i386 passes with
+19,543 checks in the new ownership fixture, plus its reused persistent and
+linkage checks. `private-mesa-owned-event-auxiliary/RESULT.json` records the
+same test against a private archive using actual Mesa compilation flags. The
+original cached thin archive and its referenced objects are unchanged.
+`owned-event-auxiliary-regressions/RESULT.json` records ten passing existing
+owner/Gallium/NIR tests against that same archive. These fixtures inject a GEM
+provider; none is a physical submission or GL/GLES rendering test.
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_linked_event_auxiliary.c --cache "$MESA_CACHE" \
+  --output /tmp/remesa-owned-event-auxiliary < "$EVENT_FIELD_EVIDENCE/auxiliary-oracle.bin"
+```
+
+The separate field search in `event-code-fields/IMMEDIATE_SCAN_REVIEW.json`
+and `FIELD_SEARCH.md` found no new parameterized constructor with its narrow
+register-OR-immediate pattern. The additional Windows class17 candidate is jump
+table data selected at1010acfc, not executable OR arithmetic. This does not
+rule out shift/table-based producers or other modules and does not justify
+embedding the old complete CODE84. The event, native admission and API rendering
+therefore remain incomplete despite owned auxiliaries.

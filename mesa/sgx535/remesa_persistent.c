@@ -52,6 +52,8 @@ struct memory {
  struct remesa_depth_scene_image *scene_image;
  uint8_t *control_image;
  bool isp_update,scene_close,raw_geometry,shader_program,shader_pds;
+ bool linked_event_auxiliary;
+ uint32_t event_pixel_bank;
  struct remesa_use_entry_plan state_use_entry;
  unsigned state_kind;
  size_t state_bytes,state_use_offset,state_pds_offset,state_ta_offset,state_ta_bytes;
@@ -2707,5 +2709,64 @@ int remesa_persistent_linked_background_snapshot(const struct remesa_device *dev
   .primary_offset=32,.primary_bytes=64,.secondary_offset=96,.secondary_bytes=4,.entry=bg->entry};
  memcpy(value.primary_known_mask,bg->known,sizeof(value.primary_known_mask));
  e=background_targets_metadata(d,bg->targets,false,&value.targets);if(e)return e;
+ *out=value;return 0;
+}
+int remesa_persistent_linked_event_auxiliary_prepare(struct remesa_device *device,
+ void *targets_object,uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct memory *targets=targets_object;
+ struct remesa_persistent_linked_targets_backing tm;
+ e=background_targets_metadata(d,targets,true,&tm);if(e)return e;
+ uint32_t ignored;e=remesa_use_base_offset(bank,&ignored);if(e)return e;
+ if(targets->refs==UINT32_MAX)return EBUSY;
+ size_t before=d->allocated;void *object=NULL;
+ e=allocate_class(d,40,&object,REMESA_VA_PROGRAM);
+ if(e)return d->failed||d->allocated!=before?EOWNERDEAD:e;
+ struct memory *b=object;b->shader_pds=true;b->linked_event_auxiliary=true;
+ b->event_pixel_bank=bank;b->linked_dependency=targets;targets->refs++;
+ if(b->va<UINT64_C(0x20000000)||b->va+b->allocated>UINT64_C(0x30000000)){e=ENOTSUP;goto fail;}
+ struct remesa_use_entry_plan entries[2];uint32_t fixup;
+ e=zclear_entry(b,0,16,bank,REMESA_USE_PIXEL,&entries[0],&fixup);if(e)goto fail;
+ e=zclear_entry(b,32,8,bank,REMESA_USE_PIXEL,&entries[1],&fixup);if(e)goto fail;
+ struct memory *reads[REMESA_PERSISTENT_BUFFERS]={0};unsigned count=0;
+ struct remesa_use_entry_plan banks[16]={0};bool present[16]={0};
+ struct memory *ta=targets->linked_targets->ta;
+ e=linked_ta_reads(d,ta->linked_ta->prefix,ta->linked_ta->body,reads,&count,banks,present);if(e)goto fail;
+ for(unsigned i=0;i<2;i++){e=body_bank_add(&entries[i],banks,present);if(e)goto fail;}
+ uint8_t image[40]={0};size_t n=0;
+ /* The existing target owner accepts only BGRA8, original surface tag4:
+  * caller392ab selects transfer mode0. Both entries start on32-byte boundaries.
+  * Bytes16..31 are reserved zero padding, never additional instructions. */
+ e=remesa_usse_psb_event_transfer_encode(0,image,16,&n);if(e)goto fail;
+ if(n!=16){e=EPROTO;goto fail;}
+ e=remesa_usse_psb_event_end_encode(image+32,8,&n);if(e)goto fail;
+ if(n!=8){e=EPROTO;goto fail;}
+ e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
+ return d->failed?EOWNERDEAD:e;
+}
+int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *device,
+ void *object,struct remesa_persistent_linked_event_auxiliary_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->linked_event_auxiliary||!b->linked_dependency)return EINVAL;
+ struct remesa_persistent_linked_event_auxiliary_backing value={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .allocation_bytes=b->allocated,.used_bytes=40,.program_offset={0,32},.program_bytes={16,8}};
+ e=background_targets_metadata(d,b->linked_dependency,false,&value.targets);if(e)return e;
+ for(unsigned i=0;i<2;i++){
+  e=zclear_entry(b,value.program_offset[i],value.program_bytes[i],b->event_pixel_bank,
+   REMESA_USE_PIXEL,&value.entries[i],&value.use_lower19[i]);if(e)return e;
+ }
  *out=value;return 0;
 }

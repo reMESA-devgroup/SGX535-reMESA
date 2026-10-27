@@ -546,6 +546,26 @@ struct remesa_persistent_linked_background_backing {
 };
 int remesa_persistent_linked_background_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_background_backing *);
+/* Generated PSB event USE auxiliaries only, not a complete event or a job.
+ * PROGRAM layout: transfer16@0, end8@32; used40 with zero reserved padding.
+ * BGRA8 target ownership selects original mode0. Retains the entire target/TA
+ * dependency closure until successful disposal, including uncertain teardown.
+ * Pixel bank must agree with all TA command references. No caller raw VA/CODE.
+ * Ordinary failures unwind; uncertain provider effects quarantine and return
+ * the retained object when available. External serialization is required.
+ * Snapshots use metadata only; no per-frame readback, ioctl, hash or sync.
+ */
+int remesa_persistent_linked_event_auxiliary_prepare(struct remesa_device *,
+ void *targets,uint32_t pixel_bank,void **bo);
+struct remesa_persistent_linked_event_auxiliary_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,use_lower19[2]; /* transfer, end */
+ size_t allocation_bytes,used_bytes,program_offset[2],program_bytes[2];
+ struct remesa_use_entry_plan entries[2];
+ struct remesa_persistent_linked_targets_backing targets;
+};
+int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *,
+ void *bo,struct remesa_persistent_linked_event_auxiliary_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

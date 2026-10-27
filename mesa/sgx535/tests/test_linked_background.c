@@ -76,6 +76,7 @@ static void bg_setup(struct fixture *f,struct remesa_device *d,unsigned ctx,unsi
 }
 static void bg_drop_children(struct remesa_device *d,void *children[11])
 {for(unsigned n=0;n<11;n++)d->ops->destroy_bo(d->priv,children[n]);}
+#ifndef REMESA_LINKED_BACKGROUND_FIXTURE
 int main(void)
 {
  CHECK(!ta_persistent_fixture());CHECK(!ta_linkage_fixture());
@@ -187,3 +188,4 @@ int main(void)
  }
  puts("PASS owned background: generated USE8/PDS64/secondary4/object68, retained physical USE/PDS/geometry oracle comparison, exact logical COLOR extents and depth1, RASTER/PROGRAM domains, matching pixel bank, shared/transitive lifetime and ordinary/uncertain upload/program-disposal retention; GPU0/API0/event0");return 0;
 }
+#endif
