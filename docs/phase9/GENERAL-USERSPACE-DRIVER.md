@@ -482,3 +482,57 @@ TA/clear/body/attribute/geometry/state/NIR tests against the same new archive.
 The original Mesa archive and object members remain unchanged. These tests
 use fake resource providers and simulated fences; there are no GPU submissions
 or GL/EGL API contexts in this qualification.
+
+## Owned background object and program
+
+`remesa_persistent_linked_background_prepare()` now generates the existing
+background constructor from the current target binding: auxiliary USE8,
+primary PDS64 and empty secondary4 occupy100 logical bytes in a PROGRAM
+allocation; the background object68 is in a separate RASTER allocation.
+All addresses come from these owners and the bound COLOR allocation. The
+pixel-bank word must agree with the complete TA shader/state closure.
+The object uses exact logical target dimensions and depth1. It does not use
+the earlier rejected oversized-background workaround or change geometry.
+
+CODE is generated with the existing typed encoders and operands from the
+original background producer. No historical CODE blob is transplanted or
+extended with artificial instructions. Unwritten DATA cells retain their
+conservative known-mask policy; alignment gaps and page tails are zero.
+Program8, PDS64 and secondary4 sizes remain distinct from the100-byte logical
+span and page capacity. This does not measure physical fetching or establish
+general texture sampling.
+
+The object retains its program and target binding, including after public
+target/TA/COLOR/Z references are released. The program independently retains
+the target binding as well: if parent disposal succeeds but the program's
+unpin is uncertain, it still owns every COLOR/Z/TA dependency it might read.
+Ordinary upload failure unwinds both tentative allocations; uncertainty retains
+the closure and blocks close. Metadata snapshots perform no buffer IO.
+
+Preparing background does not initialize COLOR, clear it, generate event/EOT
+CODE or submit. Undefined COLOR stays undefined and unreadable. An executable
+job must supply a valid initialization/load contract, complete event/raster/DPM
+resources and full permissions/lifetime/fence handling before GPU admission.
+
+`test_linked_background.c` passed native/UBSan/i386 and the actual Mesa
+compilation model. It checks exact logical dimensions at all three selected
+sizes, generated USE/PDS/object bytes, known masks, bank/domain admission,
+shared/transitive read-lease lifetime, ordinary/uncertain uploads and program
+unpin failure after parent disposal, including rollback. Tests explicitly
+retain the entire targets/TA/COLOR/Z chain when that child program survives.
+
+At1280×800, the generated USE8 matches the retained physical artifact exactly;
+PDS DATA1..11 and CODE match the retained primary at role0+4560, with DATA0
+independently relocated, and the24 geometry bytes match role3+44 exactly.
+The fixture literals were separately checked against those retained files in
+`BACKGROUND_RETAINED_REFERENCES.json`. This establishes byte correspondence;
+the new allocation layout, relocated program and API rendering are untested
+on the GPU.
+
+Evidence in the current artifact directory is `linked-background-v2/result.json`,
+`private-mesa-linked-background/RESULT.json` and
+`linked-background-regressions/RESULT.json`. The last passes nine earlier
+target/TA/clear/body/attribute/geometry/state/NIR regressions against this same
+new archive. Original Mesa objects and protected physical artifacts remain
+unchanged. These qualifications use fake resource providers and simulated
+fences, with zero GPU submissions and zero GL/EGL API contexts.

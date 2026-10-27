@@ -525,6 +525,27 @@ struct remesa_persistent_linked_targets_backing {
 };
 int remesa_persistent_linked_targets_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_targets_backing *);
+/* Owned original background constructor for the current BGRA8 target.
+ * Generates auxiliary USE8, primary PDS64, empty secondary4 in PROGRAM and
+ * background object68 in RASTER. Retains the target binding and both backing
+ * allocations. Requires matching pixel-bank words with the entire TA closure.
+ * Uses exact logical target dimensions and depth1; does not enlarge the plane,
+ * clear COLOR, generate EOT/event CODE, authorize sampling or submit a job.
+ * Undefined COLOR remains undefined: a future job must establish valid input.
+ */
+int remesa_persistent_linked_background_prepare(struct remesa_device *,void *targets,
+ uint32_t pixel_bank,void **bo);
+struct remesa_persistent_linked_background_backing {
+ uint64_t owner,generation,gpu_va,program_generation,program_gpu_va;
+ uint32_t handle,program_handle;
+ size_t allocation_bytes,object_bytes,program_allocation_bytes,program_used_bytes;
+ size_t use_offset,use_bytes,primary_offset,primary_bytes,secondary_offset,secondary_bytes;
+ struct remesa_use_entry_plan entry;
+ uint8_t primary_known_mask[64];
+ struct remesa_persistent_linked_targets_backing targets;
+};
+int remesa_persistent_linked_background_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_background_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
