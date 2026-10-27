@@ -57,6 +57,11 @@ instructions) using the SDK's SGX535/rev121 descriptor. This is offline compiler
 evidence only; it changes no rendering admission or physical qualification and
 does not resolve the separate PDS event CODE84 contract.
 
+The [unbound private-PD auditor](PRIVATE-MMU-AUDIT-20261027.md) now passes
+native/UBSan/i386 CPU-model tests and compiles in the original antiX MMU
+translation unit. It is not wired into the selected module and provides no
+context binding, submission permission or physical isolation qualification.
+
 | Layer | Current evidence | Required next behavior |
 | --- | --- | --- |
 | Shader IO and compilation | Typed encoders and restricted NIR profiles; old semantic pipeline links position + constant FS only | Common desktop/GLES linkage, then broader NIR operations and IO/resource allocation |
