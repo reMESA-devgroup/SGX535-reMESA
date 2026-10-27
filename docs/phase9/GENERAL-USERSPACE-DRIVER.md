@@ -13,6 +13,18 @@ result separately: a pass at one size cannot approve another, and the retained
 1280×800 gears results do not establish the other sizes. Initial checks remain
 offscreen; X11 window integration is later work.
 
+The required rendering matrix for each candidate is:
+
+| API | 1280×800 | 640×640 | 641×479 |
+| --- | --- | --- | --- |
+| Desktop OpenGL | Required | Required | Occasional edge case |
+| OpenGL ES 2.0 | Required | Required | Occasional edge case |
+
+Use the same candidate build for the paired sizes. For every executed case,
+retain GPU identity, submission/completion/retirement, correctness readback,
+buffer integrity and cleanup results. A resource-only allocation test cannot
+fill any rendering cell in this matrix.
+
 ## Reuse the physical results
 
 The restricted gears path establishes real GPU execution, vertex processing,
@@ -146,3 +158,32 @@ Next, derive PDS and raw geometry bindings from these live owners, retain the
 complete fetched allocation set until retirement, and connect typed dynamic
 submission. Do not lift the fixed gears-profile guard, activate the historical
 CPU transform route, or advertise general GL/GLES capability to skip that work.
+
+## Raw geometry and dependent PDS storage increment
+
+The next storage implementation now copies application vertex records verbatim
+for the existing three-float4 profile, checks triangle-list u16 index bounds,
+and derives PDS relocations from live CODE and geometry owners. PDS ownership
+retains both dependencies, including when callers release their original
+references. CPU read leases defer final destruction. No CPU transformation,
+lighting or viewport calculation is introduced.
+
+The VS PDS image has 64 effective bytes in 192 reserved bytes; the FS image has
+60 effective bytes in 64 reserved bytes. Padding remains zero. No CODE
+instructions are added to fill capacity, and these preparation sizes do not
+establish physical GPU consumption. The existing selected WHITE_LAMBERT3/COLOR0
+pair restriction and native execution guards remain in place.
+
+`mesa/sgx535/tests/test_linked_geometry_pds_owner.c` passed native, UBSan and
+i386 source builds, including the inherited persistent/linkage regressions,
+unchanged vertex bytes, bounded indices, encoded PDS bytes, zero padding,
+metadata with no provider IO, dependency lifetime and ordinary failure rollback.
+Results are at
+`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/geometry-pds-owner-v1/result.json`.
+The older CODE owner regression also passed all three source variants under
+`geometry-pds-preregression-v1/result.json` in the same artifact directory.
+
+This increment has not been rebuilt into the private Mesa archive or tested
+physically. The earlier physical resource evidence belongs to the earlier
+CODE-only build. Typed dynamic submission and actual desktop/GLES rendering
+through these new owners remain the next integration requirements.

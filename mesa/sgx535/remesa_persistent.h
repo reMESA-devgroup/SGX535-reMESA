@@ -5,6 +5,7 @@
 #include "remesa/provider.h"
 #include "remesa_render_target.h"
 #include "remesa_program_registers.h"
+#include "remesa_pds.h"
 #include "remesa_ta_scene.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
@@ -372,6 +373,45 @@ struct remesa_persistent_linked_program_backing {
  * destruction and must acquire kernel job holds before GPU use. */
 int remesa_persistent_linked_program_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_program_backing *);
+/* Raw input storage for the currently compiled three-float4 vertex profile.
+ * Bytes are copied verbatim; no vertex transform, lighting or viewport runs.
+ * Indexed input uses host u16 values, emitted as LE. Without indices, count
+ * must be a triangle list and an identity index list is generated. Limits
+ * below are bounded software preparation policies, not GPU capability claims.
+ */
+#define REMESA_LINKED_MAX_VERTICES 4095u
+struct remesa_linked_geometry_input {
+ const void *vertices;size_t vertex_bytes,index_bytes;
+ uint32_t vertex_count,index_count;
+ const uint16_t *indices;
+};
+int remesa_persistent_linked_geometry_prepare(struct remesa_device *,
+ const struct remesa_linked_geometry_input *,void **bo);
+struct remesa_persistent_linked_geometry_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,vertex_count,index_count,min_vertex,max_vertex,stride_bytes;
+ size_t allocation_bytes,vertex_bytes,index_offset,index_bytes;
+};
+int remesa_persistent_linked_geometry_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_geometry_backing *);
+/* Derives all PDS addresses/task fields from retained CODE and raw geometry
+ * owners. No caller GPU addresses or task words. The existing selected
+ * WHITE_LAMBERT3/COLOR0 CPU producer pair remains the admission boundary.
+ * Successful preparation retains both dependencies even if callers destroy
+ * their original references. It grants no native job/execution permission. */
+int remesa_persistent_linked_pds_prepare(struct remesa_device *,void *program,
+ void *geometry,void **bo);
+struct remesa_persistent_linked_pds_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle;
+ size_t allocation_bytes,object_offset[2],image_bytes[2],reserved_bytes[2];
+ struct remesa_persistent_linked_program_backing program;
+ struct remesa_persistent_linked_geometry_backing geometry;
+ struct remesa_pds_selected_plan plans[2];
+ uint8_t known_mask[256];
+};
+int remesa_persistent_linked_pds_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_pds_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

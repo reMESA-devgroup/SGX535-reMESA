@@ -17,6 +17,17 @@ struct linked_program {
  struct remesa_shader_linkage linkage;
  size_t offset[2],bytes[2],reserved[2];
  struct remesa_use_entry_plan entry[2];
+ struct remesa_shader_selected_resources resources[2];
+};
+struct linked_geometry {
+ uint32_t vertex_count,index_count,min_vertex,max_vertex;
+ size_t vertex_bytes,index_offset,index_bytes;
+};
+struct memory;
+struct linked_pds {
+ struct memory *program,*geometry;
+ struct remesa_pds_selected_plan plans[2];
+ uint8_t known[256];
 };
 struct memory {
  struct remesa_token token;uint32_t handle;uint64_t va;
@@ -32,6 +43,8 @@ struct memory {
  size_t state_bytes,state_use_offset,state_pds_offset,state_ta_offset,state_ta_bytes;
  struct shader_upload *shader_dependency;
  struct linked_program *linked_program;
+ struct linked_geometry *linked_geometry;
+ struct linked_pds *linked_pds;
  uint8_t state_pds_known[REMESA_PDS_STRUCTURE_STATE_BYTES];
  uint32_t depth_width,depth_height,depth_pitch,depth_cpp;
 };
@@ -86,6 +99,7 @@ struct persistent {
  struct remesa_shader_cookie_pool shader_cookies;
  unsigned shader_count;
  uint64_t shader_generation;
+ uint64_t linked_pds_serial;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
 {
@@ -399,6 +413,7 @@ static void quarantine(struct persistent *d,struct memory *b)
 }
 static void memory_error(struct persistent *d,struct memory *b,int error)
 { quarantine(d,b);if(error==EOWNERDEAD)d->failed=true; }
+static void drop_memory(struct persistent *,struct memory *);
 static void dispose(struct persistent *d,struct memory *b)
 {
  const struct remesa_persistent_ops *o=d->cfg.ops;int e;
@@ -423,7 +438,15 @@ static void dispose(struct persistent *d,struct memory *b)
   quarantine(d,b);return;
  }
  struct shader_upload *dependency=b->shader_dependency;
- d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);free(b->linked_program);memset(b,0,sizeof(*b));
+ struct memory *linked_dependencies[2]={NULL,NULL};
+ if(b->linked_pds){linked_dependencies[0]=b->linked_pds->program;linked_dependencies[1]=b->linked_pds->geometry;}
+ d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);free(b->linked_program);
+ free(b->linked_geometry);free(b->linked_pds);memset(b,0,sizeof(*b));
+ for(unsigned i=0;i<2;i++)if(linked_dependencies[i]){
+  struct memory *held=linked_dependencies[i];
+  if(!held->live||!held->refs){quarantine(d,held);d->failed=true;continue;}
+  drop_memory(d,held);
+ }
  if(dependency) {
   if(!dependency->state_refs){shader_quarantine(d,dependency);return;}
   --dependency->state_refs;
@@ -1834,6 +1857,7 @@ int remesa_persistent_linked_program_prepare(struct remesa_device *device,
  owned->linkage=*link;
  for(unsigned i=0;i<2;i++){
   owned->offset[i]=offset[i];owned->bytes[i]=length[i];owned->reserved[i]=resources[i].reserved_use_bytes;
+  owned->resources[i]=resources[i];
  }
  struct persistent *d=device->priv;void *object=NULL;const size_t before=d->allocated;
  e=allocate_class(d,used,&object,REMESA_VA_PROGRAM);
@@ -1872,5 +1896,178 @@ int remesa_persistent_linked_program_snapshot(const struct remesa_device *device
   value.program_offset[i]=owned->offset[i];value.program_bytes[i]=owned->bytes[i];
   value.reserved_bytes[i]=owned->reserved[i];value.entry[i]=owned->entry[i];
  }
+ *out=value;return 0;
+}
+
+static int linked_live(struct persistent *d,struct memory *b,bool owner)
+{
+ if(!owns_memory(d,b)||!b->live||!b->refs||(owner&&!b->owner))return EINVAL;
+ if(b->quarantined)return EIO;
+ if(!b->pinned||!b->gpu_mapped||!b->readable||b->cpu_mapped)return EBUSY;
+ struct remesa_resource r;
+ if(remesa_registry_snapshot(&d->registry,b->token,&r)!=REMESA_OK)return ESTALE;
+ return r.state==REMESA_MAPPED?0:EBUSY;
+}
+static void linked_program_metadata(const struct persistent *d,const struct memory *b,
+ struct remesa_persistent_linked_program_backing *out)
+{
+ const struct linked_program *p=b->linked_program;
+ *out=(struct remesa_persistent_linked_program_backing){.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,.allocation_bytes=b->allocated};
+ for(unsigned i=0;i<2;i++){
+  out->program_offset[i]=p->offset[i];out->program_bytes[i]=p->bytes[i];
+  out->reserved_bytes[i]=p->reserved[i];out->entry[i]=p->entry[i];
+ }
+}
+static void linked_geometry_metadata(const struct persistent *d,const struct memory *b,
+ struct remesa_persistent_linked_geometry_backing *out)
+{
+ const struct linked_geometry *p=b->linked_geometry;
+ *out=(struct remesa_persistent_linked_geometry_backing){.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .vertex_count=p->vertex_count,.index_count=p->index_count,
+  .min_vertex=p->min_vertex,.max_vertex=p->max_vertex,.stride_bytes=48,
+  .allocation_bytes=b->allocated,.vertex_bytes=p->vertex_bytes,
+  .index_offset=p->index_offset,.index_bytes=p->index_bytes};
+}
+int remesa_persistent_linked_geometry_prepare(struct remesa_device *device,
+ const struct remesa_linked_geometry_input *input,void **out)
+{
+ if(!input||!out||overlaps(input,sizeof(*input),out,sizeof(*out)))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ const struct remesa_linked_geometry_input r=*input;
+ if(!r.vertices||!r.vertex_count||r.vertex_count>REMESA_LINKED_MAX_VERTICES)return EINVAL;
+ const size_t vertex_bytes=(size_t)r.vertex_count*48;
+ if(r.vertex_bytes<vertex_bytes)return ENOSPC;
+ if(r.vertex_bytes>UINTPTR_MAX-(uintptr_t)r.vertices||
+    overlaps(r.vertices,r.vertex_bytes,out,sizeof(*out)))return EINVAL;
+ uint32_t count=r.indices?r.index_count:r.vertex_count;
+ if(!count||count>65535||count%3)return ENOTSUP;
+ if(!r.indices&&(r.index_count||r.index_bytes))return EINVAL;
+ const size_t index_bytes=(size_t)count*2;
+ if(r.indices&&(r.index_bytes<index_bytes||r.index_bytes>UINTPTR_MAX-(uintptr_t)r.indices||
+    overlaps(r.indices,r.index_bytes,out,sizeof(*out))))return EINVAL;
+ uint32_t min=UINT32_MAX,max=0;
+ /* Validate all index ranges before allocating or touching a provider. */
+ for(uint32_t i=0;i<count;i++){
+  uint16_t value=(uint16_t)i;
+  if(r.indices)memcpy(&value,(const unsigned char *)r.indices+2*i,2);
+  if(value>=r.vertex_count)return ERANGE;
+  if(value<min)min=value;if(value>max)max=value;
+ }
+ size_t used=vertex_bytes+index_bytes;
+ uint8_t *image=calloc(1,used);if(!image)return ENOMEM;
+ struct linked_geometry *owned=calloc(1,sizeof(*owned));if(!owned){free(image);return ENOMEM;}
+ *owned=(struct linked_geometry){r.vertex_count,count,min,max,vertex_bytes,vertex_bytes,index_bytes};
+ memcpy(image,r.vertices,vertex_bytes);
+ for(uint32_t i=0;i<count;i++){
+  uint16_t value=(uint16_t)i;
+  if(r.indices)memcpy(&value,(const unsigned char *)r.indices+2*i,2);
+  image[vertex_bytes+2*i]=(uint8_t)value;image[vertex_bytes+2*i+1]=(uint8_t)(value>>8);
+ }
+ struct persistent *d=device->priv;void *object=NULL;const size_t before=d->allocated;
+ e=allocate_class(d,used,&object,REMESA_VA_DEFAULT);
+ if(e){free(image);free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
+ struct memory *b=object;b->raw_geometry=true;b->linked_geometry=owned;
+ e=owned_image_lease(d,b,image,used,true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,used,false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ free(image);b->readable=true;*out=b;return 0;
+fail:
+ free(image);
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
+}
+int remesa_persistent_linked_geometry_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_geometry_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->raw_geometry||!b->linked_geometry)return EINVAL;
+ linked_geometry_metadata(d,b,out);return 0;
+}
+int remesa_persistent_linked_pds_prepare(struct remesa_device *device,void *program,
+ void *geometry,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct memory *code=program,*raw=geometry;
+ e=linked_live(d,code,true);if(e)return e;
+ e=linked_live(d,raw,true);if(e)return e;
+ if(code==raw||!code->linked_program||!code->shader_program||
+    !raw->linked_geometry||!raw->raw_geometry)return EINVAL;
+ const struct linked_program *cp=code->linked_program;
+ const struct linked_geometry *gp=raw->linked_geometry;
+ if(cp->resources[0].profile!=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3||
+    cp->resources[1].profile!=REMESA_PDS_SELECTED_FS_INPUT_COL0)return ENOTSUP;
+ if(code->refs==UINT32_MAX||raw->refs==UINT32_MAX)return EBUSY;
+ if(d->linked_pds_serial==UINT64_MAX)return EOVERFLOW;
+ struct linked_pds *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
+ void *object=NULL;const size_t before=d->allocated;
+ e=allocate_class(d,256,&object,REMESA_VA_PROGRAM);
+ if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
+ struct memory *b=object;b->shader_pds=true;b->linked_pds=owned;
+ owned->program=code;owned->geometry=raw;code->refs++;raw->refs++;
+ const uint64_t serial=++d->linked_pds_serial;
+ uint8_t image[256]={0};
+ for(unsigned i=0;i<2;i++){
+  struct remesa_pds_selected_request request={.profile=cp->resources[i].profile,
+   .use_bank=cp->entry[i].bank,.semantic_identity=cp->resources[i].semantic_identity,
+   .use={.allocation_cookie=code->handle,.owner_cookie=d->cfg.context,
+    .mapping_generation=code->token.generation,.address=code->va,.offset=cp->offset[i],
+    .bytes=cp->reserved[i],.allocation_bytes=code->allocated}};
+  const struct remesa_pds_block_request block={.operation=serial,.generation=b->token.generation,
+   .allocation={.allocation_cookie=b->handle,.owner_cookie=d->cfg.context,
+    .mapping_generation=b->token.generation,.address=b->va,.offset=i?192:0,
+    .bytes=i?64:192,.allocation_bytes=b->allocated},
+   .data_bytes=48,.code_bytes=i?12:16,.code_alignment=16};
+  e=remesa_pds_request_from_block(&block,&request.storage);if(e)goto fail;
+  if(!i){
+   request.vertex_source=(struct remesa_pds_binding){.allocation_cookie=raw->handle,
+    .owner_cookie=d->cfg.context,.mapping_generation=raw->token.generation,
+    .address=raw->va,.bytes=gp->vertex_bytes,.allocation_bytes=raw->allocated};
+   request.source_records=gp->vertex_count;
+  }
+  e=remesa_pds_selected_prepare(&request,&owned->plans[i]);if(e)goto fail;
+  if(owned->plans[i].use_committed_bytes!=cp->bytes[i]||
+     owned->plans[i].use_reserved_bytes!=cp->reserved[i]||
+     owned->plans[i].use_entry.entry_address!=cp->entry[i].entry_address||
+     owned->plans[i].use_entry.register_word!=cp->entry[i].register_word){e=EPROTO;goto fail;}
+  size_t n=0;const size_t at=i?192:0,capacity=i?64:192;
+  e=remesa_pds_selected_encode(&owned->plans[i],image+at,owned->known+at,capacity,&n);if(e)goto fail;
+  if(n!=(i?60u:64u)){e=EPROTO;goto fail;}
+ }
+ e=remesa_pds_selected_pair_validate(owned->plans);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
+}
+int remesa_persistent_linked_pds_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_pds_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->linked_pds||!b->shader_pds)return EINVAL;
+ const struct linked_pds *p=b->linked_pds;
+ e=linked_live(d,p->program,false);if(e)return e;
+ e=linked_live(d,p->geometry,false);if(e)return e;
+ struct remesa_persistent_linked_pds_backing value={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,.allocation_bytes=b->allocated};
+ for(unsigned i=0;i<2;i++){
+  value.object_offset[i]=i?192:0;value.image_bytes[i]=i?60:64;
+  value.reserved_bytes[i]=i?64:192;value.plans[i]=p->plans[i];
+ }
+ memcpy(value.known_mask,p->known,sizeof(value.known_mask));
+ linked_program_metadata(d,p->program,&value.program);
+ linked_geometry_metadata(d,p->geometry,&value.geometry);
  *out=value;return 0;
 }
