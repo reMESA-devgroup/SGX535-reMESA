@@ -10,10 +10,22 @@ int ta_linkage_fixture(void);
 /* Existing small-object fixture intentionally caps at1MiB. Only the new
  * attachment allocations use this larger fake backing; failure injection for
  * the 4KiB immutable binding continues through the original callbacks. */
+#ifndef REMESA_LINKED_TEST_BYTES
+#define REMESA_LINKED_TEST_BYTES (32u*1024u*1024u)
+#endif
+#ifndef REMESA_LINKED_TEST_RASTER_END
+#define REMESA_LINKED_TEST_RASTER_END 0x30010000
+#endif
+#ifndef REMESA_LINKED_TEST_RASTER_ALIGNMENT
+#define REMESA_LINKED_TEST_RASTER_ALIGNMENT 4096
+#endif
+#ifndef REMESA_LINKED_TEST_ALLOCATION_MAX
+#define REMESA_LINKED_TEST_ALLOCATION_MAX (8u*1024u*1024u)
+#endif
 static int target_create(void *data,size_t n,uint32_t *id)
 {
  if(n<=REMESA_SHADER_DRAW_SNAPSHOT_MAX_BYTES)return create(data,n,id);
- struct fixture *f=data;CHECK(n&&!(n&4095)&&n<=8u*1024*1024&&f->creates<64&&f->fail==FAIL_NONE);
+ struct fixture *f=data;CHECK(n&&!(n&4095)&&n<=REMESA_LINKED_TEST_ALLOCATION_MAX&&f->creates<64&&f->fail==FAIL_NONE);
  struct backing *b=&f->backing[f->creates];b->bytes=malloc(n);CHECK(b->bytes);
  memset(b->bytes,0xa5,n);b->length=n;b->live=true;*id=++f->creates;return 0;
 }
@@ -24,10 +36,10 @@ static void ta_setup(struct fixture *f,struct remesa_device *d,unsigned context,
 {
  target_ops=ops;target_ops.create=target_create;
  struct remesa_persistent_config cfg={.ops=&target_ops,.priv=f,.context=context,
-  .va_start=0x20000000,.va_end=0x45000000,.byte_budget=32u*1024u*1024u,.resource_only_backend=true,
+  .va_start=0x20000000,.va_end=0x45000000,.byte_budget=REMESA_LINKED_TEST_BYTES,.resource_only_backend=true,
   .resource_limits={2048,2048,128,16u*1024u*1024u}};
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};
- cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x30010000,4096};
+ cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,REMESA_LINKED_TEST_RASTER_END,REMESA_LINKED_TEST_RASTER_ALIGNMENT};
  cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
  CHECK(!remesa_persistent_open(d,&cfg));
  struct remesa_shader_program vs=vertex(2),fs=fragment(1);struct remesa_shader_linkage link;

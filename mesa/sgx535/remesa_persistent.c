@@ -2906,3 +2906,79 @@ int remesa_persistent_linked_region_snapshot(const struct remesa_device *device,
  value.raster_scene[1]=base+layout->cookie[7];
  value.access=REMESA_ACCESS_READ|REMESA_ACCESS_WRITE;*out=value;return 0;
 }
+static int scene_footprint_add(struct persistent *d,struct memory *b,uint32_t access,
+ uint32_t roles,struct remesa_persistent_scene_footprint *out)
+{
+ int e=linked_attachment_live(d,b,false);if(e)return e;
+ if(!access||(access&~(REMESA_ACCESS_READ|REMESA_ACCESS_WRITE))||!roles||
+    !b->bytes||b->bytes>b->allocated||b->va%PAGE_BYTES||b->allocated%PAGE_BYTES||
+    b->va<d->cfg.va_start||b->va>d->cfg.va_end||b->allocated>d->cfg.va_end-b->va)return EPROTO;
+ for(unsigned i=0;i<out->allocation_count;i++){
+  if(out->allocations[i].handle==b->handle){
+   if(out->allocations[i].generation!=b->token.generation||out->allocations[i].gpu_va!=b->va||
+      out->allocations[i].logical_bytes!=b->bytes||out->allocations[i].allocation_bytes!=b->allocated)return ESTALE;
+   out->allocations[i].access|=access;out->allocations[i].roles|=roles;return 0;
+  }
+  if(b->va<out->allocations[i].gpu_va+out->allocations[i].allocation_bytes&&
+     out->allocations[i].gpu_va<b->va+b->allocated)return EINVAL;
+ }
+ if(out->allocation_count==REMESA_PERSISTENT_BUFFERS)return E2BIG;
+ unsigned n=out->allocation_count++;
+ out->allocations[n].generation=b->token.generation;out->allocations[n].gpu_va=b->va;
+ out->allocations[n].handle=b->handle;out->allocations[n].access=access;out->allocations[n].roles=roles;
+ out->allocations[n].logical_bytes=b->bytes;out->allocations[n].allocation_bytes=b->allocated;return 0;
+}
+int remesa_persistent_scene_footprint(const struct remesa_device *device,void *background_object,
+ void *aux_object,void *region_object,void *dpm_object,struct remesa_persistent_scene_footprint *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_footprint))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *bg=background_object,*aux=aux_object,
+  *region=region_object,*dpm=dpm_object;
+ struct memory *parents[4]={bg,aux,region,dpm};
+ for(unsigned i=0;i<4;i++){
+  e=linked_live(d,parents[i],true);if(e)return e;
+  for(unsigned j=0;j<i;j++)if(parents[i]==parents[j])return EINVAL;
+ }
+ if(!bg->linked_background||!aux->linked_event_auxiliary||!region->linked_region||
+    !region->scene_hw||!dpm->linked_dpm)return EINVAL;
+ struct memory *targets=bg->linked_background->targets;
+ if(aux->linked_dependency!=targets||region->linked_dependency!=targets)return EINVAL;
+ struct remesa_persistent_linked_targets_backing tm;
+ e=background_targets_metadata(d,targets,false,&tm);if(e)return e;
+ if(region->depth_width!=tm.commands.width||region->depth_height!=tm.commands.height||
+    region->scene_layout.required_bytes>region->allocated||region->scene_layout.cookie[7]>=region->allocated||
+    region->scene_layout.cookie[8]>=region->allocated)return ESTALE;
+ struct remesa_persistent_linked_dpm_backing dm={0};
+ e=dpm_plan_metadata(d,dpm->linked_dpm->table,dpm->linked_dpm->parameter,false,&dm);if(e)return e;
+ struct memory *ta=targets->linked_targets->ta,*reads[REMESA_PERSISTENT_BUFFERS]={0};unsigned count=0;
+ struct remesa_use_entry_plan banks[16]={0};bool present[16]={0};
+ e=linked_read_add(d,ta,reads,&count);if(e)return e;
+ e=linked_ta_reads(d,ta->linked_ta->prefix,ta->linked_ta->body,reads,&count,banks,present);if(e)return e;
+ e=linked_live(d,bg->linked_background->program,false);if(e)return e;
+ e=body_bank_add(&bg->linked_background->entry,banks,present);if(e)return e;
+ for(unsigned i=0;i<2;i++){
+  struct remesa_use_entry_plan entry;uint32_t fixup;
+  e=zclear_entry(aux,i?32:0,i?8:16,aux->event_pixel_bank,REMESA_USE_PIXEL,&entry,&fixup);if(e)return e;
+  e=body_bank_add(&entry,banks,present);if(e)return e;
+ }
+ struct remesa_persistent_scene_footprint value={.owner=d->cfg.context,.width=tm.commands.width,
+  .height=tm.commands.height,.draw_count=tm.commands.draw_count,
+  .incomplete=REMESA_SCENE_NEEDS_EVENT_PDS|REMESA_SCENE_NEEDS_COLOR_LOAD_INIT|
+   REMESA_SCENE_NEEDS_DPM_INIT|REMESA_SCENE_NEEDS_RASTER_CONTROL|REMESA_SCENE_NEEDS_NATIVE_ADMISSION};
+ for(unsigned i=0;i<count;i++){
+  e=scene_footprint_add(d,reads[i],REMESA_ACCESS_READ,REMESA_SCENE_REF_TA,&value);if(e)return e;
+ }
+ struct memory *extra[]={targets,targets->linked_targets->color,targets->linked_targets->depth,
+  bg,bg->linked_background->program,aux,region,dpm->linked_dpm->table,dpm->linked_dpm->parameter};
+ const uint32_t roles[]={REMESA_SCENE_REF_TARGET_DATA,REMESA_SCENE_REF_COLOR,REMESA_SCENE_REF_DEPTH,
+  REMESA_SCENE_REF_BACKGROUND,REMESA_SCENE_REF_BACKGROUND_PROGRAM,REMESA_SCENE_REF_EVENT_AUXILIARY,
+  REMESA_SCENE_REF_REGION,REMESA_SCENE_REF_DPM_TABLE,REMESA_SCENE_REF_DPM_PARAMETER};
+ const uint32_t rw=REMESA_ACCESS_READ|REMESA_ACCESS_WRITE;
+ const uint32_t access[]={REMESA_ACCESS_READ,rw,rw,REMESA_ACCESS_READ,REMESA_ACCESS_READ,
+  REMESA_ACCESS_READ,rw,rw,rw};
+ for(unsigned i=0;i<sizeof(extra)/sizeof(extra[0]);i++){
+  e=scene_footprint_add(d,extra[i],access[i],roles[i],&value);if(e)return e;
+ }
+ *out=value;return 0;
+}

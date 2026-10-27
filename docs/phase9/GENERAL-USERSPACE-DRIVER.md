@@ -831,3 +831,66 @@ different, deliberately unqueued CPU request contract. Allocating or copying an
 XHW page would not establish general context ownership, MMU admission or GPU
 execution. Full event CODE84, native context/job ownership, complete raster and
 COLOR initialization/load remain required; all execution gates stay closed.
+
+## Coherent scene GPU-reference footprint
+
+`remesa_persistent_scene_footprint()` integrates the existing background,
+event-auxiliary, region and DPM owners without allocating another BO or host
+object. It borrows four live frontend owners under external serialization;
+it does not create job/fence holds. Background, auxiliary and region must
+reference the identical COLOR/Z/TA target owner. The endpoint, registry
+generation, pin/map/lease state, dimensions, USE bank bindings, capacities and
+non-overlapping VA ranges are validated from the actual retained objects.
+Callers cannot supply raw addresses, access flags or executable bytes.
+
+The result is a deduplicated conservative allocation-level GPU-reference set
+with role and READ versus READ|WRITE masks. Logical bytes and rounded capacity
+remain separate; neither is claimed as measured GPU consumption. The current
+single-draw fixture has16 unique references across10 roles:11 READ allocations
+and5 READ|WRITE allocations. Two draws sharing state/program/geometry still
+have16 unique references while draw_count becomes2. The old copied body BO
+and CPU-only DPM plan BO remain resident through their owners but are not
+misreported as GPU references. The partial event's complete PDS allocation is
+still missing; the result therefore cannot be a complete job footprint.
+
+Successful queries always retain five explicit unmet requirements: complete
+event PDS, COLOR load/initialization, DPM initialization, full raster control
+and native admission. Undefined attachments and DPM storage remain undefined.
+No PFN/requester validation, MMIO, submission, retirement or GL/GLES capability
+is granted by this metadata result. The native path still needs authenticated
+kernel validation and actual job holds before any execution.
+
+The query performs no allocation, provider call, hash, readback or buffer
+comparison. Its validation and result are transactional. The focused test uses
+the three requested storage dimensions, exact permissions/roles, same-target
+and duplicate-role refusal, foreign endpoints, active CPU leases, stale owners,
+alignment/output aliases, reference deduplication and preserved incomplete bits.
+Parent ownership retains the chain after frontend children are released. The
+shared test fixture's original budget/ranges remain defaults; only this combined
+DPM test selects its larger fake allocation budget/range via test-only macros.
+
+`scene-footprint-qualified-v2/result.json` records native/UBSan/i386 passes,
+with7,364 checks reported by the combined fixture. The earlier single-draw
+qualification is retained in `scene-footprint-qualified/`. These are injected
+provider tests without GPU or API rendering.
+`private-mesa-scene-footprint/RESULT.json` records the same final fixture
+passing i386 against a private archive built with actual Mesa flags. The
+original cached thin archive and every referenced object remain unchanged.
+`scene-footprint-regressions/RESULT.json` records thirteen passing existing
+owner/Gallium/NIR regressions against that archive, including region, DPM,
+event auxiliaries and the old geometry path.
+
+```sh
+python3 mesa/sgx535/tests/qualify_shader_program.py --source-only \
+  --test test_scene_footprint.c --cache "$MESA_CACHE" \
+  --output /tmp/remesa-scene-footprint
+```
+
+The separate event investigation is retained in `event-memory-fields/` and
+`pds-decoder-locator/`. Seven nearby memory-write candidates do not modify the
+reviewed F7 word: subsequent stores advance the CODE cursor and mutations hit
+frame/stack counters. This local-slice result does not exclude later fixups.
+ASCII/UTF16 identifier scans found only PDS buffer labels, not an identifiable
+decoder. One selected compiler path was a dangling symlink and was recorded
+as missing, not silently replaced. No unlabeled decoder is ruled out and no
+event CF/C7/F7/87/lowE0 encoder was admitted from these bounded searches.

@@ -607,6 +607,39 @@ struct remesa_persistent_linked_region_backing {
 };
 int remesa_persistent_linked_region_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_region_backing *);
+/* Conservative allocation-level GPU references for one coherent scene.
+ * Borrows four live frontend owners, with external serialization; does NOT
+ * create job holds, issue ioctls or admit execution. All three scene owners
+ * must refer to the identical COLOR/Z/TA target owner. No raw VA/CODE accepted.
+ * Logical and rounded extents are not measured GPU fetch lengths. The old
+ * copied body BO and CPU-only DPM plan BO are deliberately not GPU references.
+ * Undefined attachment/DPM contents remain undefined. Every returned result
+ * retains all NEEDS bits below; success is resource metadata only.
+ */
+enum remesa_scene_reference_role {
+ REMESA_SCENE_REF_TA=1u<<0,REMESA_SCENE_REF_TARGET_DATA=1u<<1,
+ REMESA_SCENE_REF_COLOR=1u<<2,REMESA_SCENE_REF_DEPTH=1u<<3,
+ REMESA_SCENE_REF_BACKGROUND=1u<<4,REMESA_SCENE_REF_BACKGROUND_PROGRAM=1u<<5,
+ REMESA_SCENE_REF_EVENT_AUXILIARY=1u<<6,REMESA_SCENE_REF_REGION=1u<<7,
+ REMESA_SCENE_REF_DPM_TABLE=1u<<8,REMESA_SCENE_REF_DPM_PARAMETER=1u<<9
+};
+enum remesa_scene_incomplete {
+ REMESA_SCENE_NEEDS_EVENT_PDS=1u<<0,REMESA_SCENE_NEEDS_COLOR_LOAD_INIT=1u<<1,
+ REMESA_SCENE_NEEDS_DPM_INIT=1u<<2,REMESA_SCENE_NEEDS_RASTER_CONTROL=1u<<3,
+ REMESA_SCENE_NEEDS_NATIVE_ADMISSION=1u<<4
+};
+struct remesa_persistent_scene_footprint {
+ uint64_t owner;
+ uint32_t width,height,draw_count,allocation_count,incomplete;
+ struct {
+  uint64_t generation,gpu_va;
+  uint32_t handle,access,roles;
+  size_t logical_bytes,allocation_bytes;
+ } allocations[REMESA_PERSISTENT_BUFFERS];
+};
+int remesa_persistent_scene_footprint(const struct remesa_device *,void *background,
+ void *event_auxiliary,void *region,void *dpm,
+ struct remesa_persistent_scene_footprint *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
