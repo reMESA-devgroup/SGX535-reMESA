@@ -436,3 +436,49 @@ lifetime, no-IO metadata, ordinary rollback and uncertain closure retention.
 Its three size cases are CPU storage tests, not rendering. Evidence is
 `linked-ta-v1/result.json` and `private-mesa-linked-ta/RESULT.json` in the
 current artifact directory. Earlier private archive variants remain intact.
+
+## COLOR/Z ownership around the command stream
+
+`remesa_persistent_linked_targets_prepare()` now binds a combined TA owner to
+normal linear BGRA8 backing and matching typed cpp4 Z backing. It checks the
+actual logical COLOR byte extent, padded Z dimensions, pitch, current mapping
+state and resource kind. Source GPU addresses are allocator-derived. It creates
+an immutable72-byte control object: target DATA16 plus existing TA control56.
+The generated control points at the effective command span rather than its
+page capacity. This is command DATA, not direct register access or submission.
+
+The binding retains TA, COLOR and Z, including after caller ownership is
+released. It supports multiple bindings sharing the same attachments, defers
+final destruction through read leases and preserves all dependencies after
+uncertain upload/disposal. Its snapshot revalidates the complete TA read set
+and attachment mappings, and reports separate conservative READ|WRITE access
+for COLOR and Z. The binding object is rejected by writable mappings, legacy
+color submission and render-target reinterpretation.
+
+Attachment storage readiness is deliberately distinct from shader publication:
+fresh undefined attachments can be bound without marking them CPU-readable or
+writing their contents. This does not initialize them or implement a load,
+clear or preservation contract. A later executable job must explicitly ensure
+valid attachment contents where read access is required. The snapshot does not
+grant fences, retirement, MMU visibility or physical BGRA/Z format approval.
+
+The eventual job still needs raster/background/EOT/DPM resources and control,
+with all READ/WRITE allocations retained and checked together. These bindings
+are not the physical submission and do not approve any rendering matrix cell.
+
+`test_linked_targets.c` passed native/UBSan/i386 and the actual Mesa compilation
+model. It checks all three sizes, exact DATA16/control56, logical-size limits,
+pitch, dimensions, undefined contents staying unreadable, metadata without IO,
+shared attachment lifetime, deferred leases, ordinary rollback and uncertain
+retention. The original fake provider's1MiB limit rejected the first run before
+the full-size test could proceed. The corrected fixture supplies larger fake
+attachment storage while retaining the original failure callbacks for the new
+4KiB control object. Its first failure log remains in `linked-targets-v1`.
+
+Evidence is `linked-targets-v2/result.json` and
+`private-mesa-linked-targets/RESULT.json` in the current artifact directory.
+`linked-targets-regressions/RESULT.json` additionally passes eight earlier
+TA/clear/body/attribute/geometry/state/NIR tests against the same new archive.
+The original Mesa archive and object members remain unchanged. These tests
+use fake resource providers and simulated fences; there are no GPU submissions
+or GL/EGL API contexts in this qualification.

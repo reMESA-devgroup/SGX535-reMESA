@@ -506,6 +506,25 @@ struct remesa_persistent_linked_ta_backing {
 };
 int remesa_persistent_linked_ta_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_ta_backing *);
+/* Bind live COLOR/Z backing to a combined TA without transferring raw VAs.
+ * Generates color target DATA16 and TA control DATA56 in immutable storage.
+ * Requires a normal BGRA8 allocation and matching padded cpp4 Z allocation.
+ * Retains all three owners; caller deletion does not release their backing.
+ * This does not initialize COLOR/Z, generate raster/EOT state or submit a job.
+ * No content/clear/preserve or physical format support is inferred from it.
+ */
+int remesa_persistent_linked_targets_prepare(struct remesa_device *,void *ta,
+ void *color,void *depth,uint32_t color_pitch_pixels,void **bo);
+struct remesa_persistent_linked_targets_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,color_access,depth_access;
+ size_t allocation_bytes,used_bytes,color_data_offset,ta_control_offset;
+ struct remesa_persistent_linked_ta_backing commands;
+ struct remesa_persistent_render_target_backing color;
+ struct remesa_persistent_depth_backing depth;
+};
+int remesa_persistent_linked_targets_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_targets_backing *);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.
