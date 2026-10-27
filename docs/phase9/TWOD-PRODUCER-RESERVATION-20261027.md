@@ -1,5 +1,10 @@
 # Serialize native 2D against the console FIFO producer
 
+The [IRQ follow-up](TWOD-IRQ-OWNERSHIP-20261027.md) extends the current staging
+tool with shared IRQ exclusion/capture and five pinned native inputs. The
+424-check results below describe the preserved producer-only increment;
+the updated suite reports510 checks and uses singleton native IRQ ownership.
+
 `remesa_twod_reservation.h/.inc` supplies a device-local kernel reservation
 under the existing `dev_priv->lock_2d`. The pinned staging tool also patches
 the original `psbfb_2d_submit` to check that reservation after taking the same

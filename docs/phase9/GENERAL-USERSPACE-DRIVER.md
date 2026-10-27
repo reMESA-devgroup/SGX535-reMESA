@@ -96,6 +96,10 @@ integrates with the original console submit path under its own lock, prevents
 FIFO/reset interference while reserved and requires the saved request base
 restored before release. This has CPU and real kernel-object build evidence;
 it has not been installed or physically qualified.
+The [shared IRQ ownership and pre-ACK capture](TWOD-IRQ-OWNERSHIP-20261027.md)
+now retain 2D events separately, exclude concurrent 3D/2D owners and keep the
+reservation on incomplete or unexpected events. Actual FIFO emission and
+hardware boundary/coherency/retirement integration are still required.
 
 ## First common implementation increment
 

@@ -19,9 +19,19 @@ struct drm_psb_private {
  u32 fifo,blit,base,packet[128];unsigned words,reads,resets;
 };
 static unsigned long jiffies;
+static unsigned irq_lock_held;
+struct model_scene_owner {struct drm_device *dev;};
+struct sgx535_gma500_fixed_backend {
+ bool active,fire_possible;struct model_scene_owner *owner;u32 pending_status1,pending_status2;
+};
+static struct sgx535_gma500_fixed_backend *fixed_irq_owner;
+unsigned long sgx535_gma500_fixed_irq_lock(void)
+{CHECK(!irq_lock_held);irq_lock_held=1;return 0;}
+void sgx535_gma500_fixed_irq_unlock(unsigned long flags)
+{CHECK(!flags&&irq_lock_held);irq_lock_held=0;}
 #define HZ 2u
 #define time_after(a,b) ((long)((b)-(a))<0)
-#define spin_lock_irqsave(lock,flags) do{(flags)=0;CHECK(!(lock)->held);(lock)->held=1;}while(0)
+#define spin_lock_irqsave(lock,flags) do{(flags)=0;CHECK(!irq_lock_held&&!(lock)->held);(lock)->held=1;}while(0)
 #define spin_unlock_irqrestore(lock,flags) do{CHECK(!(flags)&&(lock)->held);(lock)->held=0;}while(0)
 static int gma_power_is_on(struct drm_device *dev){return dev->powered;}
 static int gma_power_begin(struct drm_device *dev,int wake)
@@ -60,6 +70,7 @@ static struct model_gtt *to_gtt_range(struct model_gtt *g){return g;}
 static unsigned console_copies;
 static void drm_fb_helper_cfb_copyarea(struct fb_info *i,const struct fb_copyarea *a)
 {CHECK(i&&a);console_copies++;}
+#include "../remesa_twod_irq.inc"
 #include "../remesa_twod_reservation.inc"
 /* Preserve the original kernel producer's signed loop counter verbatim. */
 #pragma GCC diagnostic push
@@ -113,8 +124,10 @@ int main(void)
   device.powered=0;CHECK(remesa_twod_release(&p,&r)==-EIO&&r.held);device.powered=1;
   CHECK(remesa_twod_release(&p,&r2)==-ENOENT&&r.held);
   CHECK(remesa_twod_release(&other,&r)==-ENOENT&&r.held);
-  CHECK(!remesa_twod_reserve(&other,&r2));CHECK(!remesa_twod_release(&other,&r2));
+  /* The native IRQ owner, like the old fixed 3D owner, is global. */
+  CHECK(remesa_twod_reserve(&other,&r2)==-EBUSY);
   CHECK(!remesa_twod_release(&p,&r)&&!memcmp(&r,&zero,sizeof r)&&!p.remesa_twod_owner);
+  CHECK(!remesa_twod_reserve(&other,&r2));CHECK(!remesa_twod_release(&other,&r2));
   CHECK(remesa_twod_release(&p,&r)==-ENOENT);
   p.words=0;console_copy(&p,width,height);
   CHECK(p.words==10&&console_copies==before+1&&!memcmp(expected,p.packet,sizeof expected));
