@@ -89,4 +89,5 @@ int main(void){
  /* A fence outlives its context; CPU-only operations never redispatch draws. */
  c->destroy(c);other->destroy(other);release(a);release(b);release(bad);s->destroy(s);assert(f.alloc==f.free&&f.maps==f.unmaps&&!f.submitted);
  puts("PASS CPU copy overlap, cross-context fences, map failure, terminal quarantine, teardown; NO SGX");
+ return 0;
 }

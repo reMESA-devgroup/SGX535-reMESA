@@ -1025,12 +1025,38 @@ Linux userspace adapter validates owned IDs, exact receipts and monotonic
 operations, retaining poison on uncertainty. The optional kernel service still
 requires root, its default-off gate and the same file/context ownership.
 
-This is the low-level primitive, not a connected Gallium resource-copy callback
-or general unprivileged ABI. The existing frontend CPU copy remains explicitly
-CPU. General3D, complete2D API dispatch, presentation and installable packaging
+That initial qualification covered the low-level primitive. The subsequent
+Gallium connection is described below; the service remains privileged. Default
+frontend CPU transfers remain explicitly CPU. General3D, complete2D API dispatch, presentation and installable packaging
 remain unfinished. See the linked report for physical call times and their
 limits; those measurements are not desktop FPS or an isolated GPU timer.
 
 The normal-copy qualification ended on independently verified stock boot
 639e968a after all48 native operations were already retired. The default boot
 and original module are restored; no queued work or next boot remains.
+
+
+## Native Gallium resource copy
+
+The [native Gallium copy report](TWOD-GALLIUM-COPY-20261028.md) records another
+48 physical operations at1280×800,640×640 and641×479, using the actual
+`resource_copy_region` callback, persistent BO owner and normal Linux transport.
+Writer synchronization, epochs, owned mappings and two-buffer quarantine are
+integrated. Native opt-in has no CPU fallback. Per-size sequences reuse buffers
+and produce16 native ioctls, zero CPU copies and zero memory ioctls/leases/
+allocations during copying. Final logical guarded readbacks and exact previous
+physical oracle common prefixes pass independently. General driver creation,
+complete2D operations, unprivileged admission, presentation and installation
+remain unfinished. This does not alter general3D or GL/GLES capability gates.
+
+Artifact root:
+`/home/gama/sgx535-offline/gallium-native-copy-20261028/v1/`.
+The actual-Mesa private archive and six regressions, native/UBSan/i386 owner
+and writer tests, physical results and final stock receipt are bound there.
+Normal call means41.807547/13.127341/10.728538ms are external callback wall
+times, not sustained presentation FPS or isolated GPU durations.
+
+The Gallium qualification ended on verified stock boot608368aa after all48
+operations were already retired; original default/module restored, empty next
+entry and no work pending. This is an incremental component, not completion
+of the full userspace driver goal.

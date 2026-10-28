@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include "remesa_texture_descriptor.h"
+#include "remesa_copy.h"
 /* Opaque factory ABI also used by the standalone ownership-model tests.
  * The Gallium adapter qualification compiles against pinned Mesa headers. */
 struct pipe_screen;
@@ -206,6 +207,12 @@ int remesa_screen_collect(struct pipe_screen *);
  * diagnostic discard; it does not establish a kernel load/store capability. */
 int remesa_context_set_framebuffer_load(struct pipe_context *,bool preserve);
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *);
+/* Serialized opt-in before children, using the screen's same device.priv.
+ * Callback attests a retired/published native copy; never general draw/API
+ * admission. Unsupported or uncertain native copies do not fall back to CPU. */
+int remesa_screen_enable_native_copy(struct pipe_screen *,remesa_copy_region_fn);
+/* Successful native callback count, not independent GPU execution evidence. */
+uint64_t remesa_context_native_copy_count(const struct pipe_context *);
 /* Completed CPU byte-copy callbacks, never SGX draw/blit submissions. */
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *);
 const char *remesa_screen_unavailable_reason(void);

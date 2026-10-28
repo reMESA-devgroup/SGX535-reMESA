@@ -207,3 +207,13 @@ int remesa_linux_memory_copy_2d(struct remesa_linux_memory *d,struct remesa_twod
 uncertain:
  a->poison=b->poison=true;return EOWNERDEAD;
 }
+
+int remesa_linux_memory_native_copy(void *opaque,const struct remesa_gpu_copy *c)
+{
+ if(!c)return EINVAL;
+ struct remesa_twod_copy_request r={.source={c->source.id,c->source.width,c->source.height,c->source.stride},
+  .destination={c->destination.id,c->destination.width,c->destination.height,c->destination.stride},
+  .source_x=c->source_x,.source_y=c->source_y,.destination_x=c->destination_x,
+  .destination_y=c->destination_y,.width=c->width,.height=c->height,.budget_ms=1000};
+ return remesa_linux_memory_copy_2d(opaque,&r);
+}

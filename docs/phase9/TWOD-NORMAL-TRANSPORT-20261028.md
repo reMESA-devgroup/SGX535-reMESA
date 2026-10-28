@@ -7,9 +7,10 @@ allocations once and completed16 synchronous native copies before readback.
 All48 operations passed retirement and all three final guarded readback pairs
 match the preserved LAB oracles byte for byte.
 
-This is a qualified privileged copy primitive. Gallium's resource-copy callback
-is not connected to it yet; the existing CPU byte-transfer callback remains
-explicitly a CPU path. This does not qualify desktop acceleration, general
+This original qualification covered the privileged copy primitive. A later
+[native Gallium integration](TWOD-GALLIUM-COPY-20261028.md) completed48 more
+physical operations through the actual callback and persistent resource owner.
+Default CPU byte transfers remain explicitly CPU. This does not qualify desktop acceleration, general
 OpenGL/GLES, presentation FPS or an installable driver.
 
 ## Normal interface and safety boundary
@@ -122,8 +123,8 @@ to N, producers_active0, context cleanup0, and no new native fault/BUG/WARN/Oops
 appeared. `hardware/PHYSICAL_RESULTS.json`, per-size fetched archives/raw files
 and independent-verification reports retain the proof.
 
-Next: connect this primitive to authenticated Gallium resource ownership and
-its synchronization rules. Keep permissions/isolation closed until qualified;
+The subsequent Gallium report connects this primitive to authenticated resource
+ownership and writer synchronization. Keep permissions/isolation closed until qualified;
 do not use the normal profile to approve LAB tests or general API support.
 
 
@@ -134,9 +135,9 @@ experimental controls/proc endpoint, original GRUB/default and empty next entry.
 Reset was not used to satisfy retirement. All probe/fetch/SSH/reboot observation
 handles are terminal. No user libraries or default driver were replaced.
 
-The remaining immediate integration is an authenticated Gallium resource-copy
-callback with correct writer/resource lifetime handling, followed by physical
-frontend tests. Unprivileged admission requires its separate memory-isolation
+The follow-up Gallium report records physical frontend copies and correct
+writer/resource lifetime handling. Remaining2D work includes fill/clear, other
+operations and integration into general driver creation. Unprivileged admission requires its separate memory-isolation
 qualification; CAP_SYS_ADMIN must not simply be removed. General3D still needs
 its complete event PDS, attachment/DPM initialization, raster control and typed
 native submission. Installation and later video acceleration remain separate

@@ -131,6 +131,7 @@ struct persistent {
  uint64_t shader_generation;
  uint64_t linked_pds_serial,scene_serial;
  struct scene_capture scenes[REMESA_PROVIDER_MAX_JOBS];
+ remesa_gpu_copy_fn native_copy;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
 {
@@ -3061,4 +3062,55 @@ int remesa_persistent_scene_capture_release(struct remesa_device *device,
  for(unsigned i=0;i<count;i++)drop_memory(d,held[i]);
  for(unsigned i=0;i<count;i++)if(held[i]->quarantined)return EOWNERDEAD;
  return d->failed?EOWNERDEAD:0;
+}
+
+int remesa_persistent_set_native_copy(struct remesa_device *device,remesa_gpu_copy_fn fn)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!fn)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(d->native_copy||d->allocated||d->shaders)return EBUSY;
+ d->native_copy=fn;return 0;
+}
+static int native_copy_surface(struct persistent *d,const struct remesa_copy_surface *s,
+ struct memory **out,bool source)
+{
+ struct memory *b=s->bo;
+ int e=linked_attachment_live(d,b,true);if(e)return e;
+ if(b->scene_holds||b->refs==UINT32_MAX)return EBUSY;
+ if(b->linked_dpm||b->linked_background||b->linked_targets||b->linked_ta||b->zclear_prefix||
+    b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||
+    b->shader_program||b->shader_pds||b->scene_image||b->control_image)return ENOTSUP;
+ if(source&&!b->readable)return EAGAIN;
+ if(!s->width||s->width>4096||!s->height||s->height>4096||s->stride%4||
+    s->stride<s->width*4u||s->stride>0x7fffu)return EINVAL;
+ if((uint64_t)(s->height-1)*s->stride+(uint64_t)s->width*4u>b->bytes)return ENOSPC;
+ *out=b;return 0;
+}
+int remesa_persistent_copy_region(void *opaque,const struct remesa_copy_region *r)
+{
+ struct persistent *d=opaque;struct memory *a,*b;int e;
+ if(!d||!r)return EINVAL;
+ if(d->failed)return EOWNERDEAD;
+ if(!d->native_copy)return EOPNOTSUPP;
+ e=native_copy_surface(d,&r->source,&a,true);if(e)return e;
+ e=native_copy_surface(d,&r->destination,&b,false);if(e)return e;
+ if(a==b)return EOPNOTSUPP; /* Overlap not admitted by this physical profile. */
+ if(!r->width||!r->height||r->width>4095||r->height>4095||r->width==8||r->height==8)return EOPNOTSUPP;
+ if(r->source_x>=r->source.width||r->source_y>=r->source.height||
+    r->destination_x>=r->destination.width||r->destination_y>=r->destination.height||
+    r->width>r->source.width-r->source_x||r->height>r->source.height-r->source_y||
+    r->width>r->destination.width-r->destination_x||r->height>r->destination.height-r->destination_y)return EINVAL;
+ uint64_t base=a->va&UINT64_C(0xf0000000),limit=base+UINT64_C(0x10000000);
+ if(a->va>=UINT64_C(0x100000000)||a->allocated>limit-a->va||
+    b->va<base||b->va>=limit||b->allocated>limit-b->va)return EOPNOTSUPP;
+ struct remesa_gpu_copy copy={.source={a->handle,r->source.width,r->source.height,r->source.stride},
+  .destination={b->handle,r->destination.width,r->destination.height,r->destination.stride},
+  .source_x=r->source_x,.source_y=r->source_y,.destination_x=r->destination_x,
+  .destination_y=r->destination_y,.width=r->width,.height=r->height};
+ a->refs++;b->refs++;
+ e=d->native_copy(d->cfg.priv,&copy);
+ if(e==EOWNERDEAD||e<0){memory_error(d,a,EOWNERDEAD);memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;}
+ if(!e)b->readable=true;
+ drop_memory(d,a);drop_memory(d,b);return e;
 }

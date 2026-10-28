@@ -2,6 +2,7 @@
 #ifndef REMESA_PERSISTENT_H
 #define REMESA_PERSISTENT_H
 #include "remesa_device.h"
+#include "remesa_copy.h"
 #include "remesa/provider.h"
 #include "remesa_render_target.h"
 #include "remesa_program_registers.h"
@@ -81,6 +82,11 @@ struct remesa_persistent_config {
  * qualification is performed here. The real GEM/MMU binding is not supplied
  * by this library. No mode silently falls back to host rasterization. */
 int remesa_persistent_open(struct remesa_device *,const struct remesa_persistent_config *);
+/* Explicit native-copy opt-in, before any resources/shaders/captures exist.
+ * Leaves draw admission and resource-only flags unchanged. Callback uses the
+ * same cfg.priv and ownership as the memory provider. No reentry permitted. */
+int remesa_persistent_set_native_copy(struct remesa_device *,remesa_gpu_copy_fn);
+int remesa_persistent_copy_region(void *,const struct remesa_copy_region *);
 /* Completion receipts may arrive out of order; visibility and backing release
  * drain in operation order with nonblocking dependency polls. This is host
  * sequencing, not evidence of reusable SGX execution.

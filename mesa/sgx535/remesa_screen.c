@@ -36,6 +36,7 @@ struct screen {
  struct pipe_screen base; struct remesa_device device; unsigned refs; bool closing;
  int (*release_device)(struct remesa_device *);int release_error;bool release_pending;
  uint64_t resource_cookie;bool cpu_depth24_lab,gears_runtime;
+ remesa_copy_region_fn native_copy;
 };
 static void screen_hold(struct screen *sc) { ++sc->refs; }
 static void screen_drop(struct screen *sc)
@@ -73,7 +74,7 @@ struct transfer;
 struct context {
  struct pipe_context base; struct pipe_vertex_buffer vb,second_vb,third_vb; unsigned vb_count; struct pipe_vertex_element position;
  struct pipe_resource *target,*depth_target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
- int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies;
+ int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies;
  bool failed_submission;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
@@ -424,9 +425,9 @@ static void texture_subdata(struct pipe_context *p,struct pipe_resource *b,unsig
  for(unsigned y=0;y<(unsigned)box->height;y++)memcpy((unsigned char *)dst+y*t->stride,(const unsigned char *)data+y*stride,row);
  unmap(p,t);ctx->error=0;
 }
-/* Gallium permits CPU transfer implementations of this byte-copy contract.
- * No rasterization, format conversion, resolve or GPU work occurs here.
- * Snapshot first so aliasing and overlapping regions are deterministic. */
+/* Opt-in native copies authenticate synchronous GPU retirement through the
+ * owner/transport callback. The default CPU transfer implementation snapshots
+ * first for deterministic overlap. Neither path performs format conversion. */
 static void copy_region(struct pipe_context *p,struct pipe_resource *dst,unsigned dst_level,
  unsigned dstx,unsigned dsty,unsigned dstz,struct pipe_resource *src,unsigned src_level,
  const struct pipe_box *box)
@@ -459,6 +460,34 @@ static void copy_region(struct pipe_context *p,struct pipe_resource *dst,unsigne
  if(r(src)->maps||r(dst)->maps){error=EBUSY;goto done;}
  error=resource_sync(p->screen,r(src),UINT64_MAX);if(error)goto done;
  error=resource_sync(p->screen,r(dst),UINT64_MAX);if(error)goto done;
+ if(s(p->screen)->native_copy){
+  if(src->target!=PIPE_TEXTURE_2D||src_level||dst_level||
+     r(src)->layout.levels[0].offset||r(dst)->layout.levels[0].offset){error=ENOTSUP;goto done;}
+  struct remesa_copy_region request={
+   .source={r(src)->bo,r(src)->layout.levels[0].width,r(src)->layout.levels[0].height,r(src)->layout.levels[0].stride},
+   .destination={r(dst)->bo,r(dst)->layout.levels[0].width,r(dst)->layout.levels[0].height,r(dst)->layout.levels[0].stride},
+   .source_x=box->x,.source_y=box->y,.destination_x=dstx,.destination_y=dsty,.width=box->width,.height=box->height};
+  struct remesa_pass_ticket ticket;
+  error=remesa_render_pass_begin(&r(dst)->pass,REMESA_PASS_PRESERVE,REMESA_PASS_STORE,true,&ticket);if(error)goto done;
+  r(dst)->ticket=ticket;
+  error=s(p->screen)->native_copy(s(p->screen)->device.priv,&request);
+  if(error&&error!=EOWNERDEAD&&error>0){int cancel=remesa_render_pass_cancel(&r(dst)->pass,&ticket);if(cancel)error=EOWNERDEAD;else goto done;}
+  if(error<0)error=EOWNERDEAD;
+  if(!error){
+   const struct remesa_pass_completion proof={true,true,true};
+   error=remesa_render_pass_submitted(&r(dst)->pass,&ticket);
+   if(!error)error=remesa_render_pass_finish(&r(dst)->pass,&ticket,&proof);
+   if(!error){r(dst)->has_contents=true;ctx->native_copies++;goto done;}
+   error=EOWNERDEAD;
+  }
+  if(error==EOWNERDEAD){
+   (void)remesa_render_pass_submitted(&r(dst)->pass,&ticket);
+   (void)remesa_render_pass_fail(&r(dst)->pass,&ticket,error);
+   if(src!=dst){struct remesa_pass_ticket read; if(!remesa_render_pass_import_writer(&r(src)->pass,&read))(void)remesa_render_pass_fail(&r(src)->pass,&read,error);}
+   r(src)->write_error=r(dst)->write_error=error;ctx->failed_submission=true;
+  }
+  goto done;
+ }
  snapshot=malloc(bytes);if(!snapshot){error=ENOMEM;goto done;}
  ptr=map(p,src,src_level,PIPE_MAP_READ,box,&transfer);if(!ptr){error=ctx->error;goto done;}
  for(unsigned y=0;y<(unsigned)box->height;y++)
@@ -2041,6 +2070,14 @@ int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve)
  c(p)->diagnostic_discard=!preserve;return 0;
 }
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->cpu_clears : 0; }
+int remesa_screen_enable_native_copy(struct pipe_screen *p,remesa_copy_region_fn fn)
+{
+ if(!p||p->context_create!=create_context||!fn)return EINVAL;
+ struct screen *sc=s(p);if(sc->closing||sc->refs!=1||sc->native_copy)return EBUSY;
+ sc->native_copy=fn;return 0;
+}
+uint64_t remesa_context_native_copy_count(const struct pipe_context *p)
+{return p&&p->draw_vbo==draw?((const struct context *)p)->native_copies:0;}
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->cpu_copies : 0; }
 int remesa_context_error(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->error : EINVAL; }
 int remesa_context_draw_rejections(struct pipe_context *p,struct remesa_draw_rejection_status *out)
@@ -2098,6 +2135,9 @@ int remesa_drawable_buffers_replace(struct pipe_screen *p,uint32_t w,uint32_t h,
 void remesa_drawable_buffers_release(struct remesa_drawable_buffers *o) {(void)o;}
 int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve) { (void)p;(void)preserve;return ENOTSUP; }
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { (void)p;return 0; }
+int remesa_screen_enable_native_copy(struct pipe_screen *p,remesa_copy_region_fn fn)
+{(void)p;(void)fn;return EOPNOTSUPP;}
+uint64_t remesa_context_native_copy_count(const struct pipe_context *p){(void)p;return 0;}
 uint64_t remesa_context_cpu_copy_count(const struct pipe_context *p) { (void)p;return 0; }
 int remesa_screen_collect(struct pipe_screen *screen) { (void)screen;return ENOTSUP; }
 struct pipe_screen *remesa_screen_create_owned(struct remesa_device *device,int (*release)(struct remesa_device *)) { (void)device;(void)release;return 0; }
