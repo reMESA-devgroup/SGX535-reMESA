@@ -84,3 +84,7 @@ encoder, shader, rendering gate, GLXGears profile or boot configuration changed.
 The outstanding general event CODE84 program uses **PDS**, a different ISA;
 this USSE decoder does not resolve that blocker. General 3D/2D and installable
 driver completion remain unproved.
+
+The later [texture-sampling field observations](TEXTURE-SMP-ORACLE-20261028.md)
+use the same original SGX535/rev121 context. They do not resolve texture-state
+descriptors or qualify a GPU sampling program.
