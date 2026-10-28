@@ -56,3 +56,7 @@ a real textured draw before connecting shader lowering. Keep synthetic probes
 outside production CODE and preserve general DRI admission until these contracts
 are implemented. This is progress toward the shared textured desktop renderer,
 not an accelerated desktop or physical texture-sampling result.
+
+The subsequent [original rev121 state-builder replay](TEXTURE-STATE-ORACLE-20261028.md)
+narrows selected descriptor fields with240 CPU cases. Filter semantics, GPU fetch
+footprint and upload remain unqualified; no production feature was enabled.
