@@ -26,4 +26,19 @@ struct remesa_texture_cpu_strided_state {
  */
 int remesa_texture_cpu_strided_state_encode(
    const struct remesa_texture_cpu_strided_state *, void *, size_t, size_t *written);
+
+/* Selected original GLES2 stream-target composition with explicit stride,
+ * independent min/mag image filters, clamp-to-edge and no mipmapping. This
+ * identifies the CPU producer role, not support for an IMG/OES GL extension.
+ * Evidence: TEXTURE-LAYOUT-COMPOSITION-20261028.md. Hardware fetch/upload and
+ * normal texture2D admission remain unqualified. Flags must be exactly 0/1.
+ */
+struct remesa_texture_cpu_stream_sampler_state {
+   uint64_t image_address;
+   uint32_t width, height, stride_bytes, format_id;
+   uint32_t min_filter_linear, mag_filter_linear;
+};
+int remesa_texture_cpu_stream_sampler_encode(
+   const struct remesa_texture_cpu_stream_sampler_state *, void *, size_t,
+   size_t *written);
 #endif

@@ -40,3 +40,32 @@ int remesa_texture_cpu_strided_state_encode(
    *written=sizeof(bytes);
    return 0;
 }
+
+int remesa_texture_cpu_stream_sampler_encode(
+   const struct remesa_texture_cpu_stream_sampler_state *s, void *out,
+   size_t capacity, size_t *written)
+{
+   if (!s || !out || !written) return EINVAL;
+   if (s->min_filter_linear>1 || s->mag_filter_linear>1) return ENOTSUP;
+   const struct remesa_texture_cpu_strided_state image={
+      .image_address=s->image_address,.width=s->width,.height=s->height,
+      .stride_bytes=s->stride_bytes,.format_id=s->format_id,.filter_id=0};
+   uint8_t bytes[REMESA_TEXTURE_CPU_STATE_BYTES];
+   size_t size;
+   int error=remesa_texture_cpu_strided_state_encode(&image,bytes,sizeof(bytes),&size);
+   if (error) return error;
+   if (capacity<size) return ENOSPC;
+   uint32_t word0=0;
+   for (unsigned i=0;i<4;i++) word0|=(uint32_t)bytes[i]<<(8*i);
+   /* Original stream branch: (cached_word0 & 0xffe3fe00) | stride_word0.
+    * Fixed non-mipmapped min control plus clamped wrap90 and the original
+    * composition control3e00000 leave3e20000 after the stride mask. Wrap
+    * bits must not be ORed back over the low pitch bits. These retained CPU
+    * controls do not establish their complete architectural interpretation. */
+   word0|=UINT32_C(0x03e20000)|(s->min_filter_linear<<10)|
+      (s->mag_filter_linear<<12);
+   put32(bytes,word0);
+   memcpy(out,bytes,size);
+   *written=size;
+   return 0;
+}

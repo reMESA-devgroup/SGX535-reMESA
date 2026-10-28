@@ -114,3 +114,7 @@ with physical identity, submission, completion, retirement, readback and buffer
 integrity. Do not infer a GPU3-word fetch from a12-byte CPU write or manufacture
 CODE padding. Keep normal desktop/EGL/GBM/image ownership and multi-client
 isolation as required integration work, not optional follow-up after a demo.
+
+The later [layout-composition replay](TEXTURE-LAYOUT-COMPOSITION-20261028.md)
+checks the selected stream final-state producer and extends the CPU encoder with
+independent min/mag filtering. It does not qualify normal texture2D or GPU sampling.
