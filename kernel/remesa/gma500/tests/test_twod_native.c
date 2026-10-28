@@ -14,7 +14,7 @@ int psb_mmu_default_root(struct drm_device *dev,struct psb_mmu_pd *pd,u32 *out)
 static u32 registers[0x5000/4];
 static unsigned mode,base_writes,acks,sleeps,barriers,route_calls,native_reads,power_loss_reads;
 static u64 clock_ns;
-static unsigned packet_words=10;
+static unsigned packet_words=10,alpha_writes,initial_alpha;
 #ifdef REMESA_TWOD_LAB_VENDOR_STREAM
 static int vendor_stream;
 #endif
@@ -58,6 +58,7 @@ static void base_observe_sleep(void)
   registers[PSB_CR_EVENT_STATUS/4]=registers[PSB_CR_EVENT_STATUS2/4]=0;
   sgx535_gma500_fixed_irq_unlock(flags);
  }
+ if(mode==41)registers[0x0e1c/4]^=1;
  if(mode==38)registers[PSB_CR_BIF_DIR_LIST_BASE0/4]^=4096;
 }
 static u32 native_read(struct drm_psb_private *p,u32 reg)
@@ -70,6 +71,18 @@ static u32 native_read(struct drm_psb_private *p,u32 reg)
 static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
 {
  CHECK(irq_lock_held);
+ if(reg==0x0e1c){
+  CHECK(p->lock_2d.held&&producer_depth==1&&packet_words==9);
+  alpha_writes++;
+  if(alpha_writes%2==1)CHECK(p->words%packet_words==0&&!active_native->cookie&&value==0xff00);
+  else CHECK(active_native->complete&&active_native->visible&&value==initial_alpha);
+  if((mode==40&&alpha_writes==1)||(mode==42&&alpha_writes==2))return;
+  registers[reg/4]=value;
+  if(mode==43||(mode==49&&alpha_writes==2)){registers[PSB_CR_BIF_INT_STAT/4]=4;registers[PSB_CR_BIF_FAULT/4]=p->base;}
+  if(mode==44||(mode==48&&alpha_writes==2)){power_loss_reads=native_reads;p->dev->powered=0;}
+  if(mode==45||(mode==50&&alpha_writes==2))registers[PSB_CR_EVENT_STATUS2/4]=1u<<4;
+  return;
+ }
  if(reg==PSB_CR_BIF_TWOD_REQ_BASE){
   CHECK(p->lock_2d.held);base_writes++;
   if((mode==8&&base_writes==1)||(mode==9&&base_writes==2))return;
@@ -118,8 +131,8 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
 #endif
  CHECK(!remesa_twod_copy_prepare(&copy,&launch.plan));
  dev.dev_private=&p;active_native=&native;mode=fault;
- memset(registers,0,sizeof registers);failure_log[0]=0;base_writes=acks=sleeps=barriers=0;clock_ns=0;
- registers[0x0e1c/4]=fault==39?0:0x0000ff00u;
+ memset(registers,0,sizeof registers);failure_log[0]=0;base_writes=acks=sleeps=barriers=alpha_writes=0;clock_ns=0;
+ registers[0x0e1c/4]=fault==39?0x00010000u:initial_alpha;
  registers[PSB_CR_CORE_ID/4]=0x01130000;registers[PSB_CR_CORE_REVISION/4]=0x00010201;
  registers[PSB_CR_BIF_DIR_LIST_BASE0/4]=pd.root;
  registers[PSB_CR_EVENT_STATUS/4]=_PSB_CE_TWOD_COMPLETE; /* stale event */
@@ -134,7 +147,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  for(unsigned iteration=0;iteration<(fault?1u:3u);iteration++){
   u64 cookie=0;unsigned words=p.words,initial_base_writes=base_writes;
   int error=remesa_twod_native_executor.start(&native,&launch,&cookie);
-  if(fault>=34&&fault<=38){
+  if((fault>=34&&fault<=38)||fault==41){
    CHECK(error==-EIO&&native.failed&&native.reservation.held&&cookie&&!p.words);
    CHECK(!producer_depth&&!irq_lock_held&&!p.lock_2d.held&&!p.resets);
    CHECK(!native.complete&&!native.visible&&twod_irq_owner&&p.remesa_twod_owner);
@@ -157,6 +170,12 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
    CHECK(strstr(failure_log,boundary));
    if(fault<=31)CHECK(strstr(failure_log,"bif=00004004 addr=40000000"));
 #endif
+   return;
+  }
+  if(fault==40||(fault>=43&&fault<=45)){
+   CHECK(error==-EIO&&native.failed&&native.reservation.held&&!p.words&&!cookie);
+   CHECK(alpha_writes==1&&!base_writes&&!producer_depth&&!native.complete&&!native.visible);
+   if(fault==44)CHECK(native_reads==power_loss_reads);
    return;
   }
   if(fault==21){
@@ -195,19 +214,29 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
   CHECK(!error&&native.complete&&receipt.event==_PSB_CE_TWOD_COMPLETE&&receipt.cookie==cookie);
   if(fault==16)registers[PSB_CR_BIF_INT_STAT/4]=1;
   if(fault==19)dev.powered=0;
+  if(fault==46)registers[0x0e1c/4]^=1;
   reads=native_reads;
   error=remesa_twod_native_executor.visible(&native,&launch,cookie);
   if(fault==19){CHECK(error==-EIO&&native.failed&&native.reservation.held&&native_reads==reads);return;}
-  if(fault==16){CHECK(error==-EIO&&native.failed&&native.reservation.held);return;}
+  if(fault==16||fault==46){CHECK(error==-EIO&&native.failed&&native.reservation.held);return;}
   CHECK(!error&&native.visible&&barriers==iteration+1);
   if(fault==17)registers[PSB_CR_EVENT_STATUS2/4]=1;
   if(fault==20)dev.powered=0;
+  if(fault==47)registers[0x0e1c/4]^=1;
   reads=native_reads;
   error=remesa_twod_native_executor.retire(&native,&launch,cookie);
   if(fault==20){CHECK(error==-EIO&&native.failed&&native.reservation.held&&native_reads==reads);return;}
+  if(fault==42||fault>=47){
+   CHECK(error==-EIO&&native.failed&&native.reservation.held&&!producer_depth);
+   CHECK(alpha_writes==(fault==47?1u:2u));
+   if(fault==48)CHECK(native_reads==power_loss_reads);
+   CHECK(!p.resets);return;
+  }
   if(fault==9||fault==17){CHECK(error==-EIO&&native.failed&&native.reservation.held);return;}
   CHECK(!error&&!native.live&&!native.reservation.held&&!twod_irq_owner&&!p.remesa_twod_owner);
   CHECK(p.base==0x28000000&&base_writes==initial_base_writes+2&&!p.resets);
+  CHECK(registers[0x0e1c/4]==initial_alpha);
+  CHECK(alpha_writes==(packet_words==9?2u*(iteration+1):0));
   launch.ticket.operation++;
  }
  CHECK(!irq_lock_held&&!p.lock_2d.held&&route_calls>0);
@@ -228,13 +257,15 @@ int main(void)
 #ifdef REMESA_TWOD_LAB_VENDOR_STREAM
  vendor_stream=1;packet_words=9;
  native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
- for(unsigned fault=1;fault<=39;fault++){
+ initial_alpha=0xff00;native_case(32,32,0);
+ initial_alpha=0x1234;native_case(32,32,0);initial_alpha=0;
+ for(unsigned fault=1;fault<=50;fault++){
   if(fault==31)continue; /* word ten does not exist in this profile */
   pid_t child=fork();CHECK(child>=0);
   if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
- printf("PASS vendor nine-word profile: three dimensions and 38 joined fault models including ALPHA rejection; CPU only\n");
+ printf("PASS vendor nine-word profile: three dimensions, two saved-state fixtures and 49 joined fault models including ALPHA publication, interference and restore failures; CPU only\n");
 #endif
  printf("PASS %u parent native adapter checks plus %u joined MMIO fault models; no GPU execution\n",checks,faults);
  return 0;

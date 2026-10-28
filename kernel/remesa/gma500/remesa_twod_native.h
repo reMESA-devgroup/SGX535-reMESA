@@ -12,6 +12,10 @@ struct remesa_twod_native {
  const struct remesa_twod_launch *launch;
  u64 serial,cookie;
  u32 root,core,revision,stale_status1;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ u32 saved_alpha,expected_alpha;
+ bool alpha_saved;
+#endif
  bool live,complete,visible,failed;
 };
 extern const struct remesa_twod_native_ops remesa_twod_native_executor;

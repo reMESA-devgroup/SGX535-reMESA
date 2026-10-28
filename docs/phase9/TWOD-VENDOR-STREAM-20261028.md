@@ -265,3 +265,40 @@ original stock module, absent experimental controls/proc endpoints, original
 GRUB configuration, saved default and empty next entry. The retained kernel
 lifetime ended by reset; no GPU retirement is claimed. All local test, build,
 SSH and reboot observation handles for this candidate are terminal.
+
+## v2: exclusive ALPHA ownership
+
+The next candidate is retained separately at
+`/home/gama/sgx535-offline/twod-vendor-stream-20261028/v2/`.
+Only the explicit vendor LAB build acquires this additional state. After exact
+core/revision identification, it saves the register and rejects undefined upper
+bits. The existing power/root/base/idle/fault checks authenticate the saved
+state before any write. Within the existing producer interval and both locks,
+it publishes `0x0000ff00`, validates readback and hardware quiet, and captures
+unexpected events before request-base publication or FIFO writes. Later
+hardware checks compare the current ALPHA with the transaction's expected
+value; they do not assume the register retained its value.
+
+After completion and visibility, retirement restores and checks the original
+request base and then the saved ALPHA before marking retired and releasing the
+reservation. State restoration has its own producer interval. Any failure,
+including lost power, write/readback mismatch, MMU fault, unexpected event or
+interference, keeps the reservation/backing and fails the operation. It does
+not clear the fault, repeat submission, restore uncertain state speculatively,
+or force release. The old ten-word profile and normal production are unchanged.
+
+The native model retains the old38 fault children and adds49 vendor children,
+with publication/restore write failures, reserved-bit rejection, pre-FIFO and
+post-completion interference, BIF/event faults and power loss. Successful
+fixtures restore initial values0,0xff00 and0x1234 across repeated operations;
+the three rendering dimensions remain1280×800,640×640 and641×479. These are CPU
+MMIO models, not rendered frames or physical receipts. NATIVE_RESULT.json binds
+the exact source, commands, real antiX objects and partial link. The same typed
+GEM/LAB/packet suites are rerun in native, UBSan and i386 variants.
+
+Physical validation is pending. Fresh SSH inventory timed out and ICMP reported
+host unreachable; that proves no connection, not a ConnMan regression or a
+powered-off machine. No v2 boot entry, upload, reboot or GPU test was performed. The controller
+requires a fresh exact stock inventory.
+Do not reuse the previous boot's hardware admission. The v1 physical rejection
+and recovered stock evidence remain unchanged.

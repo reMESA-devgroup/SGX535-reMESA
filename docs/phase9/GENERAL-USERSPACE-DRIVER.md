@@ -124,8 +124,10 @@ LAB candidate now passes native/UBSan/i386 packet, GEM, endpoint, fault-retentio
 and real kernel-build gates, with the normal production text and compiled gears
 asset unchanged. This is a new isolated experiment, not approval to remove a
 production synchronization boundary. Its first physical attempt rejected the
-initial ALPHA value before writing any FIFO word; explicit ALPHA-state ownership
-is the next implementation step. Physical copy qualification, the FENCE
+initial ALPHA value before writing any FIFO word. The next isolated candidate
+now implements exclusive ALPHA save/publication/check/restoration, with offline
+fault qualification; its physical validation awaits a fresh reachable Mini12
+inventory. Physical copy qualification, the FENCE
 memory/state contract and the general driver objective remain unfinished.
 
 The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0

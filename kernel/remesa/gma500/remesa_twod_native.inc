@@ -47,9 +47,10 @@ static int twod_native_hw(struct remesa_twod_native *b,
  if(!gma_power_is_on(dev_priv->dev)||dev_priv->remesa_twod_owner!=&b->reservation)
   return -EIO;
 #ifdef REMESA_TWOD_LAB_VENDOR_STREAM
- /* Match the captured vendor alpha-related field without changing shared
-  * register state. The new profile rejects an unqualified initial value. */
- if(b->launch->plan.dwords==9u&&PSB_RSGX32(0x0e1c)!=0x0000ff00u)return -EOPNOTSUPP;
+ /* Every new-profile state transition must match the value owned by this
+  * transaction. Uncertainty retains the reservation and saved state. */
+ if(b->launch->plan.dwords==9u&&(!b->alpha_saved||
+    PSB_RSGX32(0x0e1c)!=b->expected_alpha))return -EIO;
 #endif
  if(PSB_RSGX32(PSB_CR_BIF_DIR_LIST_BASE0)!=b->root||
     PSB_RSGX32(PSB_CR_BIF_BANK0)||PSB_RSGX32(PSB_CR_BIF_BANK1)||
@@ -103,6 +104,14 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  if(!gma_power_is_on(dev_priv->dev)){error=-EIO;goto done;}
  b->core=PSB_RSGX32(PSB_CR_CORE_ID);b->revision=PSB_RSGX32(PSB_CR_CORE_REVISION);
  if(b->core!=0x01130000u||b->revision!=0x00010201u){error=-ENODEV;goto done;}
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(packet_words==9u){
+  b->saved_alpha=PSB_RSGX32(0x0e1c);
+  /* Only the defined ONE/ZERO components may be replayed on restoration. */
+  if(b->saved_alpha&~0x0000ffffu){error=-EOPNOTSUPP;goto done;}
+  b->expected_alpha=b->saved_alpha;b->alpha_saved=true;
+ }
+#endif
  TWOD_LAB_PHASE(2);error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);if(error)goto done;
  TWOD_LAB_PHASE(3);
  error=twod_native_capture(dev_priv,&b->stale_status1);if(error)goto done;
@@ -111,7 +120,16 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  if(PSB_RSGX32(PSB_CR_EVENT_STATUS2)){error=-EIO;goto done;}
  /* Base publication belongs to the producer interval too: do not hide a
   * fault/request triggered before the first FIFO word from legacy history. */
- remesa_route_source_producer(1);producer=true;TWOD_LAB_PHASE(4);
+ remesa_route_source_producer(1);producer=true;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(packet_words==9u){
+  TWOD_LAB_PHASE(11);b->expected_alpha=0x0000ff00u;
+  PSB_WSGX32(b->expected_alpha,0x0e1c);
+  error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);if(error)goto done;
+  error=twod_native_capture(dev_priv,NULL);if(error)goto done;
+ }
+#endif
+ TWOD_LAB_PHASE(4);
  PSB_WSGX32(l->plan.request_base,PSB_CR_BIF_TWOD_REQ_BASE);
  if(PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE)!=l->plan.request_base){error=-EIO;goto done;}
  TWOD_LAB_PHASE(5);
@@ -224,20 +242,36 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
 {
  struct remesa_twod_native *b=opaque;struct drm_psb_private *dev_priv;
  unsigned long flags,irq_flags;u64 serial;int error;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ bool producer=false;
+#endif
  error=twod_native_match(b,l,cookie);if(error)return error;
  if(!b->complete||!b->visible)return -EBUSY;
  dev_priv=l->dev->dev_private;
  spin_lock_irqsave(&dev_priv->lock_2d,flags);irq_flags=sgx535_gma500_fixed_irq_lock();
  error=twod_native_capture(dev_priv,NULL);
  if(!error)error=twod_native_hw(b,dev_priv,l->plan.request_base,true);
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(!error&&l->plan.dwords==9u){remesa_route_source_producer(1);producer=true;}
+#endif
  if(!error){
   PSB_WSGX32(b->reservation.saved_base,PSB_CR_BIF_TWOD_REQ_BASE);
   (void)PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE);
   error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);
  }
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(!error&&l->plan.dwords==9u){
+  b->expected_alpha=b->saved_alpha;
+  PSB_WSGX32(b->saved_alpha,0x0e1c);
+  error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);
+ }
+#endif
  if(!error)error=twod_native_capture(dev_priv,NULL);
  if(!error)error=remesa_twod_irq_mark_retired_locked(&b->reservation,cookie);
  if(!error)error=remesa_twod_release_locked(dev_priv,&b->reservation);
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(producer)remesa_route_source_producer(0);
+#endif
  sgx535_gma500_fixed_irq_unlock(irq_flags);spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
  if(error){b->failed=true;return error;}
  serial=b->serial;memset(b,0,sizeof(*b));b->serial=serial;return 0;
