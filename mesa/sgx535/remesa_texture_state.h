@@ -41,4 +41,28 @@ struct remesa_texture_cpu_stream_sampler_state {
 int remesa_texture_cpu_stream_sampler_encode(
    const struct remesa_texture_cpu_stream_sampler_state *, void *, size_t,
    size_t *written);
+
+/* Selected original secondary-constant image construction: literal32 uniforms
+ * and identity texture triplets. Byte limit matches the existing 4096-byte
+ * host shader-storage policy, not an architectural SA register limit.
+ * No arbitrary compiler masks/ORs or float conversions are accepted here.
+ */
+#define REMESA_TEXTURE_CPU_SA_IMAGE_MAX_BYTES 4096u
+struct remesa_texture_cpu_sa_uniform {
+   uint32_t destination_dword, value;
+};
+struct remesa_texture_cpu_sa_texture {
+   uint32_t destination_dword;
+   struct remesa_texture_cpu_stream_sampler_state sampler;
+};
+/* Exactly uniform_count+3*texture_count DWORDs must be covered once. Checks
+ * all destinations, overlap, input/output spans and image encodings before
+ * publishing. No allocation, GPU upload, synchronization or admission occurs;
+ * caller must retain/revalidate all owned texture mappings before GPU use.
+ * ENODATA for an empty image; all errors preserve output and *written.
+ */
+int remesa_texture_cpu_sa_image_encode(
+   const struct remesa_texture_cpu_sa_uniform *, size_t uniform_count,
+   const struct remesa_texture_cpu_sa_texture *, size_t texture_count,
+   void *, size_t capacity, size_t *written);
 #endif

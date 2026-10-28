@@ -110,3 +110,8 @@ retirement, readback and buffer integrity at the required sizes. Do not infer
 3-word hardware consumption from a12-byte CPU write, or pad CODE to reach a
 reservation. Preserve full general GL/GLES2, actual desktop/EGL/GBM/images,
 multi-client isolation and recoverable installation as the required end state.
+
+The later [constant/texture upload-image work](TEXTURE-SA-UPLOAD-20261028.md)
+identifies a separate original constant-gather route. Its checked image builder
+retains all execution gates; the primary PDS texture grammar is not assumed to
+be interchangeable with this path.

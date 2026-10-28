@@ -69,3 +69,53 @@ int remesa_texture_cpu_stream_sampler_encode(
    *written=size;
    return 0;
 }
+
+static int valid_span(const void *p, size_t n)
+{
+   return (!n || p) && n<=UINTPTR_MAX-(uintptr_t)p;
+}
+static int overlap(const void *a, size_t na, const void *b, size_t nb)
+{
+   return na && nb && (uintptr_t)a<(uintptr_t)b+nb &&
+      (uintptr_t)b<(uintptr_t)a+na;
+}
+int remesa_texture_cpu_sa_image_encode(
+   const struct remesa_texture_cpu_sa_uniform *uniforms, size_t nu,
+   const struct remesa_texture_cpu_sa_texture *textures, size_t nt,
+   void *out, size_t capacity, size_t *written)
+{
+   const size_t max_words=REMESA_TEXTURE_CPU_SA_IMAGE_MAX_BYTES/4u;
+   if (nu>max_words || nt>max_words/3u || nu+3u*nt>max_words) return E2BIG;
+   if (!written || !out || (!uniforms && nu) || (!textures && nt)) return EINVAL;
+   const size_t words=nu+3u*nt, bytes=words*4u;
+   const size_t ub=nu*sizeof(*uniforms), tb=nt*sizeof(*textures);
+   if (!valid_span(uniforms,ub) || !valid_span(textures,tb) ||
+       !valid_span(out,capacity) || !valid_span(written,sizeof(*written)))
+      return EINVAL;
+   if (overlap(out,capacity,written,sizeof(*written)) ||
+       overlap(out,capacity,uniforms,ub) || overlap(out,capacity,textures,tb) ||
+       overlap(written,sizeof(*written),uniforms,ub) ||
+       overlap(written,sizeof(*written),textures,tb)) return EINVAL;
+   if (!words) return ENODATA;
+   if (capacity<bytes) return ENOSPC;
+   uint8_t image[REMESA_TEXTURE_CPU_SA_IMAGE_MAX_BYTES];
+   uint8_t used[REMESA_TEXTURE_CPU_SA_IMAGE_MAX_BYTES/4u]={0};
+   for (size_t i=0;i<nu;i++) {
+      const uint32_t d=uniforms[i].destination_dword;
+      if (d>=words || used[d]) return EINVAL;
+      used[d]=1;put32(image+d*4u,uniforms[i].value);
+   }
+   for (size_t i=0;i<nt;i++) {
+      const uint32_t d=textures[i].destination_dword;
+      if (d>words-3u || used[d] || used[d+1u] || used[d+2u]) return EINVAL;
+      size_t size;
+      int error=remesa_texture_cpu_stream_sampler_encode(&textures[i].sampler,
+         image+d*4u,REMESA_TEXTURE_CPU_STATE_BYTES,&size);
+      if (error) return error;
+      used[d]=used[d+1u]=used[d+2u]=1;
+   }
+   /* Distinct in-range writes cover exactly words cells; there are no holes
+    * or uninitialized bytes to publish. No padding is counted as data. */
+   memcpy(out,image,bytes);*written=bytes;
+   return 0;
+}
