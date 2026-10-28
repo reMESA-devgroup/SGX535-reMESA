@@ -17,6 +17,9 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
  struct remesa_twod_copy_plan plan;struct remesa_memory_binding uses[16];
  struct backing *source,*destination,*b;u32 *pfns;
  unsigned i,k,n=0,total=0,count;int error;
+#ifdef REMESA_TWOD_FILL_STREAM
+ bool fill=false;
+#endif
  if(!s||!out)return -EINVAL;
 #ifndef REMESA_MEMORY_TEST
  lockdep_assert_held(&s->lock);
@@ -32,10 +35,25 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
 #ifdef REMESA_TWOD_VENDOR_STREAM
     &&command.schema!=REMESA_GEM_TWOD_VENDOR_SCHEMA
 #endif
+#ifdef REMESA_TWOD_FILL_STREAM
+    &&command.schema!=REMESA_GEM_TWOD_FILL_SCHEMA
+#endif
    )||command.reserved)return -EINVAL;
+#ifdef REMESA_TWOD_FILL_STREAM
+ fill=command.schema==REMESA_GEM_TWOD_FILL_SCHEMA;
+ if(fill){
+  if(j->count!=1||command.fill.destination.allocation_id!=j->ids[0])return -EACCES;
+  /* The retained union tail is canonical zero, never hidden caller data. */
+  for(i=sizeof(command.fill);i<sizeof(command.copy);i++)
+   if(((const unsigned char *)&command.copy)[i])return -EINVAL;
+  count=1;
+ }else
+#endif
+ {
  count=command.copy.source.allocation_id==command.copy.destination.allocation_id?1:2;
  if(j->count!=count||command.copy.source.allocation_id!=j->ids[0]||
     command.copy.destination.allocation_id!=j->ids[count-1])return -EACCES;
+ }
  /* One existing PTE/hold authentication pass, no extra virtual-to-PFN walk. */
  for(i=0;i<count;i++){
   b=&s->bo[j->ids[i]&31];
@@ -47,6 +65,15 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
   uses[i]=(struct remesa_memory_binding){j->ids[i],b->va.start,b->gem.size};
  }
  source=&s->bo[j->ids[0]&31];destination=&s->bo[j->ids[count-1]&31];
+#ifdef REMESA_TWOD_FILL_STREAM
+ if(fill){
+  if(!destination->initialized)return -ENODATA;
+  if(command.fill.destination.gpu_address!=uses[0].va||
+     command.fill.destination.bytes!=uses[0].bytes)return -EACCES;
+  error=remesa_twod_fill_prepare(&command.fill,&plan);
+ }else
+#endif
+ {
  if(command.copy.source.gpu_address!=uses[0].va||command.copy.source.bytes!=uses[0].bytes||
     command.copy.destination.gpu_address!=uses[count-1].va||
     command.copy.destination.bytes!=uses[count-1].bytes)return -EACCES;
@@ -57,6 +84,7 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
  else
 #endif
   error=remesa_twod_copy_prepare(&command.copy,&plan);
+ }
  if(error)return -error;
  for(i=0;i<count;i++){
   b=i?destination:source;

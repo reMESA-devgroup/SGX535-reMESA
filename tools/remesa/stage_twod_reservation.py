@@ -31,7 +31,9 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
-def patched_sources(native, lab=False, vendor=False, copy=False):
+def patched_sources(native, lab=False, vendor=False, copy=False, fill=False):
+    if fill and not copy:
+        raise ValueError("native fill requires the separate normal copy profile")
     if copy and (lab or vendor):
         raise ValueError('normal copy and LAB profiles are separate builds')
     if vendor and not lab:
@@ -110,13 +112,23 @@ def patched_sources(native, lab=False, vendor=False, copy=False):
             result['Makefile'] += 'ccflags-y += -DREMESA_TWOD_LAB_VENDOR_STREAM=1\n'
     if copy:
         result['Makefile'] = (native / 'Makefile').read_text() + '\n# Typed copy profile; no LAB diagnostics; runtime defaults N.\nccflags-y += -DREMESA_TWOD_COPY_IOCTL=1 -DREMESA_TWOD_VENDOR_STREAM=1\n'
+    if fill:
+        result['Makefile'] += 'ccflags-y += -DREMESA_TWOD_FILL_STREAM=1\n'
+        result['remesa_gem_memory.c'] += '\n#ifdef REMESA_TWOD_FILL_STREAM\n#include "remesa_twod_fill.inc"\n#endif\n'
+        result['psb_drv.c'] = '#include "remesa_twod_fill.h"\n#include "remesa_twod_fill_uapi.h"\n' + result['psb_drv.c']
+        result['psb_drv.c'] = replace_once(result['psb_drv.c'],
+            'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
+            'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
+            '#ifdef REMESA_TWOD_FILL_STREAM\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_FILL, remesa_twod_fill_ioctl, DRM_ROOT_ONLY),\n'
+            '#endif\n')
     return result
 
 
-def stage(native, output, lab=False, vendor=False, copy=False):
+def stage(native, output, lab=False, vendor=False, copy=False, fill=False):
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
-    patched = patched_sources(native, lab, vendor, copy)
+    patched = patched_sources(native, lab, vendor, copy, fill)
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
@@ -134,6 +146,10 @@ def stage(native, output, lab=False, vendor=False, copy=False):
         components[name] = (additions / name).read_bytes()
     components['remesa_twod_lab_uapi.h'] = (root / 'include/remesa/twod_lab_uapi.h').read_bytes()
     components['remesa_twod_copy_uapi.h'] = (root / 'include/remesa/twod_copy_uapi.h').read_bytes()
+    if fill:
+        for name in ['remesa_twod_fill.h', 'remesa_twod_fill.inc']:
+            components[name] = (additions / name).read_bytes()
+        components['remesa_twod_fill_uapi.h'] = (root / 'include/remesa/twod_fill_uapi.h').read_bytes()
     output.mkdir(parents=True)
     for source in native.iterdir():
         if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
@@ -150,6 +166,7 @@ def stage(native, output, lab=False, vendor=False, copy=False):
         'lab_ioctl_compiled': lab,
         'vendor_stream_lab_compiled': vendor,
         'normal_copy_compiled': copy,
+        'native_fill_compiled': fill,
         'scope': 'Native 2D candidate; optional root-only gated LAB ioctl; never installed by stager',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -163,6 +180,7 @@ if __name__ == '__main__':
     parser.add_argument('--with-lab-ioctl', action='store_true')
     parser.add_argument('--with-lab-vendor-stream', action='store_true')
     parser.add_argument('--with-native-copy', action='store_true')
+    parser.add_argument('--with-native-fill', action='store_true')
     args = parser.parse_args()
     print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl,
-                           args.with_lab_vendor_stream, args.with_native_copy), indent=2))
+                           args.with_lab_vendor_stream, args.with_native_copy, args.with_native_fill), indent=2))

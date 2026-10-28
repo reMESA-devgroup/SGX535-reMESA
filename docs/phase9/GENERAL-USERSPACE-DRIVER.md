@@ -1060,3 +1060,24 @@ The Gallium qualification ended on verified stock boot608368aa after all48
 operations were already retired; original default/module restored, empty next
 entry and no work pending. This is an incremental component, not completion
 of the full userspace driver goal.
+
+
+## Native solid fill primitive
+
+The [native fill report](TWOD-NATIVE-FILL-20261028.md) adds48 physical
+destination-only solid fills,16 at each required size, with exact final
+color0x7f123456, full BO guards and unchanged sentinel, SGX535/rev121 identity,
+completion and retirement. The original vendor producer matches the independently
+authored seven-word encoder; reserved40byte capacity contains28effectivebytes.
+A separate104byte typed privileged ioctl8 retains address/permission/coherency/
+IRQ/fence/retirement gates, excludes concurrent copy/fill and quarantines on
+uncertainty. Root access and default-off runtime gate remain.
+
+Artifacts: `/home/gama/sgx535-offline/twod-native-fill-20261028/v1/`.
+Normal/LAB copy regressions and native/UBSan/i386 fill/lifetime/MMIO tests pass.
+External call means25.923199/9.716001/7.338516ms are not desktop FPS. The fill
+primitive still needs its userspace transport/owner/Gallium clear connection;
+complete2D operations, general3D and installation remain unfinished.
+
+The fill qualification ended on verified stock boot46fb37c3 after all48 fills
+were retired; original module/default restored and no pending work.

@@ -4,7 +4,12 @@
 #include "remesa_twod_native.h"
 #include "remesa_mmu_default_root.h"
 #ifdef REMESA_TWOD_VENDOR_STREAM
-#define TWOD_NATIVE_DWORDS_VALID(n) ((n)==9u||(n)==10u)
+#ifdef REMESA_TWOD_FILL_STREAM
+#define TWOD_NATIVE_VENDOR(n) ((n)==7u||(n)==9u)
+#else
+#define TWOD_NATIVE_VENDOR(n) ((n)==9u)
+#endif
+#define TWOD_NATIVE_DWORDS_VALID(n) (TWOD_NATIVE_VENDOR(n)||(n)==10u)
 #define TWOD_NATIVE_PACKET_WORDS(l) ((l)->plan.dwords)
 #else
 #define TWOD_NATIVE_DWORDS_VALID(n) ((n)==10u)
@@ -49,7 +54,7 @@ static int twod_native_hw(struct remesa_twod_native *b,
 #ifdef REMESA_TWOD_VENDOR_STREAM
  /* Every new-profile state transition must match the value owned by this
   * transaction. Uncertainty retains the reservation and saved state. */
- if(b->launch->plan.dwords==9u&&(!b->alpha_saved||
+ if(TWOD_NATIVE_VENDOR(b->launch->plan.dwords)&&(!b->alpha_saved||
     PSB_RSGX32(0x0e1c)!=b->expected_alpha))return -EIO;
 #endif
  if(PSB_RSGX32(PSB_CR_BIF_DIR_LIST_BASE0)!=b->root||
@@ -105,7 +110,7 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  b->core=PSB_RSGX32(PSB_CR_CORE_ID);b->revision=PSB_RSGX32(PSB_CR_CORE_REVISION);
  if(b->core!=0x01130000u||b->revision!=0x00010201u){error=-ENODEV;goto done;}
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(packet_words==9u){
+ if(TWOD_NATIVE_VENDOR(packet_words)){
   b->saved_alpha=PSB_RSGX32(0x0e1c);
   /* Only the defined ONE/ZERO components may be replayed on restoration. */
   if(b->saved_alpha&~0x0000ffffu){error=-EOPNOTSUPP;goto done;}
@@ -122,7 +127,7 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
   * fault/request triggered before the first FIFO word from legacy history. */
  remesa_route_source_producer(1);producer=true;
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(packet_words==9u){
+ if(TWOD_NATIVE_VENDOR(packet_words)){
   TWOD_LAB_PHASE(11);b->expected_alpha=0x0000ff00u;
   PSB_WSGX32(b->expected_alpha,0x0e1c);
   error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);if(error)goto done;
@@ -252,7 +257,7 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
  error=twod_native_capture(dev_priv,NULL);
  if(!error)error=twod_native_hw(b,dev_priv,l->plan.request_base,true);
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(!error&&l->plan.dwords==9u){remesa_route_source_producer(1);producer=true;}
+ if(!error&&TWOD_NATIVE_VENDOR(l->plan.dwords)){remesa_route_source_producer(1);producer=true;}
 #endif
  if(!error){
   PSB_WSGX32(b->reservation.saved_base,PSB_CR_BIF_TWOD_REQ_BASE);
@@ -260,7 +265,7 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
   error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);
  }
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(!error&&l->plan.dwords==9u){
+ if(!error&&TWOD_NATIVE_VENDOR(l->plan.dwords)){
   b->expected_alpha=b->saved_alpha;
   PSB_WSGX32(b->saved_alpha,0x0e1c);
   error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);

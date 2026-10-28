@@ -24,6 +24,21 @@ struct remesa_twod_copy_plan {
  uint64_t source_first,source_end,destination_first,destination_end;
  uint32_t request_base,dwords;
 };
+#ifdef REMESA_TWOD_FILL_STREAM
+#ifndef REMESA_TWOD_VENDOR_STREAM
+#error "Native fill requires the vendor stream profile"
+#endif
+struct remesa_twod_fill {
+ struct remesa_twod_surface destination;
+ uint32_t request_base,destination_x,destination_y,width,height,color,reserved;
+};
+/* Seven effective DWORDs (six original producer words + UM FLUSH), no source
+ * access. The shared plan's source fields remain zero. Reserved capacity stays
+ * 40 bytes; the zero tail is not submitted. Physical fill qualification is
+ * separate from the previously qualified copy path. */
+int remesa_twod_fill_prepare(const struct remesa_twod_fill *,
+ struct remesa_twod_copy_plan *);
+#endif
 /* Prepare original gma500 FIFO SRCCOPY only: no software pixel copies,
  * scaling, conversion, PDS, USSE or MMIO. Transactional output, no aliasing.
  * BOs must fit one aligned256MiB 2D request window. Same-allocation overlap

@@ -74,7 +74,7 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
 {
  CHECK(irq_lock_held);
  if(reg==0x0e1c){
-  CHECK(p->lock_2d.held&&producer_depth==1&&packet_words==9);
+  CHECK(p->lock_2d.held&&producer_depth==1&&(packet_words==9||packet_words==7));
   alpha_writes++;
   if(alpha_writes%2==1)CHECK(p->words%packet_words==0&&!active_native->cookie&&value==0xff00);
   else CHECK(active_native->complete&&active_native->visible&&value==initial_alpha);
@@ -118,6 +118,9 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
 #define PSB_WSGX32(value,reg) native_write(dev_priv,(value),(reg))
 #include "../remesa_twod_native.inc"
 #include "remesa_twod.c"
+#ifdef REMESA_TWOD_FILL_STREAM
+static bool fill_stream;
+#endif
 static void native_case(unsigned width,unsigned height,unsigned fault)
 {
  struct drm_device dev={.powered=1};
@@ -127,6 +130,13 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  struct remesa_twod_launch launch={.dev=&dev,.pd=&pd,.ticket={77,1,0,1},.count=2};
  struct remesa_twod_copy copy={.source={1,0x40001000,0x00fff000,width,height,width*4,1},
   .destination={2,0x41000000,0x01000000,width,height,width*4,1},.request_base=0x40000000,.width=width,.height=height};
+#ifdef REMESA_TWOD_FILL_STREAM
+ if(fill_stream){
+  struct remesa_twod_fill fill={.destination=copy.destination,.request_base=copy.request_base,
+   .width=width,.height=height,.color=0x7f123456};
+  CHECK(!remesa_twod_fill_prepare(&fill,&launch.plan));launch.count=1;
+ }else
+#endif
 #ifdef REMESA_TWOD_VENDOR_STREAM
  if(vendor_stream)CHECK(!remesa_twod_copy_prepare_vendor(&copy,&launch.plan));
  else
@@ -238,7 +248,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
   CHECK(!error&&!native.live&&!native.reservation.held&&!twod_irq_owner&&!p.remesa_twod_owner);
   CHECK(p.base==0x28000000&&base_writes==initial_base_writes+2&&!p.resets);
   CHECK(registers[0x0e1c/4]==initial_alpha);
-  CHECK(alpha_writes==(packet_words==9?2u*(iteration+1):0));
+  CHECK(alpha_writes==(packet_words!=10?2u*(iteration+1):0));
 #ifdef REMESA_TWOD_LAB_IOCTL
   CHECK(base_sleeps==iteration+1);
 #else
@@ -278,6 +288,19 @@ int main(void)
   int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
  printf("PASS vendor nine-word profile: three dimensions, two saved-state fixtures and %u joined fault models including ALPHA publication, interference and restore failures; CPU only\n",vendor_faults);
+#endif
+#ifdef REMESA_TWOD_FILL_STREAM
+ fill_stream=true;packet_words=7;
+ native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
+ initial_alpha=0xff00;native_case(32,32,0);initial_alpha=0x1234;native_case(32,32,0);initial_alpha=0;
+ unsigned fill_faults=0;
+ for(unsigned fault=1;fault<=50;fault++){
+  if((fault>=22&&fault<=38)||fault==41)continue;
+  fill_faults++;pid_t child=fork();CHECK(child>=0);
+  if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
+  int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
+ }
+ printf("PASS seven-word native fill: three dimensions, saved ALPHA and %u joined fault models; CPU only\n",fill_faults);
 #endif
  printf("PASS %u parent native adapter checks plus %u joined MMIO fault models; no GPU execution\n",checks,faults);
  return 0;

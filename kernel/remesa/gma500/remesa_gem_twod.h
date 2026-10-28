@@ -7,12 +7,20 @@
 #ifdef REMESA_TWOD_VENDOR_STREAM
 #define REMESA_GEM_TWOD_VENDOR_SCHEMA 0x31443256u
 #endif
+#ifdef REMESA_TWOD_FILL_STREAM
+#define REMESA_GEM_TWOD_FILL_SCHEMA 0x31443246u
+#endif
 /* Kernel job-command image, not a registered ioctl or public stable ABI.
  * Only the high-level copy is retained; GPU words are reconstructed in kernel.
  */
 struct remesa_gem_twod_command {
  u32 schema,reserved;
- struct remesa_twod_copy copy;
+ union {
+  struct remesa_twod_copy copy;
+#ifdef REMESA_TWOD_FILL_STREAM
+  struct remesa_twod_fill fill;
+#endif
+ };
 };
 /* Caller already holds memory->lock; output is exclusive trusted kernel
  * storage disjoint from the endpoint/command/backing metadata. Authenticates
