@@ -119,3 +119,53 @@ change/GPU submission. Reconnect and verify the exact stock boot before more
 physical work. Native analysis sessions are closed; REA_CLEANUP_FINAL.json
 records a transient close-cleanup warning, launcher exit0/PID absent, closed
 session and no associated process remaining. No unrelated process was killed.
+
+
+## Controlled original command-builder capture
+
+The next minimum above has now been executed. Evidence is at
+`/home/gama/sgx535-offline/twod-fence-contract-20261028/oracle-v2/`:
+RUN.py, oracle.c, stub_um.c, STUB_IMPORTS.json, RESULT.json, CLOSEOUT.json and
+build/run stdout/stderr. The earlier oracle-v1 is retained, including its
+initial local compiler indentation failure and corrected successful run.
+
+The original pinned libEMGD2d is loaded under QEMU i386. Only PVR2DBlt is
+called with guarded fabricated CPU context/memory metadata; no original
+context constructor or device service runs. A private library with the exact
+UM SONAME substitutes its dependency. MemSet/MemCopy are ordinary CPU helpers;
+SGXQueueTransfer validates and captures the descriptor/command array instead
+of submitting. Every other strong device-service import is a terminating
+trap. dl_iterate_phdr verifies exactly one UM dependency is loaded and its
+path is the private stub. Original constructors/JCR metadata were inspected;
+input structures have canaries. LD_PRELOAD/LD_LIBRARY_PATH are removed from
+the harness environment before invoking the private loader path.
+
+Observed results:
+
+| Cases | Result |
+| --- | --- |
+| Separate BOs1280x800,640x640,641x479 | Exactly one type2 callback each; eight payload DWORDs |
+| Same BO, four overlapping copy directions | Eight payload DWORDs, including the expected direction/coordinates |
+| Forced queue return13 | Original PVR2DBlt returns-2; the submitted body is still captured |
+| Null request | Original PVR2DBlt rejects without a queue callback |
+
+Every captured body is byte-exact with DWORDs1--8 of the unchanged existing
+legacy encoder. The old encoder still produces ten words: initial FENCE,
+eight-word body and final FLUSH. The original caller produces eight words;
+the separately observed original UM type2 queue appends FLUSH, yielding nine
+stream words at that boundary. The alpha-related descriptor field is0xff00.
+
+The stub, harness and current encoder compile with warnings treated as errors;
+all three build/run commands exit0 and final stderr is empty. All input
+canaries pass. The original library and encoder source hashes are unchanged;
+31 protected historical artifacts remain intact. This is independent original
+host-binary emission evidence, not CPU pixel rendering, a simulated hardware
+completion or a physical copy approval.
+
+The next implementation can represent a separate explicit LAB stream profile
+using this captured producer boundary, preserving the old encoder/profile.
+Reserved storage, effective DWORD count and consumed bytes must remain distinct;
+no padding opcode may replace a word. Before hardware, authenticate the full
+exclusive/context/dependency contract and alpha-related state, preserve all
+memory/coherency/fence/retirement/quarantine checks and run the offline gates.
+The captured body alone does not justify a silent FENCE removal in production.
