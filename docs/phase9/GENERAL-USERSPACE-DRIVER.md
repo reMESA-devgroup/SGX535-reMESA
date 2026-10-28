@@ -106,12 +106,12 @@ was resolved through those state transitions, rather than waived. The original
 ten-word encoder remains unchanged; these new copies do not explain every
 implicit FENCE access or qualify overlap/other formats.
 
-All three copies retired, passed readback and closed their contexts before
-returning to verified stock bootc1fad495. No reset was used as retirement. The
+At that first LAB qualification, all three copies retired, passed readback and
+closed their contexts before returning to verified stock bootc1fad495. No reset was used as retirement. The
 original GRUB/default and empty next entry are verified; no experimental
 controls or proc endpoint remain. [ConnMan supervision](CONNMAN-RECOVERY-20261028.md)
-and automatic reconnection have their separate retained evidence. Production
-2D transport/dispatch, general GL/GLES and the installable driver remain
+and automatic reconnection have their separate retained evidence. General
+2D dispatch, unprivileged admission, GL/GLES and the installable driver remain
 unfinished; none is advertised from the native LAB result.
 
 The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0
@@ -1014,3 +1014,23 @@ referenced object remain unchanged. This is not a full installed DRI rebuild.
 Gallium/NIR and legacy gears geometry regressions against that archive. No
 kernel source, native LAB candidate, shader encoder, geometry or execution gate
 changed as part of this userspace retention increment.
+
+## Non-LAB Linux copy transport
+
+The [normal typed native-copy transport](TWOD-NORMAL-TRANSPORT-20261028.md)
+now passes48 physical operations,16 per selected size, reusing two GEM buffers
+and mappings per context. Final readbacks are byte-exact to the preserved LAB
+oracles; no hashes/readbacks or LAB observations are in the copy loop. The
+Linux userspace adapter validates owned IDs, exact receipts and monotonic
+operations, retaining poison on uncertainty. The optional kernel service still
+requires root, its default-off gate and the same file/context ownership.
+
+This is the low-level primitive, not a connected Gallium resource-copy callback
+or general unprivileged ABI. The existing frontend CPU copy remains explicitly
+CPU. General3D, complete2D API dispatch, presentation and installable packaging
+remain unfinished. See the linked report for physical call times and their
+limits; those measurements are not desktop FPS or an isolated GPU timer.
+
+The normal-copy qualification ended on independently verified stock boot
+639e968a after all48 native operations were already retired. The default boot
+and original module are restored; no queued work or next boot remains.

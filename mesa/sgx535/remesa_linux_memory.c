@@ -7,7 +7,7 @@
 #include <sys/ioctl.h>
 _Static_assert(sizeof(struct remesa_memory_request)==4152,"fixed native/i386 memory ABI");
 struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poison;};
-struct remesa_linux_memory {int fd;uint64_t context;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];};
+struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -175,3 +175,35 @@ int remesa_linux_memory_begin(int fd,struct remesa_linux_memory **out)
 
 void remesa_linux_memory_forget(struct remesa_linux_memory *d)
 {if(d){for(unsigned i=0;i<32;i++)free(d->objects[i].cpu);free(d);}}
+
+_Static_assert(sizeof(struct remesa_twod_copy_request)==120,"fixed native copy ABI");
+int remesa_linux_memory_copy_2d(struct remesa_linux_memory *d,struct remesa_twod_copy_request *out)
+{
+ struct remesa_twod_copy_request r,before;struct held *a,*b;int e;
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_twod_copy_request)||
+    sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ r=*out;
+ if(r.version||r.context||r.flags||r.reserved||r.response_reserved||r.operation||r.cookie||
+    r.stages||r.retained||r.core||r.revision||r.error||!r.width||!r.height||
+    !r.budget_ms||r.budget_ms>10000)return EINVAL;
+ a=find(d,r.source.id);b=find(d,r.destination.id);
+ if(!a||!b||!a->gpu_va||!b->gpu_va)return EINVAL;
+ if(a->poison||b->poison)return EOWNERDEAD;
+ if(a->cpu||b->cpu)return EBUSY;
+ if(d->recorder.record)return EOPNOTSUPP;
+ r.version=REMESA_TWOD_COPY_VERSION;r.context=d->context;before=r;
+ e=ioctl(d->fd,DRM_IOCTL_REMESA_TWOD_COPY,&r);
+ if(e<0){
+  int error=errno;
+  if(!memcmp(&r,&before,sizeof r)&&(error==EINVAL||error==ENOTTY||error==EOPNOTSUPP||error==EPERM||error==EACCES||error==EBUSY||error==ENOMEM))return error;
+  goto uncertain;
+ }
+ if(e||memcmp(&r,&before,offsetof(struct remesa_twod_copy_request,operation))||r.response_reserved||
+    !r.operation||r.operation<=d->copy_operation)goto uncertain;
+ if(r.error<0&&r.error>=-4095&&r.stages==REMESA_TWOD_COPY_PREPARED&&!r.cookie&&!r.retained&&!r.core&&!r.revision){d->copy_operation=r.operation;*out=r;return -r.error;}
+ if(r.error||r.retained||r.stages!=REMESA_TWOD_COPY_ALL||!r.operation||!r.cookie||
+    r.core!=0x01130000u||r.revision!=0x00010201u)goto uncertain;
+ d->copy_operation=r.operation;*out=r;return 0;
+uncertain:
+ a->poison=b->poison=true;return EOWNERDEAD;
+}

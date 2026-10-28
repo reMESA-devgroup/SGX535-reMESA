@@ -29,7 +29,7 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
  if(j->command_bytes!=sizeof(command))return -EINVAL;
  memcpy(&command,j->commands,sizeof(command));
  if((command.schema!=REMESA_GEM_TWOD_COPY_SCHEMA
-#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+#ifdef REMESA_TWOD_VENDOR_STREAM
     &&command.schema!=REMESA_GEM_TWOD_VENDOR_SCHEMA
 #endif
    )||command.reserved)return -EINVAL;
@@ -51,7 +51,7 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
     command.copy.destination.gpu_address!=uses[count-1].va||
     command.copy.destination.bytes!=uses[count-1].bytes)return -EACCES;
  if(!source->initialized)return -ENODATA;
-#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+#ifdef REMESA_TWOD_VENDOR_STREAM
  if(command.schema==REMESA_GEM_TWOD_VENDOR_SCHEMA)
   error=remesa_twod_copy_prepare_vendor(&command.copy,&plan);
  else

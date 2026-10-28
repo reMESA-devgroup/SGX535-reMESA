@@ -68,7 +68,7 @@ int remesa_twod_copy_prepare(const struct remesa_twod_copy *request,
  for(i=0;i<10;i++)put32(plan.command+4*i,words[i]);
  *out=plan;return 0;
 }
-#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+#ifdef REMESA_TWOD_VENDOR_STREAM
 int remesa_twod_copy_prepare_vendor(const struct remesa_twod_copy *request,
  struct remesa_twod_copy_plan *out)
 {

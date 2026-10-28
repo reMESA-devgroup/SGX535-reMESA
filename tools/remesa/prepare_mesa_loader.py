@@ -73,7 +73,7 @@ def prepare(mesa,repo,output,egl_mesa=None):
     for n in ['registry.c','resource.c','provider.c']:
         shutil.copyfile(repo/'kernel/remesa'/n,dst/n)
     inc=dst/'include/remesa';inc.mkdir(parents=True)
-    for n in ['scene_dpm.h','scene_layout.h','native_uapi.h','draw_packet.h','shader_uapi.h','shader_request.h','memory_uapi.h','retained_uapi.h','retained_evidence.h','provider.h','registry.h','resource.h']:shutil.copyfile(repo/'include/remesa'/n,inc/n)
+    for n in ['scene_dpm.h','scene_layout.h','native_uapi.h','draw_packet.h','shader_uapi.h','shader_request.h','memory_uapi.h','twod_copy_uapi.h','retained_uapi.h','retained_evidence.h','provider.h','registry.h','resource.h']:shutil.copyfile(repo/'include/remesa'/n,inc/n)
     shim=dst/'include/drm';shim.mkdir();(shim/'drm.h').write_text('/* SPDX-License-Identifier: MIT */\n#include <drm.h>\n')
     (dst/'meson.build').write_text("""# SPDX-License-Identifier: MIT
 # Isolated experimental integration; DRI constructor currently rejects GL.

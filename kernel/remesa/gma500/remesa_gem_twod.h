@@ -4,7 +4,7 @@
 #include "remesa_gem_memory.h"
 #include "remesa_twod.h"
 #define REMESA_GEM_TWOD_COPY_SCHEMA 0x31443252u
-#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+#ifdef REMESA_TWOD_VENDOR_STREAM
 #define REMESA_GEM_TWOD_VENDOR_SCHEMA 0x31443256u
 #endif
 /* Kernel job-command image, not a registered ioctl or public stable ABI.

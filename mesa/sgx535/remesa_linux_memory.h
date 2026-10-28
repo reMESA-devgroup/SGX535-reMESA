@@ -3,6 +3,7 @@
 #define REMESA_LINUX_MEMORY_H
 #include "remesa_persistent.h"
 #include "remesa/memory_uapi.h"
+#include "remesa/twod_copy_uapi.h"
 #include "remesa_retained_transport.h"
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
@@ -30,6 +31,17 @@ uint64_t remesa_linux_memory_context(const struct remesa_linux_memory *);
  * Kernel admission/borrowed ownership and recorder remain mandatory. */
 int remesa_linux_memory_submit_retained(struct remesa_linux_memory *,
  struct remesa_retained_request *,bool *,remesa_retained_recorder,void *);
+/* Synchronous typed native copy on this exact owned fd/context. Caller starts
+ * version/context/response fields at zero; local owned IDs/mappings and leases
+ * are checked before one ioctl. No INFO, hashes, CPU maps/readbacks or retry.
+ * Success requires a new monotonic operation and exact SGX535/rev121
+ * completion/visibility/retirement. An
+ * ambiguous transport/response poisons both allocations; they cannot be
+ * unpinned/destroyed through this object. Kernel quarantine survives FD close.
+ * Memory-only diagnostic recorders do not record this ABI and are refused.
+ * Requires the separately enabled privileged copy endpoint; not GL admission.
+ */
+int remesa_linux_memory_copy_2d(struct remesa_linux_memory *,struct remesa_twod_copy_request *);
 /* Drop ONLY host staging/metadata after all consumers stop. No kernel cleanup,
  * no ioctl, no claim of retirement; caller still owns and must close the fd. */
 void remesa_linux_memory_forget(struct remesa_linux_memory *);
