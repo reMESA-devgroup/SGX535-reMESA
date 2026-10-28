@@ -95,3 +95,8 @@ to fill a capacity. The retained native copy/fill qualification remains valid,
 but actual desktop acceleration still needs general textured rendering,
 EGL/GBM/image ownership and safe Xorg/application coexistence. No red/green demo,
 software-rendered desktop or API version advertisement replaces that end state.
+
+The subsequent [checked field encoder and GLES2 sampler replay](TEXTURE-STATE-ENCODER-20261028.md)
+implement the selected numeric strided constructor and independently identify
+cached GL sampler fields. Final layout composition, upload and physical sampling
+remain unqualified; general texture admission stays closed.
