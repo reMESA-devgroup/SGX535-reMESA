@@ -86,11 +86,77 @@ Native/UBSan/i386 each pass3147 parent checks plus21 fault children, including
 fault-on-base-write, zero FIFO words, raw fault capture and logging after
 unlock. Existing root/IRQ/endpoint results remain preserved. Native objects,
 partial link and full antiX module build pass. PRODUCTION_CHECK.json verifies
-that the LAB failure-log string is absent in the production object. This new
-candidate has not been booted or physically approved.
+that the LAB failure-log string is absent in the production object. At the time of that offline result the candidate had not been booted.
+The subsequent physical diagnostic below remains rejected.
 
 Use a fresh image/controller bound to the new module and a new boot inventory;
 the recovered stock driver lacks the custom /proc interfaces. Preserve gates,
 holds and rollback. Only a correct1280x800 result permits the paired640x640
 and occasional641x479 cases. General3D/2D/userspace installation remains active
 and unfinished.
+
+
+## Second physical attempt: diagnostic phase8, raw BIF fault
+
+The diagnostic module from commit838a6cb was booted exactly once with the new
+image SHA256 `8d82e368ac19315002460dac7b6cf7d8c415fbd3b2a91b02f5b496a4c3a41107`.
+Evidence: `/home/gama/sgx535-offline/twod-fault-stage-20261028/v2/hardware/`,
+including PHYSICAL_RESULTS.json, CLOSEOUT.json, FINAL_REMOTE_STATE.json and
+artifacts-1280x800/{RESULT.json,dmesg.before,dmesg.after,stdout,stderr}.
+The archive1280x800-evidence.tar.gz has SHA256
+`9f4662b4f82637ce5b54815d012f88b2bdc06be3fd1c7ed110863e89707b4874`.
+
+Fresh stock inventory, five offline init identity tests, generated-controller
+syntax checks, staged-image hash and grub-script-check passed before boot.
+The stock-compatible controller requires the exact stock note, absence of the
+observer/custom proc interfaces and empty experimental controls. It does not
+call missing custom interfaces or mistake absent controls for N. The new
+module and observer notes, virgin source prerequisites and four N controls
+were checked on boot `9665ecff-c945-49b4-aed3-f4b6c946816d`. The original GRUB
+configuration and empty next_entry were restored before the copy.
+
+One1280x800 request reached core `0x01130000`, revision `0x00010201`,
+operation1/cookie1. It failed with error-5/stages1/retained1/uncertain1.
+The new failure line, captured before the legacy IRQ logger, is:
+
+```
+phase=8 words=10 valid=1 event=80000000/00000010 bif=00004004
+addr=40000000 root=349ec000 req=40000000
+vfifo=00000000/00000000 fifo=00000079 blit=01000000
+```
+
+This proves that the post-base/pre-FIFO hardware check returned success and
+ten FIFO write calls followed before the final hardware check rejected the
+operation. BIF bit14 reports a page fault; the original kernel names bit2
+TA. The raw word is now preserved independently of that name. Both virtual
+FIFO registers were zero at capture, including enable bit0. The faulting
+address equals the request base and remains outside both held BOs. The
+blitter was busy and FIFO was not empty. A single free-space sample does not
+identify the instruction being processed or establish which DWORD faulted.
+An asynchronous effect from base publication is still not ruled out.
+
+Issue wall time to rejection was7.509615ms and client wall time230.415265ms;
+these are not GPU execution time or FPS. Completion, visibility, retirement
+and readback integrity remain unapproved. Both raw readback files are empty
+because uncertainty refused reads. No640x640 or641x479 retry occurred.
+All controls returned to N, producers_active0 and source reasons33. The
+complete evidence was fetched before one default recovery reboot. That reset
+ended the quarantined kernel lifetime; it is not retirement approval.
+
+Recovery boot `cbb8f28e-ceca-4552-961c-a890edfa81e7` has the exact stock module
+note, no observer or experimental controls/proc endpoint, original custom.cfg
+SHA256 and original saved default/empty next_entry. No experimental job or
+queued boot remains. Both failed experiment images remain unselected artifacts.
+All31 protected historical artifacts remain unchanged.
+
+The earlier "next bounded diagnostic" was executed; do not repeat this
+consumed root `/root/sgx535-twod-lab-boot-8d82e368/copy-1280x800`.
+The next minimum experiment should locate the earliest observed fault within
+the unchanged packet, using bounded LAB-only per-word status observation and
+stopping further writes on a detected fault. It needs offline fault injection
+at every possible word boundary and a fresh isolated image/boot. The sample
+must still be described as an observation boundary, not proof of the exact
+causal DWORD. Preserve the complete packet, FENCE, protected address space,
+retained ownership, production behavior and all existing gates. Do not map
+the failing base page or change pattern/ROP state speculatively. No successful
+2D acceleration, desktop performance gain or completed general driver is claimed.
