@@ -192,3 +192,84 @@ has been built. Build a fresh identity-bound image/controller if proceeding;
 the v2 image/consumed hardware root contains the earlier phase8 candidate.
 Current physical outcome is still the rejected v2 test and verified stock
 recovery. General3D/2D/userspace installation remains unfinished.
+
+
+## v3 physical result: rejection after only the FENCE word
+
+The v3 image SHA256
+`9dfb32c25fbc9e34ac6da070c75bc0af8a569a2353392d7c863365e4a31905a9`
+(51,105,735 bytes) booted once as
+`d9baa70e-b6fc-4e8a-a9b5-48dbcc8dae41`. Its module note matched the offline
+build, all four controls were N and source/capsule prerequisites were virgin.
+The original default/configuration and empty next_entry were restored before
+one 1280x800 operation. No 640x640 or odd-size retry followed the fault.
+
+Evidence: `/home/gama/sgx535-offline/twod-fault-stage-20261028/v3/hardware/`,
+including PHYSICAL_RESULTS.json, CLOSEOUT.json and artifacts-1280x800/.
+The fetched archive SHA256 is
+`1d236edebd99e5654700d880cad865fd8b4dedcaa7aeb2f2dd381f690b86be2e`.
+The consumed root is `/root/sgx535-twod-lab-boot-9dfb32c2/copy-1280x800`.
+
+```
+phase=9 words=1 valid=1 event=80000000/00000010 bif=00004004
+addr=40000000 root=34a84000 req=40000000
+vfifo=00000000/00000000 fifo=00000080 blit=01000000
+```
+
+Only word0 (`0x70000000`, the original FENCE header) was written. The driver
+then observed the fault and stopped: no new source, destination, rectangle,
+ROP/BLIT or FLUSH word was sent. Consequently the immediate fault does not
+require this invocation's new surface or BLIT state. This still does not prove
+that FENCE caused the fault: a delayed base-publication effect or preexisting
+state remains possible. Do not remove FENCE or map the failing base page.
+
+Core/revision were `0x01130000/0x00010201`, operation/cookie1/1;
+error-5/stages1/retained1/uncertain1. No completion, visibility or retirement
+was approved; readbacks are deliberately empty. Issue wall time to rejection
+was7.466313ms, client wall241.523730ms; neither is GPU execution time or FPS.
+Controls returned to N, producers_active0, source reasons33. The probe was
+terminal before complete evidence was fetched. All31 protected artifacts remain
+intact.
+
+After fetching, exactly one default recovery reboot was requested. The first
+read-only wait exhausted30 probes; SSH independently reported "No route to
+host". No reboot was repeated and no next experiment was selected. Recovery
+is not yet verified; do not claim the quarantined kernel lifetime ended.
+The original stock saved default and empty next_entry were verified before
+that request. The user subsequently reported Mini12 powered on; only read-only
+recovery observation resumed. A successful exact-stock verification must
+supersede this pending state before another hardware experiment.
+
+## v4 offline candidate: separate base observation from the first FIFO word
+
+A LAB-only requested1,000--1,500us wait now occurs after cookie association and
+before the first FIFO write. Both spinlocks are released during the wait;
+backing, reservation, source-producer interval and IRQ cookie stay live.
+After reacquiring, phase10 rechecks power/root/base/quiet hardware and rejects
+ANY raw or owned-ledger event before FIFO. An event already ACKed by IRQ must
+still reject through the ledger. Nothing clears faults, creates a completion,
+changes the packet or releases uncertain ownership. The physical duration of
+this wait is not measured yet.
+
+Offline evidence: `/home/gama/sgx535-offline/twod-fault-stage-20261028/v4/`.
+Native/UBSan/i386 each pass3,900 parent checks plus38 joined fault children.
+New cases cover a delayed BIF fault, power loss without subsequent MMIO,
+pre-FIFO completion/fault already ACKed by IRQ, and root change during wait.
+The model checks both locks are free, producer and IRQ reservation remain live
+and another reservation is refused during sleep. All14 focused commands pass
+with empty stderr. These CPU models submit no GPU work.
+
+Complete module735,496bytes, SHA256
+`d3903fcd5bc79784b6e595a573d167c6a3df900554629769bb9ea9aa42d3b1f6`.
+Twenty-one warnings belong to unchanged original files. The compiled gears
+profile remains byte-exact and all31 protected artifacts are unchanged.
+Production accel_2d .text is byte-identical to both v2 and v3, SHA256
+`eb0eba9050870f0686de2c23a880dc2fb63e9ec9c9d55d4eb8ccca58ab0beeec`:
+the additional sleep, reads and ledger checks are compiled out of production.
+
+The offline image is51,105,535bytes, SHA256
+`62adb13237333f0b165097dc6f9b19279a6312c8c924dbf28d4c82bbc2e07f38`;
+only the four identity/module members changed, with five identity-chain tests
+passing. READY_OFFLINE.json records the prerequisite of fresh stock recovery
+and inventory. It has not been staged or booted. No physical success, 2D
+performance gain or completed installable driver is claimed.

@@ -72,6 +72,7 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  unsigned long flags,irq_flags;unsigned i=0;u32 root;int error;bool producer=false;
 #ifdef REMESA_TWOD_LAB_IOCTL
  unsigned phase=0;struct twod_native_fault_snapshot snapshot={0};
+ struct remesa_twod_irq_snapshot before_fifo;
 #endif
  if(!b||!l||!cookie||!l->dev||!l->dev->dev_private||!l->pd||
     !l->count||l->count>2||l->plan.dwords!=10||
@@ -105,6 +106,25 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  b->cookie=++b->serial;
  error=remesa_twod_irq_issue_locked(&b->reservation,b->cookie);if(error)goto done;
  *cookie=b->cookie;
+#ifdef REMESA_TWOD_LAB_IOCTL
+ /* Separate delayed base-publication effects from the first FIFO word.
+  * Keep reservation, backing, producer interval and IRQ cookie live while
+  * sleeping outside both spinlocks. Any pre-FIFO event is a rejection,
+  * including one already ACKed by IRQ and retained in the owned ledger. */
+ sgx535_gma500_fixed_irq_unlock(irq_flags);
+ spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
+ usleep_range(1000,1500);
+ spin_lock_irqsave(&dev_priv->lock_2d,flags);
+ irq_flags=sgx535_gma500_fixed_irq_lock();
+ TWOD_LAB_PHASE(10);
+ error=twod_native_hw(b,dev_priv,l->plan.request_base,true);if(error)goto done;
+ error=remesa_twod_irq_snapshot_locked(&b->reservation,b->cookie,&before_fifo);
+ if(error)goto done;
+ if(before_fifo.status1||before_fifo.status2||
+    (PSB_RSGX32(PSB_CR_EVENT_STATUS)&~(1u<<31))||PSB_RSGX32(PSB_CR_EVENT_STATUS2)){
+  error=-EIO;goto done;
+ }
+#endif
  TWOD_LAB_PHASE(7);
  for(i=0;i<10;i++){
   PSB_WSGX32(get_unaligned_le32(l->plan.command+4*i),PSB_SGX_2D_SLAVE_PORT+4*i);

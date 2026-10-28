@@ -23,14 +23,39 @@ static void native_failure_log(const char *format,...)
 }
 #define pr_err(...) native_failure_log(__VA_ARGS__)
 static u64 ktime_get_ns(void){clock_ns+=100000;return clock_ns;}
+static void base_observe_sleep(void);
 static void usleep_range(unsigned a,unsigned b)
-{CHECK(a==50&&b==100&&!irq_lock_held);clock_ns+=100000;sleeps++;}
+{
+ if(a==1000&&b==1500){base_observe_sleep();return;}
+ CHECK(a==50&&b==100&&!irq_lock_held);clock_ns+=100000;sleeps++;
+}
 static void dma_rmb(void){barriers++;}
 static u32 get_unaligned_le32(const void *p)
 {const unsigned char *b=p;return (u32)b[0]|(u32)b[1]<<8|(u32)b[2]<<16|(u32)b[3]<<24;}
 static void remesa_route_source_pending(struct drm_device *dev,u32 s1,u32 s2)
 {CHECK(dev&&irq_lock_held);(void)s1;(void)s2;route_calls++;}
 #include "fixed_capture_actual.inc"
+static void base_observe_sleep(void)
+{
+ struct drm_psb_private *p=active_native->reservation.device;
+ struct remesa_twod_reservation other={0};
+ CHECK(p&&!irq_lock_held&&!p->lock_2d.held&&producer_depth==1);
+ CHECK(active_native->reservation.held&&active_native->reservation.irq_issued&&active_native->cookie);
+ CHECK(p->remesa_twod_owner==&active_native->reservation&&twod_irq_owner==p->remesa_twod_owner);
+ CHECK(remesa_twod_reserve(p,&other)==-EBUSY&&!other.held);
+ clock_ns+=1000000;
+ if(mode==34){registers[PSB_CR_BIF_INT_STAT/4]=0x4004;registers[PSB_CR_BIF_FAULT/4]=p->base;}
+ if(mode==35){power_loss_reads=native_reads;p->dev->powered=0;}
+ if(mode==36||mode==37){
+  u32 event1=mode==36?_PSB_CE_TWOD_COMPLETE:0,event2=mode==37?1u<<4:0;
+  unsigned long flags=sgx535_gma500_fixed_irq_lock();
+  sgx535_gma500_fixed_irq_capture_locked(p->dev,event1,event2);
+  /* IRQ consumed raw status; owned ledger must still reject before FIFO. */
+  registers[PSB_CR_EVENT_STATUS/4]=registers[PSB_CR_EVENT_STATUS2/4]=0;
+  sgx535_gma500_fixed_irq_unlock(flags);
+ }
+ if(mode==38)registers[PSB_CR_BIF_DIR_LIST_BASE0/4]^=4096;
+}
 static u32 native_read(struct drm_psb_private *p,u32 reg)
 {
  CHECK(irq_lock_held&&p->dev->powered);native_reads++;
@@ -100,6 +125,18 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  for(unsigned iteration=0;iteration<(fault?1u:3u);iteration++){
   u64 cookie=0;unsigned words=p.words,initial_base_writes=base_writes;
   int error=remesa_twod_native_executor.start(&native,&launch,&cookie);
+  if(fault>=34&&fault<=38){
+   CHECK(error==-EIO&&native.failed&&native.reservation.held&&cookie&&!p.words);
+   CHECK(!producer_depth&&!irq_lock_held&&!p.lock_2d.held&&!p.resets);
+   CHECK(!native.complete&&!native.visible&&twod_irq_owner&&p.remesa_twod_owner);
+   if(fault==35)CHECK(native_reads==power_loss_reads);
+#ifdef REMESA_TWOD_LAB_IOCTL
+   CHECK(strstr(failure_log,fault==35?"phase=10 words=0 valid=0":"phase=10 words=0 valid=1"));
+#endif
+   if(fault==36)CHECK(native.reservation.pending1==_PSB_CE_TWOD_COMPLETE&&!native.reservation.pending2);
+   if(fault==37)CHECK(!native.reservation.pending1&&native.reservation.pending2==(1u<<4));
+   return;
+  }
   if(fault>=22&&fault<=33){
    unsigned stop=fault<=31?fault-21:3;
    CHECK(error==-EIO&&native.failed&&native.reservation.held&&cookie&&p.words==stop);
@@ -172,7 +209,7 @@ int main(void)
  native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
  unsigned faults=21;
 #ifdef REMESA_TWOD_LAB_IOCTL
- faults=33;
+ faults=38;
 #endif
  for(unsigned fault=1;fault<=faults;fault++){
   pid_t child=fork();CHECK(child>=0);

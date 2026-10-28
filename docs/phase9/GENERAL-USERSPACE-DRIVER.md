@@ -2,8 +2,10 @@
 
 The active target is hardware-accelerated desktop OpenGL and OpenGL ES 2.0
 through a common Gallium backend, with an installable driver. X11 integration
-comes later. The initial physical target remains antiX i686 on the Dell Mini
-12, PCI 8086:8108, SGX535 rev121. No OpenGL version/conformance or general
+comes later. The initial physical target is Debian 13 Trixie i686 on the Dell Mini 12
+with kernel 5.10.240-antix.1-486-smp, PCI 8086:8108, SGX535 rev121.
+Fresh physical /etc/os-release evidence is retained in
+`/home/gama/sgx535-offline/prime-presentation-audit-20261028/OS_RELEASE.json`. No OpenGL version/conformance or general
 acceleration is currently claimed.
 
 Video acceleration is a subsequent user-requested milestone after general
@@ -80,40 +82,48 @@ permission and change no selected runtime module.
 The current user priority is the driver/2D path rather than further
 disassembler searches. [Native2D copy preparation](TWOD-DRIVER-COPY-20261027.md)
 now matches the original kernel FIFO packets and is included in future Mesa
-overlays. The typed kernel endpoint, hardware completion/readback qualification
-and Gallium acceleration dispatch remain pending; CPU packet tests are not a
-new2D hardware-acceleration claim.
+overlays. The typed kernel endpoint now exists in an isolated LAB build; hardware
+completion/readback qualification and Gallium acceleration dispatch remain
+pending. CPU packet tests are not a 2D hardware-acceleration claim.
 The [retained GEM preflight](TWOD-GEM-PREFLIGHT-20261027.md) now authenticates
 that request against held kernel allocations and reconstructs the shared packet.
 The [separate 2D GEM lifecycle](TWOD-JOB-LIFECYCLE-20261027.md) now implements
 issue, owned-event receipt validation, visibility and retirement around trusted
 native adapter callbacks, with uncertainty holds and buffer reuse. CPU tests
-and real kernel-object compilation pass; no native MMIO adapter is installed.
+and real kernel-object compilation pass; the native MMIO adapter has been
+exercised in isolated LAB boots, without a successful physical copy.
 The existing3D lifecycle mask is unchanged.
 The [native producer reservation](TWOD-PRODUCER-RESERVATION-20261027.md) now
 integrates with the original console submit path under its own lock, prevents
 FIFO/reset interference while reserved and requires the saved request base
 restored before release. This has CPU and real kernel-object build evidence;
-it has not been installed or physically qualified.
+the isolated physical attempts below have not qualified a copy.
 The [shared IRQ ownership and pre-ACK capture](TWOD-IRQ-OWNERSHIP-20261027.md)
 now retain 2D events separately, exclude concurrent 3D/2D owners and keep the
 reservation on incomplete or unexpected events.
 The [native MMIO adapter candidate](TWOD-NATIVE-MMIO-20261027.md) now implements
 root/core authentication, stale-event handling, FIFO writes, polling, visibility
 and atomic state restoration around the retained job. It passes CPU models and
-a full antiX module build with the old gears profile byte-exact. It is not
-installed; physical copy qualification remains pending.
+a full antiX module build with the old gears profile byte-exact. It has run in temporary LAB boots; physical copy qualification remains pending.
 The [optional typed LAB endpoint and client](TWOD-LAB-ENDPOINT-20261027.md)
 now connect IDs to retained native jobs, keep contexts alive on failures and
 provide a guarded readback client. Endpoint/native models, full module/image
 build and an Atom ABI-only preflight pass. The first physical result is
 recorded below; copy qualification remains pending. The normal production build
 does not register this LAB ioctl.
-The [first physical 2D attempt](TWOD-PHYSICAL-FAULT-20261028.md) was rejected
-with an MMU fault outside both BOs; no completion/retirement/readback passed.
-Evidence was preserved and default boot recovered. A new LAB-only failure
-snapshot and post-base check are offline-tested; 2D acceleration is still
-unapproved and the general driver objective remains unfinished.
+The [physical 2D attempts](TWOD-PHYSICAL-FAULT-20261028.md) are rejected:
+no completion/retirement/readback passed. The latest per-word diagnostic
+observed an MMU fault outside both BOs after only the initial FENCE word;
+source/destination/BLIT were not sent. Evidence and all four N controls were
+preserved before one default recovery reboot request. Its return is awaiting
+network verification, not declared recovered. A LAB-only pre-FIFO observation
+candidate is offline-qualified to distinguish delayed base effects; it has not
+been physically tested. The general driver objective remains unfinished.
+
+The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0
+and no advertised DRI3 on the recovered stock desktop. DMA-BUF presentation
+requires actual sharing, lifetime/fence and Xorg integration; it is not an
+existing performance switch. No FPS gain is inferred from that audit.
 
 ## First common implementation increment
 
