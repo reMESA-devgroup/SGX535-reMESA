@@ -340,3 +340,13 @@ or silently mapping the faulting base page is a valid driver fix. Preserve
 isolation, backing holds, error handling and the original 3D implementation.
 General desktop GL/GLES2, textures/state, reusable submission and an installable
 userspace driver still require their own implementation and physical matrix.
+
+
+A subsequent bounded [vendor submission investigation](TWOD-VENDOR-STREAM-20261028.md)
+now binds the original PVR2DBlt producer to SGXQueueTransfer's type2 CCB and an
+original-SDK-decoded output loop in pbuKernel2DProgram. The examined host branch
+copies caller words and appends FLUSH; it does not prepend FENCE there. This
+reveals a distinct context/dependency boundary, not a complete explanation of
+our native FENCE fault. No driver, encoder, shader, gate, boot or GPU change
+was made during this static investigation. Latest recovery is still awaiting
+network; no successful 2D copy or broader API capability is inferred.
