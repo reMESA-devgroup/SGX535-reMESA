@@ -351,4 +351,34 @@ int remesa_pds_selected_pair_validate(const struct remesa_pds_selected_plan plan
  * mask and written unchanged. Unknown profiles remain ENOTSUP. */
 int remesa_pds_selected_encode(const struct remesa_pds_selected_plan *,void *bytes,
  uint8_t *known_mask,size_t capacity,size_t *written);
+/* Selected pixel constant-loader candidate: reuses the existing EE final
+ * control encoder (original decoder: nop.end), canonical USE fixup and the
+ * constant PDS constructor. Bindings are retained trusted caller metadata,
+ * not independently authenticated mappings or acquired GEM references.
+ * source.bytes must be the exact second-image transfer; auxiliary.bytes=8.
+ * pds.bytes is reserved capacity, not effective program size. Caller also
+ * retains indirect texture/constant dependencies and the bank lease.
+ */
+struct remesa_pds_constant_loader_request {
+ uint64_t operation,generation,owner_cookie;
+ struct remesa_pds_binding source,auxiliary,pds;
+ uint32_t constant_dwords,compiler_attribute_dwords,use_bank;
+};
+struct remesa_pds_constant_loader_plan {
+ struct remesa_pds_constant_loader_request request;
+ struct remesa_use_entry_plan auxiliary_entry;
+ uint32_t use_address_bits,program_bytes,attribute_dwords,attribute_units;
+ uint32_t attribute_mask,attribute_bits;
+ uint8_t auxiliary_code[8],pds_image[64],pds_known_mask[64];
+ int execution_error;
+};
+/* Observed auxiliary start alignment128 and PDS start alignment32; no CODE
+ * filler. Attribute allocation=max(compiler requirement, transfer words),
+ * distinct from source backing/transfer bytes. Field representation alone
+ * is not a hardware attribute-capacity approval. All failures transactional.
+ */
+int remesa_pds_constant_loader_prepare(const struct remesa_pds_constant_loader_request *,
+ struct remesa_pds_constant_loader_plan *);
+int remesa_pds_constant_loader_revalidate(const struct remesa_pds_constant_loader_plan *,
+ const struct remesa_pds_constant_loader_request *current);
 #endif

@@ -851,3 +851,68 @@ int remesa_pds_selected_encode(const struct remesa_pds_selected_plan *p,void *ou
  for(size_t i=p->data_bytes;i<size;i++)if(mask[i]!=255)return EPROTO;
  memcpy(out,image,size);memcpy(known_mask,mask,size);*written=size;return 0;
 }
+
+int remesa_pds_constant_loader_prepare(const struct remesa_pds_constant_loader_request *r,
+ struct remesa_pds_constant_loader_plan *out)
+{
+ if(!r||!out||overlaps(r,sizeof(*r),out,sizeof(*out)))return EINVAL;
+ if(!r->operation||!r->generation||!r->owner_cookie||!r->constant_dwords)return EINVAL;
+ if(r->constant_dwords>128u)return ENOTSUP;
+ int e=selected_binding32(&r->source,r->owner_cookie);if(e)return e;
+ e=selected_binding32(&r->auxiliary,r->owner_cookie);if(e)return e;
+ e=selected_binding32(&r->pds,r->owner_cookie);if(e)return e;
+ if(r->source.bytes!=(uint64_t)r->constant_dwords*4u||r->auxiliary.bytes!=8)return EINVAL;
+ if(((r->source.address+r->source.offset)&3u)||
+    ((r->auxiliary.address+r->auxiliary.offset)&127u)||
+    ((r->pds.address+r->pds.offset)&31u)||(r->pds.bytes&3u))return EINVAL;
+ e=storage_disjoint(&r->source,&r->auxiliary);if(e)return e;
+ e=storage_disjoint(&r->source,&r->pds);if(e)return e;
+ e=storage_disjoint(&r->auxiliary,&r->pds);if(e)return e;
+ struct remesa_pds_constant_loader_plan p;memset(&p,0,sizeof(p));p.request=*r;
+ const struct remesa_use_entry_request use={.allocation_address=r->auxiliary.address,
+  .allocation_bytes=r->auxiliary.allocation_bytes,.entry_offset=r->auxiliary.offset,
+  .program_bytes=8,.bank=r->use_bank,.data_master=REMESA_USE_PIXEL};
+ e=remesa_use_entry_prepare(&use,&p.auxiliary_entry);if(e)return e;
+ e=remesa_use_entry_preview_fixup(&p.auxiliary_entry,&p.use_address_bits);if(e)return e;
+ p.attribute_dwords=r->compiler_attribute_dwords;
+ if(p.attribute_dwords<r->constant_dwords)p.attribute_dwords=r->constant_dwords;
+ /* Original pixel role2 replaces mask01fc8000 with enable bit15 and a
+  * seven-bit ceil(words/32) field. This is representability, not a GPU limit. */
+ uint64_t units=((uint64_t)p.attribute_dwords+31u)/32u;
+ if(units>127u)return ERANGE;
+ p.attribute_units=(uint32_t)units;p.attribute_mask=UINT32_C(0x01fc8000);
+ p.attribute_bits=UINT32_C(0x8000)|(p.attribute_units<<18u);
+ const struct remesa_usse_cpu_control_ee end={.record_last=1};
+ size_t n;
+ e=remesa_usse_cpu_control_ee_encode(&end,p.auxiliary_code,sizeof(p.auxiliary_code),&n);
+ if(e)return e;
+ if(n!=sizeof(p.auxiliary_code))return EPROTO;
+ const struct remesa_pds_constant_image_request image={
+  .source_allocation_address=r->source.address,.source_allocation_bytes=r->source.allocation_bytes,
+  .source_offset=r->source.offset,.constant_dwords=r->constant_dwords,.use_lower19=p.use_address_bits};
+ e=remesa_pds_structure_encode_constant_image(&image,p.pds_image,p.pds_known_mask,
+  sizeof(p.pds_image),&n);if(e)return e;
+ if(n>r->pds.bytes)return ENOSPC;
+ p.program_bytes=(uint32_t)n;p.execution_error=ENOTSUP;*out=p;return 0;
+}
+int remesa_pds_constant_loader_revalidate(const struct remesa_pds_constant_loader_plan *p,
+ const struct remesa_pds_constant_loader_request *current)
+{
+ if(!p||!current)return EINVAL;
+ struct remesa_pds_constant_loader_plan q;
+ int e=remesa_pds_constant_loader_prepare(&p->request,&q);if(e)return e;
+ if(!entry_equal(&p->auxiliary_entry,&q.auxiliary_entry)||
+    p->use_address_bits!=q.use_address_bits||p->program_bytes!=q.program_bytes||
+    p->attribute_dwords!=q.attribute_dwords||p->attribute_units!=q.attribute_units||
+    p->attribute_mask!=q.attribute_mask||p->attribute_bits!=q.attribute_bits||
+    p->execution_error!=ENOTSUP||memcmp(p->auxiliary_code,q.auxiliary_code,8)||
+    memcmp(p->pds_image,q.pds_image,64)||memcmp(p->pds_known_mask,q.pds_known_mask,64))return EPROTO;
+ e=remesa_pds_constant_loader_prepare(current,&q);if(e)return e;
+ const struct remesa_pds_constant_loader_request *old=&p->request;
+ if(old->operation!=current->operation||old->generation!=current->generation||
+    old->owner_cookie!=current->owner_cookie||old->constant_dwords!=current->constant_dwords||
+    old->compiler_attribute_dwords!=current->compiler_attribute_dwords||old->use_bank!=current->use_bank||
+    !binding_equal(&old->source,&current->source)||!binding_equal(&old->auxiliary,&current->auxiliary)||
+    !binding_equal(&old->pds,&current->pds))return ESTALE;
+ return 0;
+}

@@ -120,3 +120,7 @@ retain identity, submission, completion, retirement, readback and buffer
 integrity checks at required sizes. Existing gears and native2D qualification
 remain preserved. Actual desktop/EGL/GBM/image ownership, general GL/GLES2,
 multi-client isolation and recoverable installation remain part of completion.
+
+The subsequent [fallback auxiliary and joined candidate plan](CONSTANT-LOADER-USE-AUX-20261028.md)
+reuse the existing EE final encoder for nop.end. Physical loading, private-MMU
+integration, source-resource closure and shader binding remain unqualified.
