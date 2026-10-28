@@ -1,5 +1,9 @@
 # Typed 2D LAB endpoint and physical-copy client
 
+The [physical follow-up](TWOD-PHYSICAL-FAULT-20261028.md) records a rejected
+1280x800 attempt and verified default recovery. The offline evidence below
+does not override that result or approve the native fetch contract.
+
 The optional LAB endpoint resolves existing file-bound GEM IDs and dimensions
 into the shared typed copy request. It accepts no raw packet, GPU address, PFN,
 native callback or injected completion. The DRM descriptor is ROOT_ONLY and

@@ -7,6 +7,25 @@
 #include <linux/ktime.h>
 #include <asm/unaligned.h>
 #endif
+#ifdef REMESA_TWOD_LAB_IOCTL
+/* Failure-only LAB evidence; capture under IRQ lock, print after unlocking.
+ * Never use this snapshot as completion/retirement or clear the fault. */
+struct twod_native_fault_snapshot {u32 valid,event1,event2,bif,address,root,base,vfifo0,vfifo1,fifo,blit;};
+static void twod_native_fault_read(struct drm_psb_private *dev_priv,
+ struct twod_native_fault_snapshot *s)
+{
+ if(!gma_power_is_on(dev_priv->dev))return;
+ s->event1=PSB_RSGX32(PSB_CR_EVENT_STATUS);s->event2=PSB_RSGX32(PSB_CR_EVENT_STATUS2);
+ s->bif=PSB_RSGX32(PSB_CR_BIF_INT_STAT);s->address=PSB_RSGX32(PSB_CR_BIF_FAULT);
+ s->root=PSB_RSGX32(PSB_CR_BIF_DIR_LIST_BASE0);s->base=PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE);
+ /* Permitted SGX535 definitions: 2D_VIRTUAL_FIFO_0/1, read only. */
+ s->vfifo0=PSB_RSGX32(0x0e10);s->vfifo1=PSB_RSGX32(0x0e14);
+ s->fifo=PSB_RSGX32(PSB_CR_2D_SOCIF);s->blit=PSB_RSGX32(PSB_CR_2D_BLIT_STATUS);s->valid=1;
+}
+#define TWOD_LAB_PHASE(value) do{phase=(value);}while(0)
+#else
+#define TWOD_LAB_PHASE(value) do{}while(0)
+#endif
 static int twod_native_match(struct remesa_twod_native *b,
  const struct remesa_twod_launch *l,u64 cookie)
 {
@@ -50,7 +69,10 @@ static int twod_native_capture(struct drm_psb_private *dev_priv,u32 *observed)
 static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64 *cookie)
 {
  struct remesa_twod_native *b=opaque;struct drm_psb_private *dev_priv;
- unsigned long flags,irq_flags;unsigned i;u32 root;int error;
+ unsigned long flags,irq_flags;unsigned i=0;u32 root;int error;bool producer=false;
+#ifdef REMESA_TWOD_LAB_IOCTL
+ unsigned phase=0;struct twod_native_fault_snapshot snapshot={0};
+#endif
  if(!b||!l||!cookie||!l->dev||!l->dev->dev_private||!l->pd||
     !l->count||l->count>2||l->plan.dwords!=10||
     (l->plan.request_base&0x0fffffffu))return -EINVAL;
@@ -62,29 +84,46 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  error=remesa_twod_reserve(dev_priv,&b->reservation);if(error)goto failed;
  spin_lock_irqsave(&dev_priv->lock_2d,flags);
  irq_flags=sgx535_gma500_fixed_irq_lock();
+ TWOD_LAB_PHASE(1);
  if(!gma_power_is_on(dev_priv->dev)){error=-EIO;goto done;}
  b->core=PSB_RSGX32(PSB_CR_CORE_ID);b->revision=PSB_RSGX32(PSB_CR_CORE_REVISION);
  if(b->core!=0x01130000u||b->revision!=0x00010201u){error=-ENODEV;goto done;}
- error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);if(error)goto done;
+ TWOD_LAB_PHASE(2);error=twod_native_hw(b,dev_priv,b->reservation.saved_base,true);if(error)goto done;
+ TWOD_LAB_PHASE(3);
  error=twod_native_capture(dev_priv,&b->stale_status1);if(error)goto done;
  /* An old event must actually be gone before possible issuance is recorded. */
  if(PSB_RSGX32(PSB_CR_EVENT_STATUS)&~(1u<<31)) {error=-EIO;goto done;}
  if(PSB_RSGX32(PSB_CR_EVENT_STATUS2)){error=-EIO;goto done;}
+ /* Base publication belongs to the producer interval too: do not hide a
+  * fault/request triggered before the first FIFO word from legacy history. */
+ remesa_route_source_producer(1);producer=true;TWOD_LAB_PHASE(4);
  PSB_WSGX32(l->plan.request_base,PSB_CR_BIF_TWOD_REQ_BASE);
  if(PSB_RSGX32(PSB_CR_BIF_TWOD_REQ_BASE)!=l->plan.request_base){error=-EIO;goto done;}
+ TWOD_LAB_PHASE(5);
+ error=twod_native_hw(b,dev_priv,l->plan.request_base,true);if(error)goto done;
+ TWOD_LAB_PHASE(6);
  b->cookie=++b->serial;
  error=remesa_twod_irq_issue_locked(&b->reservation,b->cookie);if(error)goto done;
  *cookie=b->cookie;
- /* The existing first-owner 3D provenance must observe this producer too.
-  * Never hide a new 2D submission behind bit27's benign IRQ classification. */
- remesa_route_source_producer(1);
+ TWOD_LAB_PHASE(7);
  for(i=0;i<10;i++)
   PSB_WSGX32(get_unaligned_le32(l->plan.command+4*i),PSB_SGX_2D_SLAVE_PORT+4*i);
  (void)PSB_RSGX32(PSB_SGX_2D_SLAVE_PORT+36);
- remesa_route_source_producer(0);
+ TWOD_LAB_PHASE(8);
  error=twod_native_hw(b,dev_priv,l->plan.request_base,false);
- done:sgx535_gma500_fixed_irq_unlock(irq_flags);
+ done:
+#ifdef REMESA_TWOD_LAB_IOCTL
+ if(error&&b->core==0x01130000u&&b->revision==0x00010201u)
+  twod_native_fault_read(dev_priv,&snapshot);
+#endif
+ if(producer)remesa_route_source_producer(0);
+ sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
+#ifdef REMESA_TWOD_LAB_IOCTL
+ if(error)pr_err("remesa2d LAB start fault phase=%u words=%u valid=%u event=%08x/%08x bif=%08x addr=%08x root=%08x req=%08x vfifo=%08x/%08x fifo=%08x blit=%08x\n",
+  phase,i,snapshot.valid,snapshot.event1,snapshot.event2,snapshot.bif,snapshot.address,
+  snapshot.root,snapshot.base,snapshot.vfifo0,snapshot.vfifo1,snapshot.fifo,snapshot.blit);
+#endif
  failed:if(error)b->failed=true;return error;
 }
 static int twod_native_poll(void *opaque,const struct remesa_twod_launch *l,

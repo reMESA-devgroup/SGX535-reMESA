@@ -5,6 +5,7 @@
 #undef main
 #include <unistd.h>
 #include <sys/wait.h>
+#include <stdarg.h>
 #include "native_source_defs.h"
 #include "../remesa_twod_native.h"
 struct psb_mmu_pd {struct drm_device *dev;u32 root;int error;};
@@ -14,6 +15,13 @@ static u32 registers[0x5000/4];
 static unsigned mode,base_writes,acks,sleeps,barriers,route_calls,native_reads;
 static u64 clock_ns;
 static struct remesa_twod_native *active_native;
+static char failure_log[512];
+static void native_failure_log(const char *format,...)
+{
+ CHECK(!irq_lock_held&&!active_native->reservation.device->lock_2d.held);
+ va_list args;va_start(args,format);vsnprintf(failure_log,sizeof failure_log,format,args);va_end(args);
+}
+#define pr_err(...) native_failure_log(__VA_ARGS__)
 static u64 ktime_get_ns(void){clock_ns+=100000;return clock_ns;}
 static void usleep_range(unsigned a,unsigned b)
 {CHECK(a==50&&b==100&&!irq_lock_held);clock_ns+=100000;sleeps++;}
@@ -36,7 +44,9 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
  if(reg==PSB_CR_BIF_TWOD_REQ_BASE){
   CHECK(p->lock_2d.held);base_writes++;
   if((mode==8&&base_writes==1)||(mode==9&&base_writes==2))return;
-  p->base=value;return;
+  p->base=value;
+  if(mode==21&&base_writes==1){registers[PSB_CR_BIF_INT_STAT/4]=4;registers[PSB_CR_BIF_FAULT/4]=value;}
+  return;
  }
  if(reg==PSB_CR_EVENT_HOST_CLEAR){
   CHECK(value==_PSB_CE_TWOD_COMPLETE);acks++;
@@ -69,7 +79,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
   .destination={2,0x41000000,0x01000000,width,height,width*4,1},.request_base=0x40000000,.width=width,.height=height};
  CHECK(!remesa_twod_copy_prepare(&copy,&launch.plan));
  dev.dev_private=&p;active_native=&native;mode=fault;
- memset(registers,0,sizeof registers);base_writes=acks=sleeps=barriers=0;clock_ns=0;
+ memset(registers,0,sizeof registers);failure_log[0]=0;base_writes=acks=sleeps=barriers=0;clock_ns=0;
  registers[PSB_CR_CORE_ID/4]=0x01130000;registers[PSB_CR_CORE_REVISION/4]=0x00010201;
  registers[PSB_CR_BIF_DIR_LIST_BASE0/4]=pd.root;
  registers[PSB_CR_EVENT_STATUS/4]=_PSB_CE_TWOD_COMPLETE; /* stale event */
@@ -84,8 +94,18 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  for(unsigned iteration=0;iteration<(fault?1u:3u);iteration++){
   u64 cookie=0;unsigned words=p.words,initial_base_writes=base_writes;
   int error=remesa_twod_native_executor.start(&native,&launch,&cookie);
+  if(fault==21){
+   CHECK(error==-EIO&&native.failed&&native.reservation.held&&!p.words&&!cookie&&!producer_depth);
+#ifdef REMESA_TWOD_LAB_IOCTL
+   CHECK(strstr(failure_log,"phase=5 words=0")&&strstr(failure_log,"bif=00000004 addr=40000000"));
+#endif
+   return;
+  }
   if((fault>=1&&fault<=8)||fault==14||fault==15){
    CHECK(error&&native.failed&&native.reservation.held&&!p.words&&!cookie);
+#ifdef REMESA_TWOD_LAB_IOCTL
+   if(fault==1||fault==2)CHECK(strstr(failure_log,"valid=0"));
+#endif
    CHECK(!p.resets);return;
   }
   if(fault==13){CHECK(error==-EIO&&cookie&&p.words==10&&native.reservation.held);return;}
@@ -128,11 +148,11 @@ int main(void)
 {
  CHECK(!reservation_test_main());
  native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
- for(unsigned fault=1;fault<=20;fault++){
+ for(unsigned fault=1;fault<=21;fault++){
   pid_t child=fork();CHECK(child>=0);
   if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
- printf("PASS %u parent native adapter checks plus 20 joined MMIO fault models; no GPU execution\n",checks);
+ printf("PASS %u parent native adapter checks plus 21 joined MMIO fault models; no GPU execution\n",checks);
  return 0;
 }

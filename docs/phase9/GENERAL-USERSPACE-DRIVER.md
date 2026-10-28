@@ -106,9 +106,14 @@ installed; physical copy qualification remains pending.
 The [optional typed LAB endpoint and client](TWOD-LAB-ENDPOINT-20261027.md)
 now connect IDs to retained native jobs, keep contexts alive on failures and
 provide a guarded readback client. Endpoint/native models, full module/image
-build and an Atom ABI-only preflight pass; selecting the isolated test boot
-and physical copy qualification remain pending. The normal production build
+build and an Atom ABI-only preflight pass. The first physical result is
+recorded below; copy qualification remains pending. The normal production build
 does not register this LAB ioctl.
+The [first physical 2D attempt](TWOD-PHYSICAL-FAULT-20261028.md) was rejected
+with an MMU fault outside both BOs; no completion/retirement/readback passed.
+Evidence was preserved and default boot recovered. A new LAB-only failure
+snapshot and post-base check are offline-tested; 2D acceleration is still
+unapproved and the general driver objective remains unfinished.
 
 ## First common implementation increment
 
