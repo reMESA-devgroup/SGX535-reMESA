@@ -1119,3 +1119,29 @@ white flash is preserved with unknown cause; no display coexistence/stability
 approval follows from guarded private pixels. Separate read-only display/
 power observation is needed before desktop qualification. Other2D operations,
 general3D, unprivileged admission, presentation and installation remain open.
+
+
+## Owned native2D construction and real desktop priority
+
+The [owned native2D factory](NATIVE-2D-FACTORY-20261028.md) now combines native
+copy/fill, an owned duplicate FD, per-file session and deferred provider
+cleanup. Its mixed path passed147 physical operations at all three sizes,
+including caller-FD closure before rendering and exactly-one session/final-FD
+closure after the last child. Normal rendering has no diagnostic hashes or
+readbacks. Protected old loader remains unchanged; a new unit is registered
+in the Mesa source overlay. This is a privileged resource-only backend, not
+general DRI/OpenGL admission or a usable everyday desktop yet.
+
+The user explicitly prioritized rendering the actual desktop through the same
+reMESA driver as3D, rather than further isolated red/green demonstrations.
+Current live stock boot5acedcdc inspection confirms Xorg21.1.16 modesetting +
+IceWM, Mesa25.0.7 system packages, and glamor refused on llvmpipe followed by
+DRISWRAST GLX. Native2D private resources are not currently the Xorg renderer.
+Pinned matching Xorg source shows modesetting's EGL/GBM/glamor route requires
+a real GL2.1 or GLES2 context, image/FBO/texture/shader functionality and shared
+pixmap/scanout ownership. It cannot be enabled by naming a renderer or removing
+the llvmpipe/general-GL gates. [Desktop integration audit](DESKTOP-INTEGRATION-20261028.md)
+records the live evidence and concrete missing contracts. Future physical
+integration should exercise the normal desktop, window/text/scroll/damage
+operations and simultaneous3D through the common backend, with recoverable
+configuration; isolated colors remain diagnostics only.

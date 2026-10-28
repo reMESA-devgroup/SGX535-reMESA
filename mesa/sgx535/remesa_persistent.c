@@ -133,6 +133,7 @@ struct persistent {
  struct scene_capture scenes[REMESA_PROVIDER_MAX_JOBS];
  remesa_gpu_copy_fn native_copy;
  remesa_gpu_fill_fn native_fill;
+ int (*release_provider)(void *);void *release_priv;int release_error;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
 {
@@ -770,6 +771,12 @@ int remesa_persistent_close(struct remesa_device *device)
  for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++) if(d->jobs[i].live||d->scenes[i].live)return EBUSY;
  for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++) if(d->buffers[i].live)return EBUSY;
  if(d->shaders)return EBUSY;
+ if(d->release_provider){
+  if(d->release_error)return d->release_error;
+  if(d->failed)return EOWNERDEAD;
+  int e=d->release_provider(d->release_priv);
+  if(e){d->failed=true;d->release_error=e>0?e:EOWNERDEAD;return d->release_error;}
+ }
  remesa_shader_cookie_pool_finish(&d->shader_cookies);
  free(d);memset(device,0,sizeof(*device));return 0;
 }
@@ -3142,4 +3149,13 @@ int remesa_persistent_fill_region(void *opaque,const struct remesa_fill_region *
  if(e==EOWNERDEAD||e<0){memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;}
  if(!e)b->readable=true;
  drop_memory(d,b);return e;
+}
+
+int remesa_persistent_take_provider(struct remesa_device *device,int (*release)(void *),void *priv)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!release||!priv)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(d->release_provider||d->allocated||d->shaders)return EBUSY;
+ d->release_provider=release;d->release_priv=priv;return 0;
 }

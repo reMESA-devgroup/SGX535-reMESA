@@ -100,6 +100,12 @@ int remesa_persistent_collect(struct remesa_device *);
  * through device.ops->destroy_bo. Does not submit or qualify any GPU path. */
 int remesa_persistent_allocate_placed(struct remesa_device *,size_t bytes,
  enum remesa_persistent_va_class,void **bo);
+/* Transfer a provider lifetime to this owner before any allocation. The
+ * callback runs once only, after every job/capture/buffer/shader is gone.
+ * A failed release retains the owner and caches the error; never retries an
+ * uncertain provider close. No callback reentry or device mutation permitted.
+ * Failed setup leaves ownership with the caller. */
+int remesa_persistent_take_provider(struct remesa_device *,int (*)(void *),void *);
 int remesa_persistent_close(struct remesa_device *);
 /* Live allocation metadata for building native job bindings. No lifetime hold,
  * byte-content verification, requester qualification or execution permission.
