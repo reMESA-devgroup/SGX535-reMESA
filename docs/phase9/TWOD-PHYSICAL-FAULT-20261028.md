@@ -271,5 +271,72 @@ The offline image is51,105,535bytes, SHA256
 `62adb13237333f0b165097dc6f9b19279a6312c8c924dbf28d4c82bbc2e07f38`;
 only the four identity/module members changed, with five identity-chain tests
 passing. READY_OFFLINE.json records the prerequisite of fresh stock recovery
-and inventory. It has not been staged or booted. No physical success, 2D
-performance gain or completed installable driver is claimed.
+and inventory. At that offline checkpoint it had not been staged or booted; the subsequent
+physical result below supersedes that deployment status. No physical success,
+2D performance gain or completed installable driver is claimed.
+
+
+The v3 recovery subsequently verified after the user restored connectivity:
+stock boot `058f1193-bb56-460e-9cd2-c29362832169`, exact stock module note,
+no observer/experimental controls/proc endpoint, original saved default and
+custom.cfg hash, empty next_entry. FINAL_REMOTE_STATE.json and the updated
+hardware/CLOSEOUT.json supersede the pending recovery state above; the initial
+unverified snapshot is preserved separately. The read-only wait was resumed
+after the user's new powered-on report; no additional reboot or GPU operation
+was requested. This ends the quarantined kernel lifetime by reset, not by
+retirement. Both observation controllers are terminal.
+
+
+## v4 physical result: pre-FIFO observation passes, FENCE still faults
+
+One v4 boot `127cbff1-ae98-4c7f-ac7e-da11239ab072` matched the bound driver
+note `9badbb08ff359cb1a919d8199219a22260344fb712ca583aa70873b3297b1989`
+and observer, all four N controls and virgin source/capsule prerequisites.
+Fresh stock inventory, identity-chain tests, controller syntax, staged-image
+hash and grub-script-check passed before this boot. The original default,
+custom.cfg and empty next_entry were restored before the single1280x800 copy.
+
+Evidence: `/home/gama/sgx535-offline/twod-fault-stage-20261028/v4/hardware/`,
+particularly PHYSICAL_RESULTS.json, artifacts-1280x800/ and the complete
+archive SHA256
+`8d32298f3c239c4038857b69a20d5c015bfe6f1da8af8652d673b50fc2ce8f10`.
+Consumed root: `/root/sgx535-twod-lab-boot-62adb132/copy-1280x800`.
+
+```
+phase=9 words=1 valid=1 event=80000000/00000010 bif=00004004
+addr=40000000 root=349ef000 req=40000000
+vfifo=00000000/00000000 fifo=00000080 blit=01000000
+```
+
+The sleep returned and phase10 hardware/root/quiet/raw-event/owned-ledger checks
+passed before the first word. The fault was again observed immediately after
+FENCE alone; source/destination/BLIT were not sent. This strengthens the
+FENCE/initial-state hypothesis and narrows the earlier asynchronous-base
+hypothesis, without proving the precise memory operation, its read/write
+semantics or complete fetch footprint. The requested sleep is1--1.5ms;
+its actual hardware duration was not independently measured. Stop repeating
+the unchanged failing operation or merely lengthening this wait.
+
+Core/revision `0x01130000/0x00010201`, op/cookie1/1;
+error-5/stages1/retained1/uncertain1. Issue wall9.137754ms until rejection,
+client wall241.646791ms are not GPU execution time or FPS. Completion,
+visibility, retirement and readback integrity remain unapproved. Readbacks
+are empty because uncertainty correctly prevented reads. No smaller-size
+retry, CPU fallback, FENCE removal, fault clear or extra base mapping occurred.
+
+Evidence was fetched after the probe terminated and all four controls returned
+to N; producers_active0/reasons33. One default recovery reboot was requested.
+The same read-only recovery observation is still awaiting network response;
+no extra reboot or GPU operation was requested. Recovery is NOT yet verified
+and the retained kernel lifetime must not be called ended. The original saved
+default and empty next_entry were verified before the recovery request.
+All31 protected artifacts remain intact.
+
+Next work: resolve the FENCE memory/state contract using permitted primary
+initialization/command evidence, including how its implicit accesses are owned
+and bounded. The original header says its bits0--27 are ignored; matching
+that packet is not a complete fetch contract. Do not infer that deleting FENCE
+or silently mapping the faulting base page is a valid driver fix. Preserve
+isolation, backing holds, error handling and the original 3D implementation.
+General desktop GL/GLES2, textures/state, reusable submission and an installable
+userspace driver still require their own implementation and physical matrix.
