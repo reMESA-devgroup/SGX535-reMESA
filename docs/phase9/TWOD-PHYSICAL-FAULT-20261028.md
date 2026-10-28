@@ -160,3 +160,35 @@ causal DWORD. Preserve the complete packet, FENCE, protected address space,
 retained ownership, production behavior and all existing gates. Do not map
 the failing base page or change pattern/ROP state speculatively. No successful
 2D acceleration, desktop performance gain or completed general driver is claimed.
+
+
+## Next candidate: bounded LAB observation between packet words
+
+The per-word observation is now implemented and qualified offline in
+`/home/gama/sgx535-offline/twod-fault-stage-20261028/v3/`. After each unchanged
+FIFO word, the LAB build checks power, raw BIF status and event-status2 without
+ACK, reset or wait. Phase9 records the number of words written when a fault is
+observed, immediately stops subsequent writes and retains the partial job.
+A power loss prevents all subsequent MMIO including the failure snapshot.
+It does not identify the causal word of an asynchronous fault.
+
+Native/UBSan/i386 each pass3543 parent checks plus33 joined fault children.
+New injections cover BIF faults after each of the ten words, event2 after
+word3 and power loss after word3; tests require exact write cutoff, balanced
+producer notification, retained ownership, no completion/visibility/reset and
+logging after both locks are released. Power-loss checks also prove no later
+MMIO reads. All14 focused compile/run/link commands pass with empty stderr.
+
+The complete antiX module builds:736432bytes, SHA256
+`9874b98b6fbd8be0633d02e29e2bf95f712fedf92ada00e85ee60968eba0ed76`.
+Its21 warnings belong to byte-unchanged original files. The compiled5844byte
+gears profile is byte-exact against the previous module. All31 protected
+artifacts are intact. The complete non-LAB accel_2d .text is byte-identical to
+v2 (SHA256 eb0eba9050870f0686de2c23a880dc2fb63e9ec9c9d55d4eb8ccca58ab0beeec).
+No additional diagnostic cost is compiled into that production code.
+
+This candidate is not installed, booted or physically approved. No v3 initrd
+has been built. Build a fresh identity-bound image/controller if proceeding;
+the v2 image/consumed hardware root contains the earlier phase8 candidate.
+Current physical outcome is still the rejected v2 test and verified stock
+recovery. General3D/2D/userspace installation remains unfinished.

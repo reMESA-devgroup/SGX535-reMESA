@@ -106,8 +106,19 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  error=remesa_twod_irq_issue_locked(&b->reservation,b->cookie);if(error)goto done;
  *cookie=b->cookie;
  TWOD_LAB_PHASE(7);
- for(i=0;i<10;i++)
+ for(i=0;i<10;i++){
   PSB_WSGX32(get_unaligned_le32(l->plan.command+4*i),PSB_SGX_2D_SLAVE_PORT+4*i);
+#ifdef REMESA_TWOD_LAB_IOCTL
+  /* Observe, never ACK/reset, between unchanged packet words. A detected
+   * fault retains the partial job and forbids further FIFO writes. This is
+   * an observation boundary, not attribution of an asynchronous fault. */
+  TWOD_LAB_PHASE(9);
+  if(!gma_power_is_on(dev_priv->dev))error=-EIO;
+  else if(PSB_RSGX32(PSB_CR_BIF_INT_STAT)||PSB_RSGX32(PSB_CR_EVENT_STATUS2))error=-EIO;
+  if(error){i++;goto done;}
+  TWOD_LAB_PHASE(7);
+#endif
+ }
  (void)PSB_RSGX32(PSB_SGX_2D_SLAVE_PORT+36);
  TWOD_LAB_PHASE(8);
  error=twod_native_hw(b,dev_priv,l->plan.request_base,false);
