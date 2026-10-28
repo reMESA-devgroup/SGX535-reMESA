@@ -115,3 +115,8 @@ at the required sizes. No CPU image/replay is accelerated rendering.
 General GL/GLES2, actual desktop/EGL/GBM/image ownership, multi-client isolation
 and reversible installation remain required. No Mini12 operation occurred in
 this increment, and the new image builder is not called from normal drawing.
+
+The later [secondary PDS trace](TEXTURE-SECONDARY-PDS-20261028.md) identifies
+a second source image which can contain a pointer into this first image, plus
+direct patches. The images must not be equated; source capacity, committed
+words and attribute reservation are also separate.

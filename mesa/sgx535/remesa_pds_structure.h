@@ -207,7 +207,9 @@ int remesa_pds_structure_resolve_initial(const struct remesa_pds_structure *,
  * The separately proven three-word state CPU profile also admits a final
  * CPU_TRAILER_AF after CPU_TRANSFER_PAIR(0) then PAIR_SINGLE(2,2).
  * The exact four/five-word vertex CPU profile (SETUP,PAIR0,[PAIR2],TASK4/1)
- * also admits a final trailer. Other vertex-prefixed combinations are rejected.
+ * also admits a final trailer. The original constant-loader secondary profile
+ * additionally admits one/two CPU_TRANSFER_PAIR sources0/[2], followed by
+ * PAIR_SINGLE(2/4,0) and trailer. Other vertex-prefixed combinations are rejected.
  * CPU_EMPTY_SECONDARY_AF is admitted only as a sole operand-free word,
  * matching the original empty-secondary producer (ELF3faa3).
  * No input word or historical byte sequence is accepted. Unknown classes
@@ -315,6 +317,24 @@ struct remesa_pds_state_image_request {
 int remesa_pds_structure_encode_state_image(
  const struct remesa_pds_state_image_request *,uint8_t *bytes,uint8_t *known_mask,
  size_t capacity,size_t *written);
+/* Selected original GLES2 constant-loader CPU profile, distinct from PARAM.
+ * 1..128 source DWORDs produce one/two DMA descriptors, then a fallback USE
+ * task (canonical lower19, other two task values zero) and trailer. DATA48,
+ * CODE12/16; padding is zero with mask0, not recovered contents or CODE fill.
+ * Source capacity, effective DWORD count and returned program size are separate.
+ * This does not establish hardware transfer extent, destination SA, task
+ * execution, mapping ownership or permission to submit. All outputs are
+ * disjoint/transactional. Source and canonical USE binding stay caller-owned.
+ */
+#define REMESA_PDS_CONSTANT_DATA_BYTES 48u
+#define REMESA_PDS_CONSTANT_MAX_IMAGE_BYTES 64u
+struct remesa_pds_constant_image_request {
+ uint64_t source_allocation_address,source_allocation_bytes,source_offset;
+ uint32_t constant_dwords,use_lower19;
+};
+int remesa_pds_structure_encode_constant_image(
+ const struct remesa_pds_constant_image_request *,uint8_t *bytes,
+ uint8_t *known_mask,size_t capacity,size_t *written);
 /* Host source construction policy, not a recovered GPU instruction. Prefix one
  * self-address DWORD to coefficient_bytes (already little endian). The caller
  * explicitly chooses transfer_dwords: either the exact effective length

@@ -473,6 +473,19 @@ int remesa_pds_structure_encode_code(
     instructions[0].ds1_index==REMESA_PDS_STRUCTURE_NO_CELL&&
     instructions[1].kind==REMESA_PDS_STRUCTURE_PAIR_SINGLE&&
     instructions[1].ds0_index==2u&&instructions[1].ds1_index==2u;
+   /* Original GLES2 ELF17890 constant loader: one/two source pairs,
+    * canonical task pair after them, DS1 task value at index0, then AF.
+    * This exact CPU grammar is not new GPU execution permission. */
+   int secondary=(count==3u||count==4u)&&
+    instructions[0].kind==REMESA_PDS_STRUCTURE_CPU_TRANSFER_PAIR&&
+    instructions[0].ds0_index==0u&&
+    instructions[0].ds1_index==REMESA_PDS_STRUCTURE_NO_CELL&&
+    (count==3u||(instructions[1].kind==REMESA_PDS_STRUCTURE_CPU_TRANSFER_PAIR&&
+      instructions[1].ds0_index==2u&&
+      instructions[1].ds1_index==REMESA_PDS_STRUCTURE_NO_CELL))&&
+    instructions[count-2u].kind==REMESA_PDS_STRUCTURE_PAIR_SINGLE&&
+    instructions[count-2u].ds0_index==(count==3u?2u:4u)&&
+    instructions[count-2u].ds1_index==0u;
    int vertex=(count==4u||count==5u)&&
     instructions[0].kind==REMESA_PDS_STRUCTURE_CPU_VERTEX_SETUP&&
     instructions[1].kind==REMESA_PDS_STRUCTURE_CPU_VERTEX_PAIR&&
@@ -485,7 +498,7 @@ int remesa_pds_structure_encode_code(
     instructions[2].kind==REMESA_PDS_STRUCTURE_CPU_VERTEX_PAIR&&
     instructions[2].ds0_index==2u&&
     instructions[2].ds1_index==REMESA_PDS_STRUCTURE_NO_CELL;
-   if(i+1u!=count||(!primary&&!state&&!vertex))return EINVAL;
+   if(i+1u!=count||(!primary&&!state&&!secondary&&!vertex))return EINVAL;
   }
   uint32_t word;
   int error;
@@ -919,6 +932,78 @@ int remesa_pds_structure_encode_state_image(
  memset(mask+48,0xff,12);
  memcpy(bytes,image,sizeof(image));memcpy(known_mask,mask,sizeof(mask));
  *written=sizeof(image);return 0;
+}
+
+int remesa_pds_structure_encode_constant_image(
+ const struct remesa_pds_constant_image_request *request,uint8_t *bytes,
+ uint8_t *known_mask,size_t capacity,size_t *written)
+{
+ if(!request||!written||
+    (uintptr_t)request%_Alignof(struct remesa_pds_constant_image_request)||
+    (uintptr_t)written%_Alignof(size_t)||
+    !range_valid(request,sizeof(*request))||!range_valid(written,sizeof(*written))||
+    !range_valid(bytes,capacity)||!range_valid(known_mask,capacity))return EINVAL;
+ if(!disjoint(request,sizeof(*request),bytes,capacity)||
+    !disjoint(request,sizeof(*request),known_mask,capacity)||
+    !disjoint(request,sizeof(*request),written,sizeof(*written))||
+    !disjoint(bytes,capacity,known_mask,capacity)||
+    !disjoint(bytes,capacity,written,sizeof(*written))||
+    !disjoint(known_mask,capacity,written,sizeof(*written)))return EINVAL;
+ const struct remesa_pds_constant_image_request r=*request;
+ if(!r.constant_dwords)return EINVAL;
+ if(r.constant_dwords>128u)return ENOTSUP;
+ if(r.use_lower19>0x7ffffu)return ERANGE;
+ if(!r.source_allocation_address||r.source_allocation_address>UINT32_MAX||
+    (r.source_allocation_address&3u)||(r.source_offset&3u))return EINVAL;
+ if(!r.source_allocation_bytes||
+    r.source_allocation_bytes>UINT64_C(0x100000000)-r.source_allocation_address)
+  return EOVERFLOW;
+ if(r.source_offset>r.source_allocation_bytes||
+    (uint64_t)r.constant_dwords*4u>r.source_allocation_bytes-r.source_offset)
+  return ENOSPC;
+ const uint32_t source=(uint32_t)(r.source_allocation_address+r.source_offset);
+ uint32_t count=1,width=r.constant_dwords,offset=0,control[2]={width-1u,0};
+ if(width>16u) {
+  width=16;
+  for(uint32_t d=16;d>1;d--)if(!(r.constant_dwords%d)&&r.constant_dwords/d<=16u) {
+   width=d;break;
+  }
+  uint32_t rows=r.constant_dwords/width,remainder=r.constant_dwords%width;
+  control[0]=(width-1u)|((width-1u)<<21u)|((rows-1u)<<4u);
+  if(remainder) {
+   count=2;offset=rows*width;
+   control[1]=(offset<<8u)|(remainder-1u);
+  }
+ }
+ const size_t size=REMESA_PDS_CONSTANT_DATA_BYTES+(count+2u)*4u;
+ if(capacity<size)return ENOSPC;
+ uint8_t image[REMESA_PDS_CONSTANT_MAX_IMAGE_BYTES]={0};
+ uint8_t mask[REMESA_PDS_CONSTANT_MAX_IMAGE_BYTES]={0};
+ store_le32(image,source);store_le32(image+4,control[0]);memset(mask,255,8);
+ if(count==2) {
+  store_le32(image+8,source+offset*4u);store_le32(image+12,control[1]);
+  memset(mask+8,255,8);
+ }
+ store_le32(image+count*8u,r.use_lower19);
+ /* Fallback task controls1/2 are explicitly zero in the original caller. */
+ memset(mask+count*8u,255,8);memset(mask+32,255,4);
+ const uint32_t none=REMESA_PDS_STRUCTURE_NO_CELL;
+ struct remesa_pds_code_instruction code[4]={
+  {REMESA_PDS_STRUCTURE_CPU_TRANSFER_PAIR,0,none},
+  {REMESA_PDS_STRUCTURE_PAIR_SINGLE,count*2u,0},
+  {REMESA_PDS_STRUCTURE_CPU_TRAILER_AF,none,none},
+  {0,0,0}};
+ if(count==2) {
+  code[3]=code[2];code[2]=code[1];
+  code[1]=(struct remesa_pds_code_instruction){REMESA_PDS_STRUCTURE_CPU_TRANSFER_PAIR,2,none};
+ }
+ size_t encoded=0;
+ int error=remesa_pds_structure_encode_code(code,count+2u,image+48,16,&encoded);
+ if(error)return error;
+ if(encoded!=(count+2u)*4u)return EPROTO;
+ memset(mask+48,255,encoded);
+ memcpy(bytes,image,size);memcpy(known_mask,mask,size);*written=size;
+ return 0;
 }
 
 int remesa_pds_structure_encode_parameter_source(
