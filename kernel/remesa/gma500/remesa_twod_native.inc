@@ -75,9 +75,13 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  b->cookie=++b->serial;
  error=remesa_twod_irq_issue_locked(&b->reservation,b->cookie);if(error)goto done;
  *cookie=b->cookie;
+ /* The existing first-owner 3D provenance must observe this producer too.
+  * Never hide a new 2D submission behind bit27's benign IRQ classification. */
+ remesa_route_source_producer(1);
  for(i=0;i<10;i++)
   PSB_WSGX32(get_unaligned_le32(l->plan.command+4*i),PSB_SGX_2D_SLAVE_PORT+4*i);
  (void)PSB_RSGX32(PSB_SGX_2D_SLAVE_PORT+36);
+ remesa_route_source_producer(0);
  error=twod_native_hw(b,dev_priv,l->plan.request_base,false);
  done:sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);

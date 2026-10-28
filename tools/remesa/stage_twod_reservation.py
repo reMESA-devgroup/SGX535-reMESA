@@ -20,6 +20,8 @@ PINNED = {
     'mmu.h': '2f5a6b3edde79741234fa08fbc0b1e14045e42ae472a6e90ea6cb64f1c8b9514',
     'remesa_gem_memory.c': '0569fb6831a33ccef68fa6ba20995688ae2891a6bf22486ec9d3adb9573216c6',
     'remesa_gem_memory.h': 'c205d6a54962aab65f9f1cfa60a38c48eb04eb2f3c46f15bc5f70d25b7c3461b',
+    'psb_drv.c': 'e9ce11abe31c5adf0d0134e0d4b520455661a0a7b490bb2ed9b02e1ac62488da',
+    'Makefile': '6ab5c8c5819106db5894f2c0f81df55389bf2d3f3a45a0efa4cf0f8aabdbfd9e',
 }
 
 
@@ -29,7 +31,7 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
-def patched_sources(native):
+def patched_sources(native, lab=False):
     for name, digest in PINNED.items():
         if hashlib.sha256((native / name).read_bytes()).hexdigest() != digest:
             raise ValueError('unreviewed native input: ' + name)
@@ -83,16 +85,27 @@ def patched_sources(native):
     fixed = replace_once(fixed, '    if (fixed_irq_owner) {\n',
         '    if (fixed_irq_owner || remesa_twod_irq_busy_locked()) {\n')
     mmu = (native / 'mmu.c').read_text() + '\n#include "remesa_mmu_verify_access.inc"\n#include "remesa_mmu_default_root.inc"\n'
-    gem = (native / 'remesa_gem_memory.c').read_text() + '\n#include "remesa_twod.c"\n#include "remesa_gem_twod.inc"\n#include "remesa_gem_twod_job.inc"\n'
-    return {'psb_drv.h': header, 'accel_2d.c': accel,
+    gem = (native / 'remesa_gem_memory.c').read_text() + '\n#include "remesa_twod.c"\n#include "remesa_gem_twod.inc"\n#include "remesa_gem_twod_job.inc"\n#ifdef REMESA_TWOD_LAB_IOCTL\n#include "remesa_twod_lab.inc"\n#endif\n'
+    driver = replace_once((native / 'psb_drv.c').read_text(),
+        '#include "remesa_retained_uapi.h"\n',
+        '#include "remesa_retained_uapi.h"\n#include "remesa_twod_lab.h"\n#include "remesa_twod_lab_uapi.h"\n')
+    driver = replace_once(driver, 'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
+        'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
+        '#ifdef REMESA_TWOD_LAB_IOCTL\n'
+        '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_LAB, remesa_twod_lab_ioctl, DRM_ROOT_ONLY),\n'
+        '#endif\n')
+    result = {'psb_drv.h': header, 'accel_2d.c': accel,
             'gma500_fixed_backend.c': fixed, 'mmu.c': mmu,
-            'remesa_gem_memory.c': gem}
+            'remesa_gem_memory.c': gem, 'psb_drv.c': driver}
+    if lab:
+        result['Makefile'] = (native / 'Makefile').read_text() + '\n# Explicit isolated 2D LAB candidate; runtime gate defaults N.\nccflags-y += -DREMESA_TWOD_LAB_IOCTL=1\n'
+    return result
 
 
-def stage(native, output):
+def stage(native, output, lab=False):
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
-    patched = patched_sources(native)
+    patched = patched_sources(native, lab)
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
@@ -106,6 +119,9 @@ def stage(native, output):
         components[name] = (additions / name).read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:
         components[name] = (root / 'mesa/sgx535' / name).read_bytes()
+    for name in ['remesa_twod_lab.h', 'remesa_twod_lab.inc']:
+        components[name] = (additions / name).read_bytes()
+    components['remesa_twod_lab_uapi.h'] = (root / 'include/remesa/twod_lab_uapi.h').read_bytes()
     output.mkdir(parents=True)
     for source in native.iterdir():
         if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
@@ -119,7 +135,8 @@ def stage(native, output):
         'native_source': str(native.resolve()), 'pinned_inputs': PINNED,
         'output_sha256': {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
                           for name in [*patched, *components]},
-        'scope': 'Native 2D MMIO candidate, GEM/IRQ/MMU integration; no ioctl registration or installation',
+        'lab_ioctl_compiled': lab,
+        'scope': 'Native 2D candidate; optional root-only gated LAB ioctl; never installed by stager',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
     return manifest
@@ -129,5 +146,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--native-source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--with-lab-ioctl', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(stage(args.native_source, args.output), indent=2))
+    print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl), indent=2))

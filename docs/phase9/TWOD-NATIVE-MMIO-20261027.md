@@ -1,5 +1,10 @@
 # Native 2D FIFO adapter candidate
 
+The [LAB endpoint follow-up](TWOD-LAB-ENDPOINT-20261027.md) contains the current
+candidate and adds source-producer notifications around FIFO writes. This
+page preserves the earlier native-only evidence; neither candidate has been
+physically approved yet.
+
 `remesa_twod_native.h/.inc` implements `remesa_twod_native_executor` for the
 authenticated retained GEM 2D lifecycle. It performs real register operations
 when called in a native kernel build; no pixel rendering/copy is implemented

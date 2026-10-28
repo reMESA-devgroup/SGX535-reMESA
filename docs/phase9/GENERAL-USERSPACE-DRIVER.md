@@ -102,7 +102,13 @@ The [native MMIO adapter candidate](TWOD-NATIVE-MMIO-20261027.md) now implements
 root/core authentication, stale-event handling, FIFO writes, polling, visibility
 and atomic state restoration around the retained job. It passes CPU models and
 a full antiX module build with the old gears profile byte-exact. It is not
-installed; the LAB entry point and physical copy qualification remain pending.
+installed; physical copy qualification remains pending.
+The [optional typed LAB endpoint and client](TWOD-LAB-ENDPOINT-20261027.md)
+now connect IDs to retained native jobs, keep contexts alive on failures and
+provide a guarded readback client. Endpoint/native models, full module/image
+build and an Atom ABI-only preflight pass; selecting the isolated test boot
+and physical copy qualification remain pending. The normal production build
+does not register this LAB ioctl.
 
 ## First common implementation increment
 

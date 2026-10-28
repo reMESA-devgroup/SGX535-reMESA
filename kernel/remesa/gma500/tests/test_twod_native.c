@@ -43,7 +43,7 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
   if(mode!=7)registers[PSB_CR_EVENT_STATUS/4]&=~value;
   return;
  }
- CHECK(p->lock_2d.held&&active_native->reservation.irq_issued&&active_native->cookie);
+ CHECK(p->lock_2d.held&&active_native->reservation.irq_issued&&active_native->cookie&&producer_depth==1);
  model_write(p,value,reg);
  if(p->words%10==0){
   if(mode!=10)registers[PSB_CR_EVENT_STATUS/4]|=_PSB_CE_TWOD_COMPLETE;
@@ -130,7 +130,7 @@ int main(void)
  native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
  for(unsigned fault=1;fault<=20;fault++){
   pid_t child=fork();CHECK(child>=0);
-  if(!child){native_case(32,32,fault);_exit(0);}
+  if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
  printf("PASS %u parent native adapter checks plus 20 joined MMIO fault models; no GPU execution\n",checks);
