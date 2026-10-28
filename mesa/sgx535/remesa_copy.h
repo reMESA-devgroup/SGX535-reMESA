@@ -20,4 +20,17 @@ struct remesa_gpu_copy {
  * physical GPU evidence. */
 typedef int (*remesa_copy_region_fn)(void *,const struct remesa_copy_region *);
 typedef int (*remesa_gpu_copy_fn)(void *,const struct remesa_gpu_copy *);
+/* Native fill values are packed bytes in surface storage order. */
+struct remesa_fill_region {
+ struct remesa_copy_surface destination;
+ uint32_t destination_x,destination_y,width,height,color;
+};
+struct remesa_gpu_fill {
+ struct {uint32_t id,width,height,stride;} destination;
+ uint32_t destination_x,destination_y,width,height,color;
+};
+/* Same synchronous receipt/error contract as copy; retain the destination on
+ * uncertainty. These internal callbacks do not grant hardware admission. */
+typedef int (*remesa_fill_region_fn)(void *,const struct remesa_fill_region *);
+typedef int (*remesa_gpu_fill_fn)(void *,const struct remesa_gpu_fill *);
 #endif

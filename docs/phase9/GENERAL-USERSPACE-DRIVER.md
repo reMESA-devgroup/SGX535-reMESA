@@ -1081,3 +1081,41 @@ complete2D operations, general3D and installation remain unfinished.
 
 The fill qualification ended on verified stock boot46fb37c3 after all48 fills
 were retired; original module/default restored and no pending work.
+
+
+## Application target: Minecraft through a general driver
+
+The user clarified that Minecraft is an intended application target, while
+the deliverable remains a complete general userspace3D/2D driver and installable
+package. A Minecraft-only renderer or application-specific bypass does not
+satisfy the objective. Common shader compilation/linking, textures/samplers,
+vertex/index buffers, framebuffer/depth/state correctness, synchronization
+and presentation must work through the normal backend. Other applications
+and independent GL/GLES tests remain necessary to establish generality.
+
+No Minecraft version/profile or playable performance is qualified yet. These
+need actual application and hardware evidence; the existing gears/fill tests
+do not imply game compatibility or promise Minecraft FPS. Later qualification
+should bind the selected unmodified game/version, native driver identity,
+physical submissions/retirement, correct images and measured sustained frame
+times without CPU-rendering substitution. This target does not waive the
+remaining general driver requirements.
+
+
+## Native Gallium color clear
+
+The [Gallium fill report](TWOD-GALLIUM-FILL-20261028.md) records144 physical
+fills through raw texture, surface and scissored framebuffer color clear:
+16calls perAPI perrequiredsize, exact per-sequence colors/guarded readback,
+zero CPU clear fallback and zero memory ioctls/leases/allocations inside the
+native sequences. Writer waits, destination reference/quarantine and normal
+Linux receipt validation are connected. Depth/stencil remain unsupported in
+this opt-in; general drawing and capability gates are unchanged.
+
+Root: `/home/gama/sgx535-offline/gallium-native-fill-20261028/v1/`.
+Nine actual-Mesa regressions plus native/UBSan/i386 owner/writer/transport
+tests pass. The same qualified kernel fill module is reused. User-reported
+white flash is preserved with unknown cause; no display coexistence/stability
+approval follows from guarded private pixels. Separate read-only display/
+power observation is needed before desktop qualification. Other2D operations,
+general3D, unprivileged admission, presentation and installation remain open.

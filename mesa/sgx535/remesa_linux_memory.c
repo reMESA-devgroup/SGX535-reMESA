@@ -217,3 +217,43 @@ int remesa_linux_memory_native_copy(void *opaque,const struct remesa_gpu_copy *c
   .destination_y=c->destination_y,.width=c->width,.height=c->height,.budget_ms=1000};
  return remesa_linux_memory_copy_2d(opaque,&r);
 }
+
+_Static_assert(sizeof(struct remesa_twod_fill_request)==104,"fixed native fill ABI");
+int remesa_linux_memory_fill_2d(struct remesa_linux_memory *d,struct remesa_twod_fill_request *out)
+{
+ struct remesa_twod_fill_request r,before;struct held *b;int e;
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_twod_fill_request)||
+    sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ r=*out;
+ if(r.version||r.context||r.flags||r.reserved[0]||r.reserved[1]||r.response_reserved||r.operation||r.cookie||
+    r.stages||r.retained||r.core||r.revision||r.error||!r.width||!r.height||
+    !r.budget_ms||r.budget_ms>10000)return EINVAL;
+ b=find(d,r.destination.id);
+ if(!b||!b->gpu_va)return EINVAL;
+ if(b->poison)return EOWNERDEAD;
+ if(b->cpu)return EBUSY;
+ if(d->recorder.record)return EOPNOTSUPP;
+ r.version=REMESA_TWOD_FILL_VERSION;r.context=d->context;before=r;
+ e=ioctl(d->fd,DRM_IOCTL_REMESA_TWOD_FILL,&r);
+ if(e<0){
+  int error=errno;
+  if(!memcmp(&r,&before,sizeof r)&&(error==EINVAL||error==ENOTTY||error==EOPNOTSUPP||error==EPERM||error==EACCES||error==EBUSY||error==ENOMEM))return error;
+  goto uncertain;
+ }
+ if(e||memcmp(&r,&before,offsetof(struct remesa_twod_fill_request,operation))||r.response_reserved||
+    !r.operation||r.operation<=d->copy_operation)goto uncertain;
+ if(r.error<0&&r.error>=-4095&&r.stages==REMESA_TWOD_FILL_PREPARED&&!r.cookie&&!r.retained&&!r.core&&!r.revision){d->copy_operation=r.operation;*out=r;return -r.error;}
+ if(r.error||r.retained||r.stages!=REMESA_TWOD_FILL_ALL||!r.operation||!r.cookie||
+    r.core!=0x01130000u||r.revision!=0x00010201u)goto uncertain;
+ d->copy_operation=r.operation;*out=r;return 0;
+uncertain:
+ b->poison=true;return EOWNERDEAD;
+}
+
+int remesa_linux_memory_native_fill(void *opaque,const struct remesa_gpu_fill *f)
+{
+ if(!f)return EINVAL;
+ struct remesa_twod_fill_request r={.destination={f->destination.id,f->destination.width,f->destination.height,f->destination.stride},
+  .destination_x=f->destination_x,.destination_y=f->destination_y,.width=f->width,.height=f->height,.color=f->color,.budget_ms=1000};
+ return remesa_linux_memory_fill_2d(opaque,&r);
+}

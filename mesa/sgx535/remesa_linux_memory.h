@@ -4,6 +4,7 @@
 #include "remesa_persistent.h"
 #include "remesa/memory_uapi.h"
 #include "remesa/twod_copy_uapi.h"
+#include "remesa/twod_fill_uapi.h"
 #include "remesa_retained_transport.h"
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
@@ -42,6 +43,9 @@ int remesa_linux_memory_submit_retained(struct remesa_linux_memory *,
  * Requires the separately enabled privileged copy endpoint; not GL admission.
  */
 int remesa_linux_memory_native_copy(void *,const struct remesa_gpu_copy *);
+/* Destination-only variant of the same authenticated synchronous contract. */
+int remesa_linux_memory_fill_2d(struct remesa_linux_memory *,struct remesa_twod_fill_request *);
+int remesa_linux_memory_native_fill(void *,const struct remesa_gpu_fill *);
 int remesa_linux_memory_copy_2d(struct remesa_linux_memory *,struct remesa_twod_copy_request *);
 /* Drop ONLY host staging/metadata after all consumers stop. No kernel cleanup,
  * no ioctl, no claim of retirement; caller still owns and must close the fd. */

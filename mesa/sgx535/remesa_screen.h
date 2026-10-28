@@ -211,6 +211,9 @@ uint64_t remesa_context_cpu_clear_count(const struct pipe_context *);
  * Callback attests a retired/published native copy; never general draw/API
  * admission. Unsupported or uncertain native copies do not fall back to CPU. */
 int remesa_screen_enable_native_copy(struct pipe_screen *,remesa_copy_region_fn);
+/* Native clear opt-in has the same before-children lifetime/receipt contract. */
+int remesa_screen_enable_native_fill(struct pipe_screen *,remesa_fill_region_fn);
+uint64_t remesa_context_native_fill_count(const struct pipe_context *);
 /* Successful native callback count, not independent GPU execution evidence. */
 uint64_t remesa_context_native_copy_count(const struct pipe_context *);
 /* Completed CPU byte-copy callbacks, never SGX draw/blit submissions. */

@@ -132,6 +132,7 @@ struct persistent {
  uint64_t linked_pds_serial,scene_serial;
  struct scene_capture scenes[REMESA_PROVIDER_MAX_JOBS];
  remesa_gpu_copy_fn native_copy;
+ remesa_gpu_fill_fn native_fill;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
 {
@@ -3113,4 +3114,32 @@ int remesa_persistent_copy_region(void *opaque,const struct remesa_copy_region *
  if(e==EOWNERDEAD||e<0){memory_error(d,a,EOWNERDEAD);memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;}
  if(!e)b->readable=true;
  drop_memory(d,a);drop_memory(d,b);return e;
+}
+
+int remesa_persistent_set_native_fill(struct remesa_device *device,remesa_gpu_fill_fn fn)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!fn)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(d->native_fill||d->allocated||d->shaders)return EBUSY;
+ d->native_fill=fn;return 0;
+}
+int remesa_persistent_fill_region(void *opaque,const struct remesa_fill_region *r)
+{
+ struct persistent *d=opaque;struct memory *b;int e;
+ if(!d||!r)return EINVAL;
+ if(d->failed)return EOWNERDEAD;
+ if(!d->native_fill)return EOPNOTSUPP;
+ e=native_copy_surface(d,&r->destination,&b,false);if(e)return e;
+ if(!r->width||!r->height||r->width>4095||r->height>4095||r->width==8||r->height==8)return EOPNOTSUPP;
+ if(r->destination_x>=r->destination.width||r->destination_y>=r->destination.height||
+    r->width>r->destination.width-r->destination_x||r->height>r->destination.height-r->destination_y)return EINVAL;
+ uint64_t base=b->va&UINT64_C(0xf0000000),limit=base+UINT64_C(0x10000000);
+ if(b->va>=UINT64_C(0x100000000)||b->allocated>limit-b->va)return EOPNOTSUPP;
+ struct remesa_gpu_fill fill={.destination={b->handle,r->destination.width,r->destination.height,r->destination.stride},
+  .destination_x=r->destination_x,.destination_y=r->destination_y,.width=r->width,.height=r->height,.color=r->color};
+ b->refs++;e=d->native_fill(d->cfg.priv,&fill);
+ if(e==EOWNERDEAD||e<0){memory_error(d,b,EOWNERDEAD);return EOWNERDEAD;}
+ if(!e)b->readable=true;
+ drop_memory(d,b);return e;
 }

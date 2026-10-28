@@ -37,6 +37,7 @@ struct screen {
  int (*release_device)(struct remesa_device *);int release_error;bool release_pending;
  uint64_t resource_cookie;bool cpu_depth24_lab,gears_runtime;
  remesa_copy_region_fn native_copy;
+ remesa_fill_region_fn native_fill;
 };
 static void screen_hold(struct screen *sc) { ++sc->refs; }
 static void screen_drop(struct screen *sc)
@@ -74,7 +75,7 @@ struct transfer;
 struct context {
  struct pipe_context base; struct pipe_vertex_buffer vb,second_vb,third_vb; unsigned vb_count; struct pipe_vertex_element position;
  struct pipe_resource *target,*depth_target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
- int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies;
+ int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies,native_fills;
  bool failed_submission;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
@@ -216,7 +217,7 @@ static struct pipe_resource *create_resource(struct pipe_screen *p,const struct 
   layout.levels[0]=(struct remesa_texture_level){t->width0,1,0,0,bytes};
  }
  else {
-  if(t->bind) { if((!s(p)->cpu_depth24_lab&&(t->width0!=32||t->height0!=32))||t->last_level)return NULL; }
+  if(t->bind) { if((!s(p)->cpu_depth24_lab&&!(s(p)->native_fill&&s(p)->device.resource_only_backend&&t->bind==PIPE_BIND_RENDER_TARGET&&t->format==PIPE_FORMAT_B8G8R8A8_UNORM)&&(t->width0!=32||t->height0!=32))||t->last_level)return NULL; }
   /* The exact physical profile requires tight rows; transfer-only storage
    * follows explicit backend alignment and independently bounded capacity. */
   struct remesa_resource_limits limits=s(p)->device.resource_limits;
@@ -501,7 +502,37 @@ static void copy_region(struct pipe_context *p,struct pipe_resource *dst,unsigne
  done:
  free(snapshot);ctx->error=error;
 }
-/* Raw texel CPU clear for transfer storage, explicitly not an SGX clear. */
+/* The native callback may publish only after synchronous authenticated
+ * completion/retirement. All clocks/pixel checks stay in external tools. */
+static int native_fill(struct pipe_context *p,struct pipe_resource *res,unsigned level,
+ unsigned x,unsigned y,unsigned width,unsigned height,const unsigned char pixel[4])
+{
+ struct context *ctx=c(p);struct resource *b=r(res);int error;
+ if(res->target!=PIPE_TEXTURE_2D||level||b->layout.levels[0].offset)return ENOTSUP;
+ if(b->maps)return EBUSY;
+ error=resource_sync(p->screen,b,UINT64_MAX);if(error)return error;
+ struct remesa_fill_region request={.destination={b->bo,b->layout.levels[0].width,b->layout.levels[0].height,b->layout.levels[0].stride},
+  .destination_x=x,.destination_y=y,.width=width,.height=height,
+  .color=(uint32_t)pixel[0]|(uint32_t)pixel[1]<<8|(uint32_t)pixel[2]<<16|(uint32_t)pixel[3]<<24};
+ struct remesa_pass_ticket ticket;
+ error=remesa_render_pass_begin(&b->pass,REMESA_PASS_PRESERVE,REMESA_PASS_STORE,true,&ticket);if(error)return error;
+ b->ticket=ticket;error=s(p->screen)->native_fill(s(p->screen)->device.priv,&request);
+ if(error&&error!=EOWNERDEAD&&error>0){
+  if(!remesa_render_pass_cancel(&b->pass,&ticket))return error;
+  error=EOWNERDEAD;
+ }
+ if(error<0)error=EOWNERDEAD;
+ if(!error){
+  const struct remesa_pass_completion proof={true,true,true};
+  error=remesa_render_pass_submitted(&b->pass,&ticket);
+  if(!error)error=remesa_render_pass_finish(&b->pass,&ticket,&proof);
+  if(!error){b->has_contents=true;ctx->native_fills++;return 0;}
+  error=EOWNERDEAD;
+ }
+ (void)remesa_render_pass_fail(&b->pass,&ticket,EOWNERDEAD);
+ b->write_error=EOWNERDEAD;ctx->failed_submission=true;return EOWNERDEAD;
+}
+/* Raw texel clear: explicit native opt-in or the default CPU transfer. */
 static void clear_texture(struct pipe_context *p,struct pipe_resource *res,unsigned level,
  const struct pipe_box *box,const void *data)
 {
@@ -517,6 +548,7 @@ static void clear_texture(struct pipe_context *p,struct pipe_resource *res,unsig
  if(r(res)->maps){error=EBUSY;goto done;}
  error=resource_sync(p->screen,r(res),UINT64_MAX);if(error)goto done;
  memcpy(pixel,data,sizeof(pixel));
+ if(s(p->screen)->native_fill){error=native_fill(p,res,level,box->x,box->y,box->width,box->height,pixel);goto done;}
  ptr=map(p,res,level,PIPE_MAP_WRITE,box,&transfer);if(!ptr){error=ctx->error;goto done;}
  for(unsigned y=0;y<(unsigned)box->height;y++)
   for(unsigned x=0;x<(unsigned)box->width;x++)
@@ -596,7 +628,7 @@ static void framebuffer(struct pipe_context *p,const struct pipe_framebuffer_sta
  /* Validate while the previous binding is live: the incoming texture can
   * be that same resource and the context can own its final reference. */
  if(f&&!f->nr_cbufs&&!f->zsbuf.texture&&!f->resolve&&!f->viewmask){remesa_resource_reference(&ctx->target,NULL);remesa_resource_reference(&ctx->depth_target,NULL);ctx->error=0;return;}
- if(!f || f->nr_cbufs!=1 || (!s(p->screen)->cpu_depth24_lab&&(f->width!=32||f->height!=32)) || !f->width||!f->height || f->samples>1 || (f->zsbuf.texture&&(!s(p->screen)->cpu_depth24_lab||
+ if(!f || f->nr_cbufs!=1 || (!s(p->screen)->cpu_depth24_lab&&!(s(p->screen)->native_fill&&s(p->screen)->device.resource_only_backend)&&(f->width!=32||f->height!=32)) || !f->width||!f->height || f->samples>1 || (f->zsbuf.texture&&(!s(p->screen)->cpu_depth24_lab||
     f->zsbuf.format!=PIPE_FORMAT_Z24X8_UNORM||f->zsbuf.texture->format!=PIPE_FORMAT_Z24X8_UNORM||
     f->zsbuf.texture->screen!=p->screen||f->zsbuf.texture->bind!=PIPE_BIND_DEPTH_STENCIL||
     !color_storage_target(f->zsbuf.texture->target)||f->zsbuf.texture->width0!=f->width||f->zsbuf.texture->height0!=f->height||
@@ -1487,10 +1519,9 @@ static void polygon_stipple(struct pipe_context *p,const struct pipe_poly_stippl
 { c(p)->error=pattern?0:EINVAL; }
 static void sample_mask(struct pipe_context *p,unsigned mask)
 { c(p)->sample_enabled=(mask&1)!=0;c(p)->error=0; /* Single sample only. */ }
-/* Explicit CPU transfer fallback, not a GPU clear. It cannot establish GL
- * conformance: the native draw profile still clears/replaces its whole target.
- * Sync the resource writer before mapping; never synthesize a completion. */
-static int cpu_clear(struct pipe_context *p,struct pipe_resource *target,
+/* Pack the existing color-clear semantics, then opt-in native fill or default
+ * explicit CPU transfer. Depth is not admitted by the native color-fill path. */
+static int clear_resource(struct pipe_context *p,struct pipe_resource *target,
  const union pipe_color_union *color,double depth,unsigned x,unsigned y,unsigned width,unsigned height)
 {
  struct context *ctx=c(p);struct screen *sc=s(p->screen);struct remesa_color_clear region;void *ptr=NULL;int error;
@@ -1503,6 +1534,10 @@ static int cpu_clear(struct pipe_context *p,struct pipe_resource *target,
  else error=remesa_prepare_color_clear(target->format,target->width0,target->height0,r(target)->stride,
    r(target)->bytes,color,x,y,width,height,&region);if(error)return error;
  if(!width||!height)return 0;
+ if(sc->native_fill){
+  if(target->format!=PIPE_FORMAT_B8G8R8A8_UNORM&&target->format!=PIPE_FORMAT_R8G8B8A8_UNORM)return ENOTSUP;
+  return native_fill(p,target,0,x,y,width,height,region.pixel);
+ }
  if(r(target)->maps)return EBUSY;
  error=resource_sync(p->screen,r(target),UINT64_MAX);if(error)return error;
  error=remesa_render_pass_admit_cpu_write(&r(target)->pass);if(error)return error;
@@ -1528,6 +1563,7 @@ static void clear(struct pipe_context *p,unsigned buffers,const struct pipe_scis
   if(bad){if(getenv("REMESA_GEARS_TRACE"))fprintf(stderr,"GEARS_CLEAR_REJECT buffers=%x pending=%u poisoned=%u size=%ux%u depth=%g color=%g,%g,%g,%g\n",buffers,ctx->gears_pending,ctx->gears_poisoned,ctx->target?ctx->target->width0:0,ctx->target?ctx->target->height0:0,depth,color?color->f[0]:0,color?color->f[1]:0,color?color->f[2]:0,color?color->f[3]:0);ctx->gears_poisoned=true;ctx->error=ENOTSUP;return;}
  }
  if(!buffers){ctx->error=0;return;}
+ if(s(p->screen)->native_fill&&(buffers&PIPE_CLEAR_DEPTH)){ctx->error=ENOTSUP;return;}
  if((buffers&~(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))||
     ((buffers&PIPE_CLEAR_DEPTH)&&(!s(p->screen)->cpu_depth24_lab||!ctx->depth_target))||!ctx->target){ctx->error=ENOTSUP;return;}
  unsigned w=ctx->target->width0,h=ctx->target->height0;
@@ -1541,9 +1577,9 @@ static void clear(struct pipe_context *p,unsigned buffers,const struct pipe_scis
  if(buffers&PIPE_CLEAR_COLOR0){ctx->error=remesa_prepare_color_clear(ctx->target->format,w,h,
   r(ctx->target)->stride,r(ctx->target)->bytes,color,x,y,rw,rh,&plan);if(ctx->error)return;}
  ctx->error=0;
- if(buffers&PIPE_CLEAR_COLOR0)ctx->error=cpu_clear(p,ctx->target,color,depth,x,y,rw,rh);
+ if(buffers&PIPE_CLEAR_COLOR0)ctx->error=clear_resource(p,ctx->target,color,depth,x,y,rw,rh);
  if(!ctx->error&&(buffers&PIPE_CLEAR_DEPTH)){union pipe_color_union unused={0};
-  ctx->error=cpu_clear(p,ctx->depth_target,&unused,depth,x,y,rw,rh);} if(s(p->screen)->gears_runtime){
+  ctx->error=clear_resource(p,ctx->depth_target,&unused,depth,x,y,rw,rh);} if(s(p->screen)->gears_runtime){
   if(ctx->error)ctx->gears_poisoned=true;
   else ctx->gears_clear_mask|=buffers;
  }
@@ -1555,7 +1591,7 @@ static void clear_target(struct pipe_context *p,struct pipe_surface *surface,
     surface->level||surface->first_layer||surface->last_layer||surface->nr_samples>1) {
   c(p)->error=ENOTSUP;return;
  }
- c(p)->error=cpu_clear(p,surface->texture,color,0,x,y,width,height);
+ c(p)->error=clear_resource(p,surface->texture,color,0,x,y,width,height);
 }
 /* Whole-frame gears preparation never calls the legacy CPU transform/clip
  * path. Only the existing pre-VS snapshot and typed uniform encoder run. */
@@ -2070,6 +2106,14 @@ int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve)
  c(p)->diagnostic_discard=!preserve;return 0;
 }
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { return p && p->draw_vbo==draw ? ((const struct context *)p)->cpu_clears : 0; }
+int remesa_screen_enable_native_fill(struct pipe_screen *p,remesa_fill_region_fn fn)
+{
+ if(!p||p->context_create!=create_context||!fn)return EINVAL;
+ struct screen *sc=s(p);if(sc->closing||sc->refs!=1||sc->native_fill)return EBUSY;
+ sc->native_fill=fn;return 0;
+}
+uint64_t remesa_context_native_fill_count(const struct pipe_context *p)
+{return p&&p->draw_vbo==draw?((const struct context *)p)->native_fills:0;}
 int remesa_screen_enable_native_copy(struct pipe_screen *p,remesa_copy_region_fn fn)
 {
  if(!p||p->context_create!=create_context||!fn)return EINVAL;
@@ -2135,6 +2179,9 @@ int remesa_drawable_buffers_replace(struct pipe_screen *p,uint32_t w,uint32_t h,
 void remesa_drawable_buffers_release(struct remesa_drawable_buffers *o) {(void)o;}
 int remesa_context_set_framebuffer_load(struct pipe_context *p,bool preserve) { (void)p;(void)preserve;return ENOTSUP; }
 uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { (void)p;return 0; }
+int remesa_screen_enable_native_fill(struct pipe_screen *p,remesa_fill_region_fn fn)
+{(void)p;(void)fn;return EOPNOTSUPP;}
+uint64_t remesa_context_native_fill_count(const struct pipe_context *p){(void)p;return 0;}
 int remesa_screen_enable_native_copy(struct pipe_screen *p,remesa_copy_region_fn fn)
 {(void)p;(void)fn;return EOPNOTSUPP;}
 uint64_t remesa_context_native_copy_count(const struct pipe_context *p){(void)p;return 0;}

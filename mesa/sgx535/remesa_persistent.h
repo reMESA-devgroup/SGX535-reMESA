@@ -87,6 +87,8 @@ int remesa_persistent_open(struct remesa_device *,const struct remesa_persistent
  * same cfg.priv and ownership as the memory provider. No reentry permitted. */
 int remesa_persistent_set_native_copy(struct remesa_device *,remesa_gpu_copy_fn);
 int remesa_persistent_copy_region(void *,const struct remesa_copy_region *);
+int remesa_persistent_set_native_fill(struct remesa_device *,remesa_gpu_fill_fn);
+int remesa_persistent_fill_region(void *,const struct remesa_fill_region *);
 /* Completion receipts may arrive out of order; visibility and backing release
  * drain in operation order with nonblocking dependency polls. This is host
  * sequencing, not evidence of reusable SGX execution.
