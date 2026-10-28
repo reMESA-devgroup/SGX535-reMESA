@@ -640,6 +640,27 @@ struct remesa_persistent_scene_footprint {
 int remesa_persistent_scene_footprint(const struct remesa_device *,void *background,
  void *event_auxiliary,void *region,void *dpm,
  struct remesa_persistent_scene_footprint *);
+/* Retain and freeze one validated scene reference set before native job
+ * preparation. Internal userspace token, not a fence or ioctl ABI. No provider
+ * I/O, allocation, initialization, dispatch or capability admission. All
+ * footprint NEEDS bits remain set. External serialization is required.
+ * Captures keep references after frontend owner destruction. Public CPU maps
+ * and legacy submission otherwise admitted return EBUSY; immutable write and
+ * backend admission gates retain their existing errors. Up to eight
+ * captures may coexist, including shared graphs. Release cancels an UNISSUED
+ * capture only; it is never GPU completion/retirement or uncertain-job teardown.
+ * A future submission API must transfer these holds into its authenticated
+ * native lifecycle; it cannot call release to acknowledge GPU execution.
+ * If cancellation reaches disposal and disposal fails, the capture token is
+ * consumed but uncertain backing stays quarantined; retrying returns ESTALE.
+ */
+struct remesa_scene_capture {uint64_t owner,serial;uint32_t slot,reserved;};
+int remesa_persistent_scene_capture(struct remesa_device *,void *background,
+ void *event_auxiliary,void *region,void *dpm,struct remesa_scene_capture *);
+int remesa_persistent_scene_capture_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_footprint *);
+int remesa_persistent_scene_capture_release(struct remesa_device *,
+ struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

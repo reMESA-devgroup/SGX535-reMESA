@@ -982,3 +982,51 @@ rejection of all148 one-byte reference corruptions and refusal to overwrite
 evidence. The generated files are not launchable or physically approved and
 cannot supply a production instruction encoder. No Mesa/kernel code, FAST
 runtime, geometry, shader implementation or execution gate changed in this step.
+
+## Retained unissued scene captures
+
+`remesa_persistent_scene_capture()` now retains and freezes the currently known
+scene reference set before native job preparation. It uses the existing
+coherent footprint query, resolves handles/generations back to live endpoint
+allocations, deduplicates references and retains the four parent owners as
+well. The additional DPM plan owner remains CPU metadata; it is not falsely
+reported as a GPU fetch. Eight capture slots are preallocated per endpoint;
+capture and snapshot allocate no object or BO and issue no provider calls.
+The slot/owner/monotonic serial token prevents stale release after slot reuse.
+
+Captured allocations refuse otherwise admitted CPU maps and legacy submission
+with EBUSY; existing immutable-write and backend admission checks retain their
+errors. Frontend owners can be destroyed without invalidating the retained
+closure. Multiple captures may retain the same unissued graph. Snapshot still
+checks live allocation ownership and mapping state, and returns the original
+conservative READ/READ|WRITE roles and all five incomplete bits unchanged.
+This is not a complete GPU footprint, a fence, a kernel submission or API
+admission. Undefined attachments/DPM remain undefined and the event PDS is
+still incomplete.
+
+`remesa_persistent_scene_capture_release()` cancels only an unissued capture.
+It cannot acknowledge GPU retirement or safely discard an issued/uncertain
+native job. A future submitter must transfer these holds into its authenticated
+lifecycle before dispatch. If cancellation reaches final disposal and unpin
+or destroy fails, the token is consumed while uncertain backing stays in
+quarantine; repeating cancellation returns ESTALE. Endpoint close stays busy
+while captures or quarantined allocations survive.
+
+`test_scene_capture.c` exercises the three storage dimensions, all eight slots,
+shared closures, retained snapshots after all frontend owners are dropped,
+foreign/stale/alias/active-lease refusal, zero provider I/O during acquisition
+and snapshots, final cancellation cleanup, and two joined fault models for
+uncertain unpin/destroy. Native, UBSan and i386 results are retained in
+`/home/gama/sgx535-offline/general-userspace-driver-20261027T040000Z/scene-capture-v2/result.json`.
+The initial sharing/lifetime suite remains in `scene-capture-v1/`. All providers
+in these tests are injected; GPU0/API0. This does not replace physical testing
+of either desktop GL or GLES, nor qualify the pending native 2D candidate.
+
+`private-mesa-scene-capture/RESULT.json` records the same final test passing
+against a private archive using the actual Mesa compilation model. Nine
+build/archive/test commands passed; the cached thin archive and every original
+referenced object remain unchanged. This is not a full installed DRI rebuild.
+`scene-capture-regressions/RESULT.json` records thirteen passing existing owner,
+Gallium/NIR and legacy gears geometry regressions against that archive. No
+kernel source, native LAB candidate, shader encoder, geometry or execution gate
+changed as part of this userspace retention increment.
