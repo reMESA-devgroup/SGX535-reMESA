@@ -302,3 +302,16 @@ powered-off machine. No v2 boot entry, upload, reboot or GPU test was performed.
 requires a fresh exact stock inventory.
 Do not reuse the previous boot's hardware admission. The v1 physical rejection
 and recovered stock evidence remain unchanged.
+
+## v2 physical copy qualification
+
+The Mini12 returned on user-started stock bootef55dee2. A fresh inventory,
+exact candidate boot06f1b0b5 and restoration of the original default preceded
+three successful disjoint ARGB8888 copies:1280×800,640×640 and641×479. Each passed
+native submission/completion/visibility/retirement, full source/destination
+readback, guards and context cleanup. Independent host verification checked
+all14,041,088 bytes. No gate was waived; the earlier failures remain valid.
+The complete result and scope are [recorded separately](TWOD-PHYSICAL-COPY-20261028.md).
+The endpoint remains LAB-only; no general API, desktop or installation claim
+follows from these copies. The earlier NOT_DEPLOYED.json and offline CLOSEOUT
+are historical snapshots, superseded for deployment by hardware/PHYSICAL_RESULTS.

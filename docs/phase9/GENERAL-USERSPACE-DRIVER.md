@@ -79,56 +79,40 @@ permission and change no selected runtime module.
 | Installation | Mesa loader/EGL overlays exist; current qualified runtime is private | Reproducible i686 build and isolated package with an explicit matching DRM dependency and uninstall/rollback |
 | 2D and X11 | X11 presentation currently copies completed GPU pixels | GPU 2D drawing/blits and later window-system integration; copying pixels to X11 is not desktop acceleration |
 
-The current user priority is the driver/2D path rather than further
-disassembler searches. [Native2D copy preparation](TWOD-DRIVER-COPY-20261027.md)
-now matches the original kernel FIFO packets and is included in future Mesa
-overlays. The typed kernel endpoint now exists in an isolated LAB build; hardware
-completion/readback qualification and Gallium acceleration dispatch remain
-pending. CPU packet tests are not a 2D hardware-acceleration claim.
-The [retained GEM preflight](TWOD-GEM-PREFLIGHT-20261027.md) now authenticates
-that request against held kernel allocations and reconstructs the shared packet.
-The [separate 2D GEM lifecycle](TWOD-JOB-LIFECYCLE-20261027.md) now implements
-issue, owned-event receipt validation, visibility and retirement around trusted
-native adapter callbacks, with uncertainty holds and buffer reuse. CPU tests
-and real kernel-object compilation pass; the native MMIO adapter has been
-exercised in isolated LAB boots, without a successful physical copy.
-The existing3D lifecycle mask is unchanged.
-The [native producer reservation](TWOD-PRODUCER-RESERVATION-20261027.md) now
-integrates with the original console submit path under its own lock, prevents
-FIFO/reset interference while reserved and requires the saved request base
-restored before release. This has CPU and real kernel-object build evidence;
-the isolated physical attempts below have not qualified a copy.
-The [shared IRQ ownership and pre-ACK capture](TWOD-IRQ-OWNERSHIP-20261027.md)
-now retain 2D events separately, exclude concurrent 3D/2D owners and keep the
-reservation on incomplete or unexpected events.
-The [native MMIO adapter candidate](TWOD-NATIVE-MMIO-20261027.md) now implements
-root/core authentication, stale-event handling, FIFO writes, polling, visibility
-and atomic state restoration around the retained job. It passes CPU models and
-a full antiX module build with the old gears profile byte-exact. It has run in temporary LAB boots; physical copy qualification remains pending.
-The [optional typed LAB endpoint and client](TWOD-LAB-ENDPOINT-20261027.md)
-now connect IDs to retained native jobs, keep contexts alive on failures and
-provide a guarded readback client. Endpoint/native models, full module/image
-build and an Atom ABI-only preflight pass. The first physical result is
-recorded below; copy qualification remains pending. The normal production build
-does not register this LAB ioctl.
-The [physical 2D attempts](TWOD-PHYSICAL-FAULT-20261028.md) are rejected:
-no completion/retirement/readback passed. Per-word observation located the
-fault after the initial FENCE, before source/destination/BLIT. A later
-pre-FIFO wait/check passed, then the same first-word fault appeared. Both
-failures preserved backing, evidence and four N controls before recovery.
-The latest stock boot7055b53d is now independently verified; [ConnMan
-supervision](CONNMAN-RECOVERY-20261028.md) and automatic reconnection were repaired.
-The [vendor command-builder capture](TWOD-VENDOR-STREAM-20261028.md) corroborates
-the eight-word copy body against the unchanged encoder. A separate nine-word
-LAB candidate now passes native/UBSan/i386 packet, GEM, endpoint, fault-retention
-and real kernel-build gates, with the normal production text and compiled gears
-asset unchanged. This is a new isolated experiment, not approval to remove a
-production synchronization boundary. Its first physical attempt rejected the
-initial ALPHA value before writing any FIFO word. The next isolated candidate
-now implements exclusive ALPHA save/publication/check/restoration, with offline
-fault qualification; its physical validation awaits a fresh reachable Mini12
-inventory. Physical copy qualification, the FENCE
-memory/state contract and the general driver objective remain unfinished.
+The native 2D component now has its first [physical disjoint-copy qualification](TWOD-PHYSICAL-COPY-20261028.md): ARGB8888 SRCCOPY at1280×800,640×640 and641×479,
+using the same isolated candidate. Each case passed actual submission,
+completion, visibility, retirement, full source/destination readback, guards
+and context cleanup. Independent host verification checked14,041,088 bytes.
+These are root-only LAB copy cases, not normal Gallium/Xorg dispatch or
+unprivileged-context qualification. The normal build does not register the
+[typed LAB ioctl](TWOD-LAB-ENDPOINT-20261027.md).
+
+The [GEM preflight](TWOD-GEM-PREFLIGHT-20261027.md),
+[job lifecycle](TWOD-JOB-LIFECYCLE-20261027.md),
+[producer reservation](TWOD-PRODUCER-RESERVATION-20261027.md),
+[owned IRQ capture](TWOD-IRQ-OWNERSHIP-20261027.md) and
+[native adapter](TWOD-NATIVE-MMIO-20261027.md) authenticate/hold the mapped
+allocations, exclude competing native producers and require an owned completion,
+visibility, restored state and retirement before release. Address/PFN/permission,
+coherency and uncertainty gates remain active. Existing3D lifecycle masks,
+compiled gears assets, geometry and shaders are unchanged.
+
+The [earlier legacy FENCE failures](TWOD-PHYSICAL-FAULT-20261028.md) remain
+preserved and unapproved. A pre-FIFO delay/check did not fix the first-word
+fault. The [separate vendor-stream profile](TWOD-VENDOR-STREAM-20261028.md)
+uses the independently captured eight-word body plus FLUSH and now owns
+ALPHA save/publication/check/restoration. Its initial ALPHA-value rejection
+was resolved through those state transitions, rather than waived. The original
+ten-word encoder remains unchanged; these new copies do not explain every
+implicit FENCE access or qualify overlap/other formats.
+
+All three copies retired, passed readback and closed their contexts before
+returning to verified stock bootc1fad495. No reset was used as retirement. The
+original GRUB/default and empty next entry are verified; no experimental
+controls or proc endpoint remain. [ConnMan supervision](CONNMAN-RECOVERY-20261028.md)
+and automatic reconnection have their separate retained evidence. Production
+2D transport/dispatch, general GL/GLES and the installable driver remain
+unfinished; none is advertised from the native LAB result.
 
 The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0
 and no advertised DRI3 on the recovered stock desktop. DMA-BUF presentation

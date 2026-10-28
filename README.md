@@ -56,9 +56,11 @@ That's an observed **11.29% FPS improvement** over the earlier 14.4983 FPS snaps
 
 A separate six-operation physical smoke test checked full COLOR, defined Z24 bits, all five input images and every X11 RGB pixel. It also checked completion before lease release and detach before FD/GEM close. Those readbacks belong to the separate LAB harness; the normal FAST run doesn't add per-frame hashes, pixel checks or dumps. This remains restricted qualification, not full GL conformance or LAB approval.
 
+On October 28, the native **2D SRCCOPY** path also passed on the real SGX535 at **1280×800, 640×640 and 641×479**. All three copies completed and retired, with full source/destination readbacks, intact guards and clean context teardown. These are isolated LAB copies, not general desktop acceleration or a new GLXGears FPS result. The [physical 2D report](docs/phase9/TWOD-PHYSICAL-COPY-20261028.md) records the candidate, phase timings, evidence and limits.
+
 There's more to do before I can call this a usable everyday graphics driver. Still, considering where this project was a month ago, I'm pretty happy with the progress.
 
-The next headache is reaching the **30–60 FPS goal**, qualifying longer continuous operation and expanding beyond this restricted path. The [current technical report](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md) records the measurements, evidence and remaining limits.
+The current driver target is a common userspace backend for **desktop OpenGL and GLES 2.0**, production 2D dispatch and an installable package. The [general driver report](docs/phase9/GENERAL-USERSPACE-DRIVER.md) tracks the missing contracts. Longer continuous GLXGears operation and the **30–60 FPS goal** remain separate qualification work; the [GLXGears technical report](docs/phase9/PHYSICAL-GLX-STATUS-20261027.md) preserves those measurements and limits.
 
 <br clear="all">
 

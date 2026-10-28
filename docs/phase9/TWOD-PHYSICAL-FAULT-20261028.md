@@ -360,3 +360,11 @@ preserved separately. This reset ended quarantine; it did not retire the
 failed GPU operation. The user's subsequent [ConnMan repair](CONNMAN-RECOVERY-20261028.md)
 restored supervision and verified automatic restart/reconnection without a new
 GPU operation or machine reboot. The network blocker is resolved at this check.
+
+
+A later, separate [vendor-stream/owned-ALPHA candidate](TWOD-PHYSICAL-COPY-20261028.md)
+now passes disjoint ARGB8888 copies at1280×800,640×640 and641×479 with native
+completion/retirement and full guarded readbacks. This does not reclassify any
+FENCE failure above as a pass, alter its evidence, or prove general API support.
+The first successful copy qualification and already-retired return-to-stock
+are recorded independently under twod-vendor-stream-20261028/v2/hardware/.
