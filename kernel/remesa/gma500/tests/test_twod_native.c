@@ -14,6 +14,10 @@ int psb_mmu_default_root(struct drm_device *dev,struct psb_mmu_pd *pd,u32 *out)
 static u32 registers[0x5000/4];
 static unsigned mode,base_writes,acks,sleeps,barriers,route_calls,native_reads,power_loss_reads;
 static u64 clock_ns;
+static unsigned packet_words=10;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+static int vendor_stream;
+#endif
 static struct remesa_twod_native *active_native;
 static char failure_log[512];
 static void native_failure_log(const char *format,...)
@@ -86,7 +90,7 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
  }
  if(mode==32&&p->words==3)registers[PSB_CR_EVENT_STATUS2/4]=1u<<4;
  if(mode==33&&p->words==3){power_loss_reads=native_reads;p->dev->powered=0;}
- if(p->words%10==0){
+ if(p->words%packet_words==0){
   if(mode!=10)registers[PSB_CR_EVENT_STATUS/4]|=_PSB_CE_TWOD_COMPLETE;
   if(mode==11)registers[PSB_CR_EVENT_STATUS2/4]|=1u<<4;
   if(mode==12)p->blit=_PSB_C2B_STATUS_BUSY;
@@ -108,9 +112,14 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  struct remesa_twod_launch launch={.dev=&dev,.pd=&pd,.ticket={77,1,0,1},.count=2};
  struct remesa_twod_copy copy={.source={1,0x40001000,0x00fff000,width,height,width*4,1},
   .destination={2,0x41000000,0x01000000,width,height,width*4,1},.request_base=0x40000000,.width=width,.height=height};
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(vendor_stream)CHECK(!remesa_twod_copy_prepare_vendor(&copy,&launch.plan));
+ else
+#endif
  CHECK(!remesa_twod_copy_prepare(&copy,&launch.plan));
  dev.dev_private=&p;active_native=&native;mode=fault;
  memset(registers,0,sizeof registers);failure_log[0]=0;base_writes=acks=sleeps=barriers=0;clock_ns=0;
+ registers[0x0e1c/4]=fault==39?0:0x0000ff00u;
  registers[PSB_CR_CORE_ID/4]=0x01130000;registers[PSB_CR_CORE_REVISION/4]=0x00010201;
  registers[PSB_CR_BIF_DIR_LIST_BASE0/4]=pd.root;
  registers[PSB_CR_EVENT_STATUS/4]=_PSB_CE_TWOD_COMPLETE; /* stale event */
@@ -157,20 +166,20 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
 #endif
    return;
   }
-  if((fault>=1&&fault<=8)||fault==14||fault==15){
+  if((fault>=1&&fault<=8)||fault==14||fault==15||fault==39){
    CHECK(error&&native.failed&&native.reservation.held&&!p.words&&!cookie);
 #ifdef REMESA_TWOD_LAB_IOCTL
    if(fault==1||fault==2)CHECK(strstr(failure_log,"valid=0"));
 #endif
    CHECK(!p.resets);return;
   }
-  if(fault==13){CHECK(error==-EIO&&cookie&&p.words==10&&native.reservation.held);return;}
+  if(fault==13){CHECK(error==-EIO&&cookie&&p.words==packet_words&&native.reservation.held);return;}
 #ifdef REMESA_TWOD_LAB_IOCTL
-  if(fault==11){CHECK(error==-EIO&&cookie&&p.words==10&&native.reservation.held);return;}
+  if(fault==11){CHECK(error==-EIO&&cookie&&p.words==packet_words&&native.reservation.held);return;}
 #endif
-  CHECK(!error&&cookie==iteration+1&&native.reservation.held&&p.words==words+10);
+  CHECK(!error&&cookie==iteration+1&&native.reservation.held&&p.words==words+packet_words);
   CHECK(base_writes==initial_base_writes+1&&p.base==copy.request_base);
-  for(unsigned i=0;i<10;i++)CHECK(p.packet[words+i]==get_unaligned_le32(launch.plan.command+4*i));
+  for(unsigned i=0;i<packet_words;i++)CHECK(p.packet[words+i]==get_unaligned_le32(launch.plan.command+4*i));
   CHECK(remesa_twod_native_executor.retire(&native,&launch,cookie)==-EBUSY);
   memset(&receipt,0xa5,sizeof receipt);struct remesa_twod_completion old=receipt;
   CHECK(remesa_twod_native_executor.poll(&native,&launch,cookie+1,1,&receipt)==-EACCES);
@@ -216,6 +225,17 @@ int main(void)
   if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ vendor_stream=1;packet_words=9;
+ native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
+ for(unsigned fault=1;fault<=39;fault++){
+  if(fault==31)continue; /* word ten does not exist in this profile */
+  pid_t child=fork();CHECK(child>=0);
+  if(!child){native_case(32,32,fault);CHECK(!producer_depth);_exit(0);}
+  int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
+ }
+ printf("PASS vendor nine-word profile: three dimensions and 38 joined fault models including ALPHA rejection; CPU only\n");
+#endif
  printf("PASS %u parent native adapter checks plus %u joined MMIO fault models; no GPU execution\n",checks,faults);
  return 0;
 }

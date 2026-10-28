@@ -28,7 +28,11 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
  for(i=0;i<8;i++)if(s->jobs[i].live&&s->jobs[i].state!=REMESA_JOB_PREPARED)return -EBUSY;
  if(j->command_bytes!=sizeof(command))return -EINVAL;
  memcpy(&command,j->commands,sizeof(command));
- if(command.schema!=REMESA_GEM_TWOD_COPY_SCHEMA||command.reserved)return -EINVAL;
+ if((command.schema!=REMESA_GEM_TWOD_COPY_SCHEMA
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+    &&command.schema!=REMESA_GEM_TWOD_VENDOR_SCHEMA
+#endif
+   )||command.reserved)return -EINVAL;
  count=command.copy.source.allocation_id==command.copy.destination.allocation_id?1:2;
  if(j->count!=count||command.copy.source.allocation_id!=j->ids[0]||
     command.copy.destination.allocation_id!=j->ids[count-1])return -EACCES;
@@ -47,7 +51,13 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
     command.copy.destination.gpu_address!=uses[count-1].va||
     command.copy.destination.bytes!=uses[count-1].bytes)return -EACCES;
  if(!source->initialized)return -ENODATA;
- error=remesa_twod_copy_prepare(&command.copy,&plan);if(error)return -error;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(command.schema==REMESA_GEM_TWOD_VENDOR_SCHEMA)
+  error=remesa_twod_copy_prepare_vendor(&command.copy,&plan);
+ else
+#endif
+  error=remesa_twod_copy_prepare(&command.copy,&plan);
+ if(error)return -error;
  for(i=0;i<count;i++){
   b=i?destination:source;
   if(b->inserted>2u*MAX_BYTES/PAGE_SIZE-total)return -E2BIG;

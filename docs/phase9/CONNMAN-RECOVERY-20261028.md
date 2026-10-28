@@ -64,3 +64,12 @@ empty next_entry. Evidence is
 This ends the earlier quarantined kernel lifetime by reset, not GPU retirement.
 No experimental workload remains resident from the failed v4 boot. General
 3D/2D/userspace/installable driver work remains active and unapproved as a whole.
+
+## Subsequent full-boot verification
+
+The next isolated driver boot, `8897d270-7f0d-491e-8cd8-c82b4fe2109d`, returned
+online automatically. A fresh SSH inspection proved exactly one connmand,
+PID1652 parent1473/runsv, with its logger running. Evidence is retained at
+`/home/gama/sgx535-offline/twod-vendor-stream-20261028/v1/hardware/CONNMAN_COLD_BOOT.stdout`.
+This supplies the full-machine startup check left pending by the original
+service-only repair. No additional network configuration change was required.

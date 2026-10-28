@@ -12,6 +12,11 @@ static int lab_start(void *opaque,const struct remesa_twod_launch *l,u64 *cookie
 {
  struct remesa_twod_native *n=opaque;struct retained_job *j=ticket_job(endpoint,l->ticket);
  CHECK(endpoint_lock.held&&endpoint->lock.held&&j&&j->attached&&j->state==REMESA_JOB_ISSUED);
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ CHECK(l->plan.dwords==9&&l->plan.command[3]==0xa0&&l->plan.command[35]==0xf0&&l->plan.command[39]==0);
+#else
+ CHECK(l->plan.dwords==10&&l->plan.command[3]==0x70);
+#endif
  starts++;n->live=true;n->launch=l;n->core=0x01130000;n->revision=0x00010201;
  *cookie=l->ticket.operation+100;n->cookie=*cookie;
  return lab_mode==2?-EIO:0;

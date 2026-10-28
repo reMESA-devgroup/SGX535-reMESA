@@ -68,3 +68,19 @@ int remesa_twod_copy_prepare(const struct remesa_twod_copy *request,
  for(i=0;i<10;i++)put32(plan.command+4*i,words[i]);
  *out=plan;return 0;
 }
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+int remesa_twod_copy_prepare_vendor(const struct remesa_twod_copy *request,
+ struct remesa_twod_copy_plan *out)
+{
+ struct remesa_twod_copy_plan plan;uintptr_t a,b;int error;
+ if((uintptr_t)request%_Alignof(struct remesa_twod_copy)||
+    (uintptr_t)out%_Alignof(struct remesa_twod_copy_plan)||
+    !span(request,sizeof(*request))||!span(out,sizeof(*out)))return EINVAL;
+ a=(uintptr_t)request;b=(uintptr_t)out;
+ if(a<=b?b-a<sizeof(*request):a-b<sizeof(*out))return EINVAL;
+ error=remesa_twod_copy_prepare(request,&plan);if(error)return error;
+ memmove(plan.command,plan.command+4,36);
+ memset(plan.command+36,0,4); /* Reserved tail, never submitted as an opcode. */
+ plan.dwords=9;*out=plan;return 0;
+}
+#endif

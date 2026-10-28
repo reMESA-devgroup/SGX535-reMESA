@@ -37,4 +37,14 @@ struct remesa_twod_copy_plan {
  */
 int remesa_twod_copy_prepare(const struct remesa_twod_copy *,
  struct remesa_twod_copy_plan *);
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+#ifndef REMESA_TWOD_LAB_IOCTL
+#error "Vendor stream is an isolated LAB profile, not production admission"
+#endif
+/* Original PVR2DBlt body plus UM FLUSH: 36 effective bytes in 40 reserved.
+ * Requires the native exclusive/idle/context contract; not an implicit
+ * replacement for the legacy packet's hardware synchronization boundary. */
+int remesa_twod_copy_prepare_vendor(const struct remesa_twod_copy *,
+ struct remesa_twod_copy_plan *);
+#endif
 #endif

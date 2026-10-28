@@ -169,3 +169,99 @@ no padding opcode may replace a word. Before hardware, authenticate the full
 exclusive/context/dependency contract and alpha-related state, preserve all
 memory/coherency/fence/retirement/quarantine checks and run the offline gates.
 The captured body alone does not justify a silent FENCE removal in production.
+
+## Explicit vendor-stream LAB implementation and offline qualification
+
+The separate candidate now lives at
+`/home/gama/sgx535-offline/twod-vendor-stream-20261028/v1/`.
+`REMESA_TWOD_LAB_VENDOR_STREAM` requires the LAB build flag and is absent from
+normal production. Its internal typed GEM schema is `0x31443256`; the existing
+`0x31443252` schema and ten-word encoder remain supported unchanged. There is
+no new raw-packet userspace ABI. The root-only LAB endpoint uses the new schema
+only in this explicit build.
+
+The vendor encoder reserves the existing 40-byte command capacity, returns
+nine effective DWORDs (36 bytes), and zeros the unused four-byte tail. The
+submitted stream is the captured eight-word payload followed by the existing
+FLUSH word. The unused tail is never emitted. Legacy FENCE behavior is retained
+in the old profile. This experiment does not establish equivalence to every
+vendor transfer-context synchronization dependency.
+
+A conservative new-profile prerequisite checks the read-only ALPHA register
+against the captured `0x0000ff00` field. An incompatible initial value causes
+rejection before the first FIFO write; the adapter does not change shared ALPHA
+state. Failure snapshots include that value. Address/PTE/PFN/permission checks,
+producer exclusion, coherency, owned IRQ cookies, completion, visibility,
+retirement and uncertainty retention remain active.
+
+`FOCUSED_RESULT.json` records 54 successful build/run commands: legacy and
+vendor GEM, lifecycle, LAB and native models in native, UBSan and i386 variants,
+plus eight independent captured vendor packet fixtures. The native vendor
+suite preserves all legacy cases and adds three dimensions with three copies
+each, 38 fault children, and ALPHA mismatch rejection. Word-ten fault injection
+is explicitly excluded for the nine-word profile. The GEM lifecycle test in
+the vendor build still exercises the legacy schema; vendor lifecycle paths are
+covered through the LAB endpoint's seven fault children.
+
+`NATIVE_RESULT.json` records 14 successful commands including real antiX kernel
+objects and partial linking. `FULL_MODULE_BUILD.json` records the complete
+candidate module. `MODULE_PROFILE_VERIFICATION.json` proves the old compiled
+gears asset remains byte-exact. `PRODUCTION_TEXT_COMPARISON.json` proves the
+complete normal `accel_2d` text matches v4. All 31 protected artifacts and pinned
+input files remain unchanged. The 21 full-build warnings are in byte-unchanged
+original files. `CLOSEOUT.json` is explicitly CPU/offline qualification with
+zero GPU operations, not a physical 2D approval.
+
+The first focused harness compile used the already integrated staged GEM file
+and included preflight twice. The runner's include order was corrected to the
+original GEM source plus current separate preflight, as used by the earlier
+qualified harness. `RUN_FOCUSED.first-failed.py` retains the initial runner.
+No driver safety check was removed to address that harness error.
+
+## Physical initial-state rejection (v1)
+
+The candidate was booted once, with exact module/observer identity and a virgin
+source guard, on boot `8897d270-7f0d-491e-8cd8-c82b4fe2109d`. The original GRUB
+configuration, saved stock default and empty next entry were restored before
+attempting the copy. ConnMan also returned online automatically under runsv
+(PID1652, parent1473), qualifying its startup after a full reboot.
+
+The 1280×800 attempt identified core/revision `0x01130000/0x00010201` and was
+rejected with `-EOPNOTSUPP` at phase2, **zero FIFO words**, cookie0. The new
+ALPHA prerequisite observed `0x00000000` rather than `0x0000ff00`. BIF status
+and fault address were zero. The request-base register still held the saved
+`0xd0000000`; no new base publication or producer interval had begun. This is
+an initial-state rejection, not evidence of a nine-word stream executing or
+failing on the GPU, and not a successful fix of the old FENCE fault.
+
+Completion, visibility, retirement and readback did not pass. The client
+retained the uncertain job and checked zero source/destination bytes. The two
+zero-length readback files are not readback evidence. Its 8.186027ms issue wall
+time and 335.678999ms client wall time are rejected-attempt timings, not GPU
+execution time or FPS. Four controls returned to N; producers_active and
+source reasons remained zero. No smaller-size retry occurred.
+
+Evidence: `hardware/PHYSICAL_RESULT.json`, `hardware/artifacts-1280x800/`, and
+`hardware/1280x800-evidence.tar.gz` with SHA256
+`48180e1df8b6464932b96973e828861042bd1ca5ecfd074b2e19aa99487ae1ea`.
+A default recovery reboot was requested only after evidence was fetched.
+Recovery must be established by `hardware/FINAL_REMOTE_STATE.json`; reset is
+not GPU retirement.
+
+Next minimum implementation: explicitly own the vendor ALPHA state during the
+exclusive native transaction. The retained SGX535 header names register0x0e1c
+and the ONE/ZERO component masks0xff00/0xff; the captured request and examined
+firmware output support the intended value. Save its initial value, validate
+quiet engine/power/core/root, publish the required state under both existing
+locks and the producer interval, verify readback, retain state/backing on any
+uncertainty, and restore/verify the saved value only after proven completion
+and visibility before reservation release. Add failure models for publication,
+readback, interference and restoration before a new isolated hardware test.
+Do not simply delete the prerequisite or write ALPHA outside engine ownership.
+
+Recovery is now verified on stock boot
+`59284e53-2648-4da4-b40b-96f6a467d6b4`. FINAL_REMOTE_STATE.json proves the
+original stock module, absent experimental controls/proc endpoints, original
+GRUB configuration, saved default and empty next entry. The retained kernel
+lifetime ended by reset; no GPU retirement is claimed. All local test, build,
+SSH and reboot observation handles for this candidate are terminal.

@@ -16,6 +16,9 @@ int psb_mmu_verify_cached_rw_pages(struct psb_mmu_pd *pd,u64 va,struct page **pa
 {return access_bad?-EACCES:psb_mmu_verify_pages(pd,va,pages,n);}
 #include "../remesa_gem_twod.inc"
 static unsigned checks;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+static int vendor_test;
+#endif
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"failure line%d: %s\n",__LINE__,#x);abort();}}while(0)
 static struct drm_file file={1};
 static int validate(struct remesa_gem_memory *s,struct remesa_memory_ticket t,struct remesa_twod_copy_plan *p)
@@ -48,12 +51,17 @@ static void one(unsigned width,unsigned height,int same)
  uses[0]=(struct remesa_memory_binding){src,a->va.start,a->gem.size};uses[1]=(struct remesa_memory_binding){dst,b->va.start,b->gem.size};
  command.copy=(struct remesa_twod_copy){.source={src,a->va.start,a->gem.size,width,height,width*4,1},.destination={dst,b->va.start,b->gem.size,width,height,width*4,1},.request_base=0x40000000,.width=width,.height=height};
  if(same){command.copy.width=17;command.copy.height=19;command.copy.destination_x=1;command.copy.destination_y=1;}
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ if(vendor_test){command.schema=REMESA_GEM_TWOD_VENDOR_SCHEMA;CHECK(!remesa_twod_copy_prepare_vendor(&command.copy,&expected));}
+ else
+#endif
  CHECK(!remesa_twod_copy_prepare(&command.copy,&expected));
  CHECK(!remesa_gem_job_prepare(s,uses,same?1:2,&command,sizeof command,&ticket));
  /* Prove the kernel uses its immutable copied command, not caller metadata. */
  command.schema=0;command.copy.source.allocation_id=0;
  unsigned oldflush=flushes,oldw=test_wmb,oldr=test_rmb;
  CHECK(!validate(s,ticket,&plan));CHECK(!memcmp(plan.command,expected.command,40));
+ CHECK(plan.dwords==expected.dwords);
  CHECK(plan.source_id==src&&plan.destination_id==dst);
  CHECK(flushes==oldflush&&test_wmb==oldw&&test_rmb==oldr);
  CHECK(remesa_gem_job_issue(s,ticket)==-EOPNOTSUPP); /* no new executor installed */
@@ -104,5 +112,9 @@ static void one(unsigned width,unsigned height,int same)
 int main(void)
 {
  one(1280,800,0);one(640,640,0);one(641,479,0);one(32,32,0);one(32,32,1);
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ vendor_test=1;
+ one(1280,800,0);one(640,640,0);one(641,479,0);one(32,32,0);one(32,32,1);
+#endif
  printf("PASS %u GEM-backed 2D preflight checks; no issue/cache/device operations\n",checks);return 0;
 }

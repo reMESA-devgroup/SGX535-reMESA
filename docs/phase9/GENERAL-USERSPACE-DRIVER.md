@@ -119,9 +119,14 @@ failures preserved backing, evidence and four N controls before recovery.
 The latest stock boot7055b53d is now independently verified; [ConnMan
 supervision](CONNMAN-RECOVERY-20261028.md) and automatic reconnection were repaired.
 The [vendor command-builder capture](TWOD-VENDOR-STREAM-20261028.md) corroborates
-the eight-word copy body against the unchanged encoder, but does not approve
-removing a native synchronization boundary. The FENCE memory/state contract
-and the general driver objective remain unfinished.
+the eight-word copy body against the unchanged encoder. A separate nine-word
+LAB candidate now passes native/UBSan/i386 packet, GEM, endpoint, fault-retention
+and real kernel-build gates, with the normal production text and compiled gears
+asset unchanged. This is a new isolated experiment, not approval to remove a
+production synchronization boundary. Its first physical attempt rejected the
+initial ALPHA value before writing any FIFO word; explicit ALPHA-state ownership
+is the next implementation step. Physical copy qualification, the FENCE
+memory/state contract and the general driver objective remain unfinished.
 
 The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0
 and no advertised DRI3 on the recovered stock desktop. DMA-BUF presentation

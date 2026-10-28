@@ -31,7 +31,9 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
-def patched_sources(native, lab=False):
+def patched_sources(native, lab=False, vendor=False):
+    if vendor and not lab:
+        raise ValueError('vendor stream requires the isolated LAB ioctl build')
     for name, digest in PINNED.items():
         if hashlib.sha256((native / name).read_bytes()).hexdigest() != digest:
             raise ValueError('unreviewed native input: ' + name)
@@ -99,13 +101,15 @@ def patched_sources(native, lab=False):
             'remesa_gem_memory.c': gem, 'psb_drv.c': driver}
     if lab:
         result['Makefile'] = (native / 'Makefile').read_text() + '\n# Explicit isolated 2D LAB candidate; runtime gate defaults N.\nccflags-y += -DREMESA_TWOD_LAB_IOCTL=1\n'
+        if vendor:
+            result['Makefile'] += 'ccflags-y += -DREMESA_TWOD_LAB_VENDOR_STREAM=1\n'
     return result
 
 
-def stage(native, output, lab=False):
+def stage(native, output, lab=False, vendor=False):
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
-    patched = patched_sources(native, lab)
+    patched = patched_sources(native, lab, vendor)
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
@@ -136,6 +140,7 @@ def stage(native, output, lab=False):
         'output_sha256': {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
                           for name in [*patched, *components]},
         'lab_ioctl_compiled': lab,
+        'vendor_stream_lab_compiled': vendor,
         'scope': 'Native 2D candidate; optional root-only gated LAB ioctl; never installed by stager',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -147,5 +152,7 @@ if __name__ == '__main__':
     parser.add_argument('--native-source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--with-lab-ioctl', action='store_true')
+    parser.add_argument('--with-lab-vendor-stream', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl), indent=2))
+    print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl,
+                           args.with_lab_vendor_stream), indent=2))

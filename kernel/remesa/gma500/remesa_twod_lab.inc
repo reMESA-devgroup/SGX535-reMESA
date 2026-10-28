@@ -34,11 +34,18 @@ static int twod_lab_command(struct remesa_gem_memory *s,
   uses[i]=(struct remesa_memory_binding){id,b->va.start,b->gem.size};
  }
  c->schema=REMESA_GEM_TWOD_COPY_SCHEMA;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ c->schema=REMESA_GEM_TWOD_VENDOR_SCHEMA;
+#endif
  c->copy.request_base=(u32)(c->copy.source.gpu_address&0xf0000000ULL);
  c->copy.source_x=r->source_x;c->copy.source_y=r->source_y;
  c->copy.destination_x=r->destination_x;c->copy.destination_y=r->destination_y;
  c->copy.width=r->width;c->copy.height=r->height;
+#ifdef REMESA_TWOD_LAB_VENDOR_STREAM
+ error=remesa_twod_copy_prepare_vendor(&c->copy,&plan);
+#else
  error=remesa_twod_copy_prepare(&c->copy,&plan);
+#endif
  if(error){error=-error;goto done;}
  *count=r->source.id==r->destination.id?1:2;
  done:mutex_unlock(&s->lock);return error;
