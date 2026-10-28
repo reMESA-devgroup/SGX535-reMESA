@@ -350,3 +350,13 @@ reveals a distinct context/dependency boundary, not a complete explanation of
 our native FENCE fault. No driver, encoder, shader, gate, boot or GPU change
 was made during this static investigation. Latest recovery is still awaiting
 network; no successful 2D copy or broader API capability is inferred.
+
+
+The v4 recovery is now verified on stock boot
+`7055b53d-aa35-427f-8239-aa96a71713f1`. FINAL_REMOTE_STATE.json proves exact
+stock identity, no observer/experimental controls/proc endpoint, original
+custom.cfg/default and empty next_entry. The initial unverified closeout is
+preserved separately. This reset ended quarantine; it did not retire the
+failed GPU operation. The user's subsequent [ConnMan repair](CONNMAN-RECOVERY-20261028.md)
+restored supervision and verified automatic restart/reconnection without a new
+GPU operation or machine reboot. The network blocker is resolved at this check.

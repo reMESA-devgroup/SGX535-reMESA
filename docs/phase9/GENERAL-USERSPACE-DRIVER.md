@@ -112,14 +112,16 @@ build and an Atom ABI-only preflight pass. The first physical result is
 recorded below; copy qualification remains pending. The normal production build
 does not register this LAB ioctl.
 The [physical 2D attempts](TWOD-PHYSICAL-FAULT-20261028.md) are rejected:
-no completion/retirement/readback passed. The latest per-word diagnostic
-observed an MMU fault outside both BOs after only the initial FENCE word;
-source/destination/BLIT were not sent. Evidence and all four N controls were
-preserved before one default recovery reboot request. The recovered stock boot has since been verified after connectivity returned. The next LAB-only pre-FIFO observation was also tested physically: its
-pre-FIFO checks passed, then the same fault appeared after FENCE alone. Its
-evidence was fetched before one default recovery reboot; the latest return
-is awaiting network verification. The FENCE memory/state contract remains
-unresolved and the general driver objective remains unfinished.
+no completion/retirement/readback passed. Per-word observation located the
+fault after the initial FENCE, before source/destination/BLIT. A later
+pre-FIFO wait/check passed, then the same first-word fault appeared. Both
+failures preserved backing, evidence and four N controls before recovery.
+The latest stock boot7055b53d is now independently verified; [ConnMan
+supervision](CONNMAN-RECOVERY-20261028.md) and automatic reconnection were repaired.
+The [vendor command-builder capture](TWOD-VENDOR-STREAM-20261028.md) corroborates
+the eight-word copy body against the unchanged encoder, but does not approve
+removing a native synchronization boundary. The FENCE memory/state contract
+and the general driver objective remain unfinished.
 
 The [physical PRIME/X11 audit](PRIME-PRESENTATION-20261028.md) found PRIME=0
 and no advertised DRI3 on the recovered stock desktop. DMA-BUF presentation
