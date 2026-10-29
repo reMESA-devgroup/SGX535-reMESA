@@ -300,6 +300,49 @@ def private_opregion_source(source):
         '\t\tsystem_opregion = NULL;')
 
 
+def private_async_power_sources(irq, device, opregion):
+    if hashlib.sha256(device.encode()).hexdigest() != 'c02f8c825350ed89675d7618e158d503fbb92169a7f2f8aba4255b353de9a493':
+        raise ValueError('unreviewed private platform brightness input')
+    start=irq.index('irqreturn_t psb_irq_handler(')
+    end=irq.index('\nvoid psb_irq_preinstall(',start)
+    body=irq[start:end]
+    body=replace_once(body, '\tint handled = 0;\n',
+        '\tint handled = 0;\n\n'
+        '\t/* Cover every raw read/capture/ACK, including shared IRQs.\n'
+        '\t * Denial leaves hardware status untouched; it is no completion. */\n'
+        '\tif (!gma_power_begin(dev, false))\n\t\treturn IRQ_NONE;\n')
+    body=replace_once(body, '\tif (!handled)\n',
+        '\tgma_power_end(dev);\n\n\tif (!handled)\n')
+    irq=irq[:start]+body+irq[end:]
+    start=device.index('static int psb_set_brightness(')
+    end=device.index('\nstatic const struct backlight_ops',start)
+    body=device[start:end]
+    body=replace_once(body, '\tint level = bd->props.brightness;\n',
+        '\tint level = bd->props.brightness;\n\n'
+        '\t/* Sysfs callbacks are joined by backlight unregister. Internal\n'
+        '\t * ASLE/lid producers have their own worker joins. */\n'
+        '\tif (!gma_power_begin(dev, false))\n\t\treturn -EAGAIN;\n')
+    body=replace_once(body, '\tpsb_brightness = level;\n',
+        '\tpsb_brightness = level;\n\tgma_power_end(dev);\n')
+    device='#include "power.h"\n'+device[:start]+body+device[end:]
+    start=opregion.index('static u32 asle_set_backlight(')
+    end=opregion.index('\nstatic void psb_intel_opregion_asle_work(',start)
+    body=opregion[start:end]
+    body=replace_once(body, '\tstruct backlight_device *bd = dev_priv->backlight_device;\n',
+        '\tstruct backlight_device *bd = dev_priv->backlight_device;\n\tint entry_index;\n')
+    body=replace_once(body, '\tgma_backlight_set(dev, bclp * bd->props.max_brightness / 255);',
+        '\tif (!drm_dev_enter(dev, &entry_index))\n\t\treturn ASLE_BACKLIGHT_FAILED;\n'
+        '\tif (!gma_power_begin(dev, false)) {\n'
+        '\t\tdrm_dev_exit(entry_index);\n\t\treturn ASLE_BACKLIGHT_FAILED;\n\t}\n'
+        '\t/* This outer claim keeps the nested platform callback admitted.\n'
+        '\t * A nested DRM entry there would reject a pre-unplug operation. */\n'
+        '\tgma_backlight_set(dev, bclp * bd->props.max_brightness / 255);')
+    body=replace_once(body, '\treturn 0;\n',
+        '\tgma_power_end(dev);\n\tdrm_dev_exit(entry_index);\n\treturn 0;\n')
+    opregion='#include <drm/drm_drv.h>\n#include "power.h"\n'+opregion[:start]+body+opregion[end:]
+    return irq, device, opregion
+
+
 def private_power_sources(header, source):
     # The retained native runtime-PM enable is disabled. Offline forced claims
     # cannot safely restore KMS state while callers may hold modeset locks.
@@ -546,6 +589,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             'backlight.c':'995720191e06a74df2cdb80a1bf8d77fe49aa9dd38e60139dcd15f516be63e1d',
             'psb_lid.c':'cc5660e14990d1ab7adfe69880c37125becda71927cd9e6ef7d508343dbf5bf7',
             'psb_device.c':'c02f8c825350ed89675d7618e158d503fbb92169a7f2f8aba4255b353de9a493',
+            'psb_intel_lvds.c':'f74be00054701ec6297b03824f34994eb77541b9341b5ce4f266351ae8438e12',
         }.items():
             if hashlib.sha256((native/name).read_bytes()).hexdigest()!=digest:
                 raise ValueError('unreviewed private ASLE lifetime input: '+name)
@@ -574,6 +618,9 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
             result['psb_drv.c'], result['remesa_gem_memory.c'])
         result['opregion.c'] = private_opregion_source((native/'opregion.c').read_text())
+        result['psb_irq.c'],result['psb_device.c'],result['opregion.c']=private_async_power_sources(
+            result.get('psb_irq.c',(native/'psb_irq.c').read_text()),
+            (native/'psb_device.c').read_text(),result['opregion.c'])
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
         result.update(private_gem_lifetime_sources(native))
         display=(native/'gma_display.c').read_bytes()

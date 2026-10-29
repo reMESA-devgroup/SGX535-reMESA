@@ -81,3 +81,7 @@ internal errors cannot be qualified merely by checking their outer return value.
 GPU stop/retirement, complete PM/MMIO lifetime, partial-failure recovery, physical
 S3, removal and full GL/GLES/desktop acceleration remain unfinished. Existing
 reboot-only quarantine and recovery requirements remain. GPU operations: zero.
+
+Follow-up: `private-async-power.md` records the subsequent IRQ/brightness power
+claims and their actual-source CPU regression evidence. The gaps above describe
+this admission-only milestone; the follow-up still does not qualify hardware PM.

@@ -38,6 +38,15 @@ static void gma_backlight_set(struct drm_device *d,int value)
  }
  pthread_mutex_unlock(&work_lock);
 }
+/* New private ASLE guards: this fixture models admission as available and
+ * preserves the existing work-cancel test. PM/unplug interleavings have their
+ * own actual-chain fixture; this unplug mock does not implement SRCU join. */
+static bool drm_dev_enter(struct drm_device *d,int *index)
+{assert(d==&device);*index=1;return !d->unplugged;}
+static void drm_dev_exit(int index){assert(index==1);}
+static bool gma_power_begin(struct drm_device *d,bool force)
+{assert(d==&device&&!force);return true;}
+static void gma_power_end(struct drm_device *d){assert(d==&device);}
 #include "asle_set_actual.inc"
 #include "asle_work_actual.inc"
 static void *run_work(void *unused)
