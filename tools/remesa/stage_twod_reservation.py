@@ -281,6 +281,7 @@ def private_file_lost_sources(memory):
 def private_gem_lifetime_sources(native):
     anchors = {'gem.c': '2e47b9c3df078c49693dbee1f82e6660cb76a876db0ad3156ee4091c999eca43',
                'framebuffer.c': 'ec0a8e81d02e6246600e14ed112bd3224ec07db7ee440e78bcae53b4b01541b6',
+               'gtt.c': '388c5b251cfa17545031c1841a4ef6afcf1bc7385a424e34221948959e15818d',
                'gtt.h': '2407ff8bdbdba056e0583982e94b77da8c665bdd797d3fb3444918566abdc72f'}
     sources = {}
     for name, digest in anchors.items():
@@ -310,7 +311,17 @@ def private_gem_lifetime_sources(native):
         '\t/* Private profile only; preserve existing field offsets. */\n'
         '\tstruct list_head private_lifetime_link;\n'
         '\tbool private_tracked, private_orphaned;\n')
-    return {'gem.c': gem, 'framebuffer.c': fb, 'gtt.h': header}
+    gtt = '#include <drm/drm_drv.h>\n'+sources['gtt.c']
+    for old, new in [
+        ('int psb_gtt_pin(struct gtt_range *gt)\n',
+         'static int remesa_private_gtt_pin_live(struct gtt_range *gt)\n'),
+        ('void psb_gtt_unpin(struct gtt_range *gt)\n',
+         'static void remesa_private_gtt_unpin_live(struct gtt_range *gt)\n'),
+        ('void psb_gtt_roll(struct drm_device *dev, struct gtt_range *r, int roll)\n',
+         'static void remesa_private_gtt_roll_live(struct drm_device *dev, struct gtt_range *r, int roll)\n')]:
+        gtt = replace_once(gtt, old, new)
+    gtt += '\n#include "remesa_private_gtt_guard.inc"\n'
+    return {'gem.c': gem, 'framebuffer.c': fb, 'gtt.h': header, 'gtt.c': gtt}
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
@@ -474,6 +485,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_source_mmio.h', 'remesa_private_source_mmio.inc',
                      'remesa_private_entry_guard.inc',
                      'remesa_private_gem_lifetime.h', 'remesa_private_gem_lifetime.inc',
+                     'remesa_private_gtt_guard.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:

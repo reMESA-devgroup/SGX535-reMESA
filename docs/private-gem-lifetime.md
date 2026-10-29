@@ -113,3 +113,8 @@ Remaining direct KMS/GTT operations include `gma_display.c` pin/unpin callers
 and console rolling. This component guards the standard GEM destructor and its
 CPU interval; it does not guard those entire external callbacks. A final unplug
 review must cover them before any physical qualification.
+
+The subsequent [direct GTT entry guards](private-gtt-entry.md) now cover those
+pin/unpin/roll APIs, including negative roll bounds and nested entry denial.
+They do not guard every outer KMS/console callback. The same review reproduced
+a separate framebuffer mmap bounds problem that remains to be corrected.

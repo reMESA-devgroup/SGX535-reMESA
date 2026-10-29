@@ -27,7 +27,7 @@ struct drm_device {bool unplugged,hardware_alive;unsigned refs;void *dev;};
 struct mapping {int value;};struct filp {struct mapping *f_mapping;};
 struct drm_gem_object {struct drm_device *dev;struct filp *filp;unsigned refs;size_t size;};
 struct gtt_range {
- struct drm_gem_object gem;unsigned mmapping,stolen;int in_gart,resource;
+ struct drm_gem_object gem;unsigned mmapping,stolen;int in_gart,resource,npage;
  struct list_head private_lifetime_link;bool private_tracked,private_orphaned;
 };
 struct drm_file {unsigned id;};
@@ -38,6 +38,7 @@ static unsigned readers,module_refs,offsets,releases,gtt_frees,unpins,late_unpin
 static bool pause_release,release_started,resume_release,remove_started,remove_done;
 static bool init_fails,handle_fails,allocate_fails;
 static bool pause_unpin,unpin_started,resume_unpin,unpin_fails;
+static bool flip_on_nested;
 static struct drm_device device,other;
 static struct gtt_range range;
 static struct mapping mapping;
@@ -47,7 +48,9 @@ static bool warning(bool value){assert(!value);return value;}
 #define WARN_ON(value) warning(!!(value))
 static bool drm_dev_enter(struct drm_device *dev,int *index)
 {
- assert(!pthread_mutex_lock(&state));bool ok=!dev->unplugged;
+ assert(!pthread_mutex_lock(&state));
+ if(flip_on_nested&&entered)dev->unplugged=true;
+ bool ok=!dev->unplugged;
  if(ok){entered++;readers++;*index=77;}
  assert(!pthread_mutex_unlock(&state));return ok;
 }
@@ -72,7 +75,7 @@ static void drm_gem_object_release(struct drm_gem_object *obj)
  while(pause_release&&!resume_release)assert(!pthread_cond_wait(&changed,&state));
  assert(!pthread_mutex_unlock(&state));
 }
-static void psb_gtt_unpin(struct gtt_range *r)
+static void remesa_private_gtt_unpin_live(struct gtt_range *r)
 {
  assert(r==&range&&entered);assert(!pthread_mutex_lock(&state));
  unpin_started=true;assert(!pthread_cond_broadcast(&changed));
@@ -81,6 +84,11 @@ static void psb_gtt_unpin(struct gtt_range *r)
  if(!unpin_fails)r->in_gart--;
  assert(!pthread_mutex_unlock(&state));
 }
+static int remesa_private_gtt_pin_live(struct gtt_range *r)
+{(void)r;assert(0);return -ENOSYS;}
+static void remesa_private_gtt_roll_live(struct drm_device *d,struct gtt_range *r,int roll)
+{(void)d;(void)r;(void)roll;assert(0);}
+#include "remesa_private_gtt_guard.inc"
 static void release_resource(int *r){assert(r==&range.resource);}
 static void kfree(void *p)
 {assert(p==&range);gtt_frees++;memset(&range,0xa5,sizeof range);}
@@ -119,6 +127,7 @@ static void fixture(void)
  pause_release=release_started=resume_release=remove_started=remove_done=false;
  init_fails=handle_fails=allocate_fails=false;range=(struct gtt_range){0};
  pause_unpin=unpin_started=resume_unpin=unpin_fails=false;
+ flip_on_nested=false;
 }
 static void *free_worker(void *unused)
 {(void)unused;drm_gem_object_put(&range.gem);return NULL;}
@@ -141,16 +150,17 @@ int main(int argc,char **argv)
   bool idle_failure=!strcmp(argv[1],"unpin-failure");
   bool other_pin=!strcmp(argv[1],"other-pin");
   bool invalid_pin=!strcmp(argv[1],"invalid-pin");
-  assert(idle_failure||other_pin||invalid_pin);fixture();
+  bool nested_loss=!strcmp(argv[1],"nested-loss");
+  assert(idle_failure||other_pin||invalid_pin||nested_loss);fixture();
   assert(!psb_gem_create(&file,&device,4096,&handle,0,4096));
   range.mmapping=1;range.in_gart=invalid_pin?0:(other_pin?2:1);
-  unpin_fails=idle_failure;drm_gem_object_put(&range.gem);
-  assert(unpins==(invalid_pin?0u:1u)&&!late_unpins&&!offsets&&!releases&&!gtt_frees);
+  unpin_fails=idle_failure;flip_on_nested=nested_loss;drm_gem_object_put(&range.gem);
+  assert(unpins==((invalid_pin||nested_loss)?0u:1u)&&!late_unpins&&!offsets&&!releases&&!gtt_frees);
   assert(range.private_orphaned&&range.private_tracked);
   assert(range.mmapping==(other_pin?0u:1u)&&range.in_gart==(invalid_pin?0:1));
   assert(module_refs==1&&device.refs==1&&remesa_private_gem_device_retained(&device));
   assert(remesa_private_gem_rebind_blocked());
-  puts("PASS failed idle, outstanding foreign pin or invalid mmap pin retains backing/tracking/module/device ownership; no GEM release, model only");
+  puts("PASS failed idle, remaining/invalid pin or nested GTT denial retains backing/tracking/module/device ownership; no GEM release, model only");
   return 0;
  }
  assert(argc==1);
@@ -177,7 +187,7 @@ int main(int argc,char **argv)
  assert(!pthread_create(&remove_thread,NULL,remove_worker,NULL));
  assert(!pthread_mutex_lock(&state));
  while(!remove_started)assert(!pthread_cond_wait(&changed,&state));
- assert(readers==1&&!remove_done&&device.hardware_alive&&!unpins);
+ assert(readers==2&&!remove_done&&device.hardware_alive&&!unpins);
  resume_unpin=true;assert(!pthread_cond_broadcast(&changed));assert(!pthread_mutex_unlock(&state));
  assert(!pthread_join(free_thread,NULL));assert(!pthread_join(remove_thread,NULL));
  assert(unpins==1&&!late_unpins&&gtt_frees==1&&!module_refs&&!device.refs&&!readers);

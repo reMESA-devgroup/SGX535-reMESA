@@ -33,17 +33,19 @@ def main():
         for label,argv in [(name+'-build',command),(name+'-run',[str(exe)]),
                            (name+'-unpin-failure',[str(exe),'unpin-failure']),
                            (name+'-other-pin',[str(exe),'other-pin']),
-                           (name+'-invalid-pin',[str(exe),'invalid-pin'])]:
+                           (name+'-invalid-pin',[str(exe),'invalid-pin']),
+                           (name+'-nested-loss',[str(exe),'nested-loss'])]:
             r=subprocess.run(argv,capture_output=True,text=True,timeout=60,preexec_fn=limits)
             (output/(label+'.log')).write_text(r.stdout+r.stderr)
             rows.append(dict(label=label,argv=argv,exit=r.returncode))
             if r.returncode or r.stderr:raise RuntimeError(label+': '+r.stderr)
     files=[test,Path(__file__).resolve(),root/'tools/remesa/test_private_source_mmio.py']
     files += [module/n for n in ['gem.c','gtt.c','gtt.h','framebuffer.c',
-                               'remesa_private_gem_lifetime.h','remesa_private_gem_lifetime.inc']]
+                               'remesa_private_gem_lifetime.h','remesa_private_gem_lifetime.inc',
+                               'remesa_private_gtt_guard.inc']]
     report=dict(status='PRIVATE_GEM_JOIN_AND_RETENTION_MODEL_PASS',GPU_operations=0,
         driver_physically_qualified=False,
-        scope='Actual tracker/wrapper, original destructor/GTT-free and GEM/console constructors; DRM/list/GTT APIs modeled, real pthread entry joining',
+        scope='Actual tracker/destructor/GTT entry wrappers, original destructor/GTT-free and GEM/console constructors; native GTT/DRM/list APIs modeled, pthread joining',
         sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},commands=rows)
     (output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(dict(status=report['status'],GPU_operations=0)))
