@@ -1,33 +1,35 @@
-# Vaio P: primeira coleta de identidade
+# Vaio P: initial platform identification
 
-Esta etapa identifica a máquina para preparar uma futura validação do reMESA.
-Ela não instala driver, altera boot, carrega/remove módulos ou executa GPU.
-O modelo "Vaio P" sozinho não comprova PCI, revisão SGX, MMU, painel ou kernel
-compatíveis com o Dell Mini 12 já testado.
+This package collects platform information to prepare future reMESA testing.
+It does not install drivers, change boot settings, load or unload modules, or
+submit work to the GPU. The name "Vaio P" alone does not establish the same PCI
+device, SGX revision, MMU, display panel, or kernel as the tested Dell Mini 12.
 
-Com Python 3, extraia o pacote em uma pasta e execute sem sudo:
-
-```sh
-python3 collect_platform_identity.py --output vaio-p-identidade.json
-```
-
-No repositório, o mesmo comando é:
+On Linux with Python 3, extract the package and run without sudo:
 
 ```sh
-python3 tools/remesa/collect_platform_identity.py --output vaio-p-identidade.json
+python3 collect_platform_identity.py --output vaio-p-identity.json
 ```
 
-O coletor lê distribuição/kernel/CPU/RAM, modelo e BIOS sem números de série,
-dispositivos PCI gráficos, driver vinculado e nomes de cards DRM. Não abre
-`/dev/dri`, arquivos PCI `resource*` nem registradores. Não coleta hostname,
-UUID, rede ou logs completos. O único arquivo criado é o JSON pedido; um
-arquivo existente não é sobrescrito. Campos inacessíveis ficam `null`.
+From a repository checkout, use:
 
-Envie o JSON para comparação. Um candidato PCI `8086:8108` ainda não comprova
-SGX535 rev121: a revisão PCI é diferente da revisão interna SGX. Parâmetros
-ausentes também não comprovam controles N/N. A coleta não certifica aceleração.
+```sh
+python3 tools/remesa/collect_platform_identity.py --output vaio-p-identity.json
+```
 
-Mantenha o sistema e o boot atuais. O candidato privado em desenvolvimento
-ainda não está fisicamente qualificado para o Vaio; não há instalação de módulo
-ou teste de renderização neste pacote. Um kernel diferente do alvo antiX
-5.10.240 precisa de build e revisão próprios antes de qualquer instalação.
+The collector reads distribution, kernel, CPU, RAM, model and BIOS information
+(excluding serial numbers), display PCI devices, bound drivers, and DRM card
+names. It does not open `/dev/dri`, PCI `resource*` files, or registers. It does
+not collect hostnames, UUIDs, network addresses, or complete logs. The only file
+created is the requested JSON; existing files are not overwritten. Unavailable
+fields are `null`, and inaccessible PCI/DRM directories are marked unreadable.
+
+Share the JSON for comparison. PCI ID `8086:8108` alone does not establish
+SGX535 rev121: the PCI revision is different from the internal SGX revision.
+Missing module parameters do not establish disabled N/N controls. This inventory
+does not qualify GPU acceleration.
+
+Keep the current system and boot configuration. The private driver candidate
+is not physically qualified for this Vaio. This package contains no kernel
+module and performs no rendering test. A kernel different from the current
+antiX 5.10.240 target needs its own build and review before installation.
