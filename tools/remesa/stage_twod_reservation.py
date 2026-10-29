@@ -250,6 +250,8 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '#endif\n')
     if private:
         private_header = native / 'gma500_fixed_backend.h'
+        if hashlib.sha256((native / 'stream_profile_asset.h').read_bytes()).hexdigest() != 'e21ceda020131e56c93271b995af0df590c8eecbe87e18d97579fa25bf8edf6e':
+            raise ValueError('unreviewed private qualification profile')
         if hashlib.sha256(private_header.read_bytes()).hexdigest() != '97c2f97e00d61970195b79cb7ddb4acc1a5c4b314c739f707ded12df3cc1260f':
             raise ValueError('unreviewed private backend header')
         result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = private_fixed_sources(
@@ -258,7 +260,12 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_private_probe.inc"\n'
+        result['psb_drv.c'] = replace_once(result['psb_drv.c'],
+            'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
+            '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
+            'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
     return result
 
@@ -284,8 +291,11 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
                      'remesa_gem_private_execute.inc',
+                     'remesa_private_probe.h', 'remesa_private_probe.inc',
+                     'remesa_private_probe_request.h',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
+        components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:
         components[name] = (root / 'mesa/sgx535' / name).read_bytes()
     for name in ['remesa_twod_lab.h', 'remesa_twod_lab.inc', 'remesa_twod_copy.h', 'remesa_twod_copy.inc']:

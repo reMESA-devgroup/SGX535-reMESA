@@ -56,6 +56,11 @@ def verify(path, kernel_release):
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
             raise ValueError(f"missing defined executable function: {name}")
     controls = ("memory_enabled", "retained_lab_enabled", "twod_copy_enabled", "twod_fill_enabled")
+    if "private_probe_enabled" in symbols:
+        controls += ("private_probe_enabled", "private_probe_consumed")
+        index, kind, size = symbols.get("remesa_private_probe_ioctl", (0, 0, 0))
+        if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
+            raise ValueError("missing private probe handler")
     for name in controls:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or sections[index][1] != 8 or size != 1:
