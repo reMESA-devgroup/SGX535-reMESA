@@ -64,6 +64,15 @@ static void fixture(struct remesa_mmu_private **out)
  registers[PSB_CR_2D_SOCIF/4]=_PSB_C2_SOCIF_EMPTY;
  clear_cache_trace();CHECK(!*out);
  CHECK(!remesa_mmu_private_prepare(&f.driver,f.bindings,3,out));
+ /* Mirror psb_drv.c alloc_pd(driver,1,0), rather than an inconsistent CPU
+  * table array with no corresponding root PDE. */
+ f.def.invalid_pde=0;
+ f.def.invalid_pte=0;
+ for(unsigned i=0;i<1024;i++){
+  f.def.p->words[i]=f.def.invalid_pde;
+  f.def.dummy_pt->words[i]=f.def.invalid_pte;
+ }
+ f.def.p->words[17]=((u32)f.default_pt.p->pfn<<12)|PSB_PTE_VALID;
  tracked_owner=*out;
  for(unsigned i=0;i<16;i++)memcpy(expected_pages[i],f.pages[i].words,4096);
 }
@@ -176,6 +185,41 @@ int main(void)
  fixture(&s);CHECK(!remesa_mmu_private_bind_exclusive(s));
  f.def.dummy_pt=NULL;
  CHECK(remesa_mmu_private_restore_exclusive(s)==-EINVAL&&writes==3);check_retained(&s);
+ /* Actual default-directory contents must agree with the pointer array.
+  * Test each row, including present17 and all absent/dummy rows. */
+ for(unsigned row=0;row<1024;row++){
+  fixture(&s);f.def.p->words[row]^=0x1000;
+  CHECK(remesa_mmu_private_bind_exclusive(s)==-ESTALE&&!writes);
+  CHECK(!s->root_active&&!s->root_uncertain);destroy(&s);
+ }
+ for(unsigned row=0;row<1024;row++){
+  fixture(&s);f.def.dummy_pt->words[row]^=0x1000;
+  CHECK(remesa_mmu_private_bind_exclusive(s)==-ESTALE&&!writes);destroy(&s);
+ }
+ fixture(&s);f.def.pd_mask|=PSB_PTE_CACHED;
+ CHECK(remesa_mmu_private_bind_exclusive(s)==-EINVAL&&!writes);destroy(&s);
+ fixture(&s);f.def.invalid_pde^=PSB_PTE_RO;
+ CHECK(remesa_mmu_private_bind_exclusive(s)==-EOPNOTSUPP&&!writes);destroy(&s);
+ fixture(&s);f.def.invalid_pte^=PSB_PTE_CACHED;
+ CHECK(remesa_mmu_private_bind_exclusive(s)==-EOPNOTSUPP&&!writes);destroy(&s);
+ fixture(&s);CHECK(!remesa_mmu_private_bind_exclusive(s));
+ clear_cache_trace();f.def.p->words[17]^=0x1000;
+ CHECK(remesa_mmu_private_restore_exclusive(s)==-ESTALE&&writes==3&&!cache_lines);
+ check_retained(&s);
+ fixture(&s);CHECK(!remesa_mmu_private_bind_exclusive(s));
+ clear_cache_trace();f.def.dummy_pt->words[1023]^=0x1000;
+ CHECK(remesa_mmu_private_restore_exclusive(s)==-ESTALE&&writes==3&&!cache_lines);
+ check_retained(&s);
+ /* Also exercise original alloc_pd(driver,0,0) dummy-backed mode. */
+ fixture(&s);
+ f.def.invalid_pde=((u32)f.def.dummy_pt->pfn<<12)|PSB_PTE_VALID;
+ f.def.invalid_pte=((u32)f.def.dummy_page->pfn<<12)|PSB_PTE_VALID;
+ for(unsigned i=0;i<1024;i++){
+  if(i!=17)f.def.p->words[i]=f.def.invalid_pde;
+  f.def.dummy_pt->words[i]=f.def.invalid_pte;
+ }
+ clear_cache_trace();CHECK(!remesa_mmu_private_bind_exclusive(s));
+ clear_cache_trace();CHECK(!remesa_mmu_private_restore_exclusive(s));destroy(&s);
  CHECK(!active&&!maps&&downs==ups);
  printf("PASS %u private-root transaction checks; simulated MMIO only, no GPU commands\n",checks);
  return 0;

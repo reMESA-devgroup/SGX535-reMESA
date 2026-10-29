@@ -35,23 +35,48 @@ static int remesa_mmu_switch_root(struct page *p,u32 *root)
  pfn=page_to_pfn(p);if(!pfn||pfn>0xfffffUL)return -ERANGE;
  *root=(u32)pfn<<12;return 0;
 }
-/* Caller holds the write semaphore; preflight every table before maintenance. */
-static int remesa_mmu_sync_restore(struct remesa_mmu_private *s)
+/* Caller holds the MMU write semaphore and whole-device exclusion. Verify
+ * the actual PDE tree, not only the CPU table-pointer array: otherwise cache
+ * maintenance could miss a page the restored GPU root will dereference. */
+static int remesa_mmu_restore_tree(struct remesa_mmu_private *s,
+ struct psb_mmu_pd *pd,u32 expected_root)
 {
- struct psb_mmu_pd *pd=s->restore_pd;u32 stride,root,i;int ret;
- if(!s->driver->has_clflush||s->driver->clflush_add<=0||
-    s->driver->clflush_add%(PAGE_SIZE/sizeof(u32)))return -EOPNOTSUPP;
- stride=s->driver->clflush_add/(PAGE_SIZE/sizeof(u32));
- if(stride<sizeof(u32)||stride>PAGE_SIZE||(stride&(stride-1)))return -EOPNOTSUPP;
- if(!pd->tables)return -EINVAL;
+ u32 root,dummy_pt,dummy_page,i,*v,expected;int ret=0;
+ if(!pd||pd->driver!=s->driver||!pd->tables||pd->pd_mask!=PSB_PTE_VALID)
+  return -EINVAL;
  ret=remesa_mmu_switch_root(pd->p,&root);if(ret)return ret;
- if(root!=s->restore_root)return -ESTALE;
- ret=remesa_mmu_switch_root(pd->dummy_pt,&root);if(ret)return ret;
- ret=remesa_mmu_switch_root(pd->dummy_page,&root);if(ret)return ret;
+ if(root!=expected_root)return -ESTALE;
+ ret=remesa_mmu_switch_root(pd->dummy_pt,&dummy_pt);if(ret)return ret;
+ ret=remesa_mmu_switch_root(pd->dummy_page,&dummy_page);if(ret)return ret;
+ /* Original alloc_pd uses either trap entries0/0 or the two owned dummy
+  * frames with invalid_type0. Other default-directory modes need proof. */
+ if((pd->invalid_pde||pd->invalid_pte)&&
+    (pd->invalid_pde!=(dummy_pt|PSB_PTE_VALID)||
+     pd->invalid_pte!=(dummy_page|PSB_PTE_VALID)))return -EOPNOTSUPP;
  for(i=0;i<1024;i++)if(pd->tables[i]){
   if(pd->tables[i]->pd!=pd||pd->tables[i]->index!=i)return -EINVAL;
   ret=remesa_mmu_switch_root(pd->tables[i]->p,&root);if(ret)return ret;
  }
+ v=kmap_atomic(pd->p);
+ for(i=0;i<1024;i++){
+  expected=pd->invalid_pde;
+  if(pd->tables[i])expected=((u32)page_to_pfn(pd->tables[i]->p)<<12)|pd->pd_mask;
+  if(v[i]!=expected){ret=-ESTALE;break;}
+ }
+ kunmap_atomic(v);if(ret)return ret;
+ v=kmap_atomic(pd->dummy_pt);
+ for(i=0;i<1024;i++)if(v[i]!=pd->invalid_pte){ret=-ESTALE;break;}
+ kunmap_atomic(v);return ret;
+}
+/* Preflight completes BEFORE any cache maintenance or root publication. */
+static int remesa_mmu_sync_restore(struct remesa_mmu_private *s)
+{
+ struct psb_mmu_pd *pd=s->restore_pd;u32 stride,i;int ret;
+ if(!s->driver->has_clflush||s->driver->clflush_add<=0||
+    s->driver->clflush_add%(PAGE_SIZE/sizeof(u32)))return -EOPNOTSUPP;
+ stride=s->driver->clflush_add/(PAGE_SIZE/sizeof(u32));
+ if(stride<sizeof(u32)||stride>PAGE_SIZE||(stride&(stride-1)))return -EOPNOTSUPP;
+ ret=remesa_mmu_restore_tree(s,pd,s->restore_root);if(ret)return ret;
  mb();
  for(i=0;i<1024;i++)if(pd->tables[i])
   remesa_mmu_private_sync_page(pd->tables[i]->p,stride);
@@ -77,6 +102,7 @@ int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *s)
  }
  ret=remesa_mmu_switch_root(s->pd->p,&root);if(ret)goto bind_done;
  ret=remesa_mmu_switch_root(def->p,&restore);if(ret)goto bind_done;
+ ret=remesa_mmu_restore_tree(s,def,restore);if(ret)goto bind_done;
  ret=remesa_mmu_switch_quiet(s,restore);if(ret)goto bind_done;
  dev_priv=s->driver->dev->dev_private;
  s->restore_pd=def;s->restore_root=restore;s->private_root=root;
