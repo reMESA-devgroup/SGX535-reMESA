@@ -67,7 +67,8 @@ def prepare(mesa,repo,output,egl_mesa=None):
     sources += ['remesa_present.c', 'remesa_present.h','remesa_render_target.c','remesa_render_target.h','remesa_ta_index.c','remesa_ta_index.h','remesa_ta_scene.c','remesa_ta_scene.h','remesa_usse_arithmetic.c','remesa_usse_arithmetic.h','remesa_usse_fragment_color.c','remesa_usse_fragment_color.h','remesa_ta_scalar.c','remesa_ta_scalar.h','remesa_ta_zclear.c','remesa_ta_zclear.h','remesa_depth_scene_image.c','remesa_depth_scene_image.h']
     sources += ['remesa_twod.c', 'remesa_twod.h', 'remesa_copy.h', 'remesa_native_2d_loader.c']
     sources += ['remesa_texture_state.c', 'remesa_texture_state.h',
-                'remesa_usse_sample.c', 'remesa_usse_sample.h']
+                'remesa_usse_sample.c', 'remesa_usse_sample.h',
+                'remesa_pds_prefetch.c', 'remesa_pds_prefetch.h']
     for n in sources:shutil.copyfile(repo/'mesa/sgx535'/n,dst/n)
     shutil.copyfile(repo/'common/remesa/draw_packet.c',dst/'draw_packet.c')
     shutil.copyfile(repo/'common/remesa/shader_request.c',dst/'shader_request.c')
@@ -81,7 +82,7 @@ def prepare(mesa,repo,output,egl_mesa=None):
 # Isolated experimental integration; DRI constructor currently rejects GL.
 libremesa_loader = static_library('remesa_loader',
   files('remesa_retained_transport.c','retained_evidence.c','remesa_persistent.c','remesa_linux_memory.c','registry.c','resource.c','provider.c','remesa_render_pass.c','remesa_sampler_state.c','remesa_texture_binding.c','remesa_texture_descriptor.c','remesa_fixed_state.c','remesa_nir.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_pds_structure.c','remesa_shader_program.c','remesa_fragment_body.c','remesa_shader_storage.c','remesa_program_registers.c','remesa_nir_uniform.c','remesa_screen.c', 'remesa_draw.c', 'remesa_linux.c',
-        'remesa_loader.c', 'remesa_native_2d_loader.c', 'remesa_dri.c', 'remesa_present.c', 'remesa_render_target.c', 'remesa_ta_index.c', 'remesa_ta_scene.c', 'remesa_usse_arithmetic.c', 'remesa_usse_fragment_color.c', 'remesa_ta_scalar.c', 'remesa_ta_zclear.c', 'remesa_depth_scene_image.c', 'remesa_twod.c', 'remesa_texture_state.c', 'remesa_usse_sample.c', 'draw_packet.c', 'shader_request.c'),
+        'remesa_loader.c', 'remesa_native_2d_loader.c', 'remesa_dri.c', 'remesa_present.c', 'remesa_render_target.c', 'remesa_ta_index.c', 'remesa_ta_scene.c', 'remesa_usse_arithmetic.c', 'remesa_usse_fragment_color.c', 'remesa_ta_scalar.c', 'remesa_ta_zclear.c', 'remesa_depth_scene_image.c', 'remesa_twod.c', 'remesa_texture_state.c', 'remesa_usse_sample.c', 'remesa_pds_prefetch.c', 'draw_packet.c', 'shader_request.c'),
   include_directories : [inc_include, inc_src, inc_gallium, inc_nir, inc_compiler,
                         include_directories('include')],
   dependencies : [dep_libdrm],
