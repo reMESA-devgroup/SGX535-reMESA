@@ -233,6 +233,8 @@ def private_entry_sources(driver, memory):
         '\t\tif (dev_priv->opregion.header)\n'
         '\t\t\tcancel_work_sync(&dev_priv->opregion.asle_work);\n'
         '#endif\n'
+        '\t\t/* The private lid worker may perform I2C brightness updates. */\n'
+        '\t\tpsb_lid_timer_takedown(dev_priv);\n'
         '\t\tif (dev_priv->backlight_device)\n\t\t\tgma_backlight_exit(dev);')
     driver = replace_once(driver,
         '\t\tpsb_intel_opregion_fini(dev);\n\n\t\tif (dev_priv->pf_pd) {',
@@ -296,6 +298,17 @@ def private_opregion_source(source):
         '\t\tunregister_acpi_notifier(&psb_intel_opregion_notifier);\n'
         '\t\t/* No notifier reader remains after unregister returns. */\n'
         '\t\tsystem_opregion = NULL;')
+
+
+def private_lid_sources(header, source):
+    header = '#include <linux/workqueue.h>\n'+header
+    header = replace_once(header, '\tbool remesa_private_fbdev_unregistered;\n',
+        '\tbool remesa_private_fbdev_unregistered;\n'
+        '\tstruct delayed_work remesa_private_lid_work;\n'
+        '\tbool remesa_private_lid_initialized, remesa_private_lid_stopping;\n'
+        '\tbool remesa_private_lid_pending;\n\tu32 remesa_private_lid_target;\n')
+    start=source.index('static void psb_lid_timer_func(struct timer_list *t)\n')
+    return header, source[:start]+'#include "remesa_private_lid.inc"\n'
 
 
 def private_file_lost_sources(memory):
@@ -510,6 +523,8 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         for name,digest in {
             'opregion.c':'a6fd11464b3972d456dea55919cf97c3ccb26f9d5a1a690139cdf1c4c09d35d0',
             'backlight.c':'995720191e06a74df2cdb80a1bf8d77fe49aa9dd38e60139dcd15f516be63e1d',
+            'psb_lid.c':'cc5660e14990d1ab7adfe69880c37125becda71927cd9e6ef7d508343dbf5bf7',
+            'psb_device.c':'c02f8c825350ed89675d7618e158d503fbb92169a7f2f8aba4255b353de9a493',
         }.items():
             if hashlib.sha256((native/name).read_bytes()).hexdigest()!=digest:
                 raise ValueError('unreviewed private ASLE lifetime input: '+name)
@@ -545,6 +560,8 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             raise ValueError('unreviewed fbdev legacy modeset input')
         result['psb_drv.h'],result['framebuffer.c'],result['gma_display.c']=private_fbdev_sources(
             result['psb_drv.h'],result['framebuffer.c'],display.decode())
+        result['psb_drv.h'],result['psb_lid.c']=private_lid_sources(
+            result['psb_drv.h'],(native/'psb_lid.c').read_text())
         for name, digest, fragment in [
             ('remesa_stream_bridge.c', '4d0a1accdfc65caa28892facc2a2149cfc35c42360ebb7333027aa9d07ad8f4d',
              'remesa_private_stream_file_lost.inc'),
@@ -593,6 +610,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_fbdev.h', 'remesa_private_fbdev_map.inc',
                      'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
                      'remesa_private_fbdev_config.inc',
+                     'remesa_private_lid.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:

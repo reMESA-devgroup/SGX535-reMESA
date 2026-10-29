@@ -44,6 +44,8 @@ static void remesa_route_source_lifecycle(struct drm_device *d){assert(d==&devic
 static void drm_kms_helper_poll_disable(struct drm_device *d){assert(d==&device);poll_stops++;}
 static void drm_crtc_vblank_off(struct drm_crtc *c){assert(c>=device.crtcs&&c<device.crtcs+2);vblank_stops++;}
 static void drm_irq_uninstall(struct drm_device *d){assert(d==&device&&d->irq_enabled);d->irq_enabled=false;irq_stops++;}
+static void psb_lid_timer_takedown(struct drm_psb_private *p)
+{assert(p==&private&&!backlight_stops&&!chip_stops);}
 static void cancel_work_sync(struct work_struct *w)
 {assert(w==&private.opregion.asle_work&&!device.irq_enabled&&!backlight_stops);
  asle_joins++;if(asle_join_hook)asle_join_hook();}
