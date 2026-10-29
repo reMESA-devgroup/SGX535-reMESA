@@ -4,6 +4,10 @@
  * Reservation set/clear and 3D owner admission use the SAME IRQ lock. */
 #include "remesa_twod_irq.h"
 static struct remesa_twod_reservation *twod_irq_owner;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+static struct remesa_twod_reservation *twod_irq_fixed_lender;
+static const void *twod_irq_fixed_token;
+#endif
 static void twod_irq_assert_locked(void)
 {
 #ifdef __KERNEL__
@@ -11,9 +15,16 @@ static void twod_irq_assert_locked(void)
 #endif
 }
 bool remesa_twod_irq_busy_locked(void)
-{twod_irq_assert_locked();return twod_irq_owner!=NULL;}
+{
+ twod_irq_assert_locked();
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ return twod_irq_owner!=NULL||twod_irq_fixed_lender!=NULL;
+#else
+ return twod_irq_owner!=NULL;
+#endif
+}
 bool remesa_twod_irq_available_locked(void)
-{twod_irq_assert_locked();return !fixed_irq_owner&&!twod_irq_owner;}
+{twod_irq_assert_locked();return !fixed_irq_owner&&!remesa_twod_irq_busy_locked();}
 int remesa_twod_irq_claim_locked(struct remesa_twod_reservation *r)
 {
  twod_irq_assert_locked();
@@ -73,3 +84,51 @@ int remesa_twod_irq_guard_locked(struct remesa_twod_reservation *r)
   return -EBUSY;
  return 0;
 }
+
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+/* Private to the staged backend translation unit. Both publication points of
+ * begin recheck this under the SAME IRQ lock; the console reservation never
+ * drops. These checks do not replace source-history admission or retirement. */
+static int remesa_twod_irq_handoff_ready_locked(struct remesa_twod_reservation *r,
+ const void *token,struct drm_device *dev)
+{
+ twod_irq_assert_locked();
+ if(!r||!token||!dev)return -EINVAL;
+ if(fixed_irq_owner||twod_irq_fixed_lender)return -EBUSY;
+ if(!r->held||!r->device||r->device->dev!=dev||r->device->remesa_twod_owner!=r||
+    r->mmu_owner!=token)return -EACCES;
+ return remesa_twod_irq_guard_locked(r);
+}
+static int remesa_twod_irq_handoff_fixed_locked(struct remesa_twod_reservation *r,
+ const void *token,struct sgx535_gma500_fixed_backend *backend,struct drm_device *dev)
+{
+ int error;
+ if(!backend)return -EINVAL;
+ error=remesa_twod_irq_handoff_ready_locked(r,token,dev);if(error)return error;
+ twod_irq_fixed_lender=r;twod_irq_fixed_token=token;
+ twod_irq_owner=NULL;fixed_irq_owner=backend;return 0;
+}
+/* Called only after the original fixed-service may_release gate succeeds.
+ * Extra pending events remain a rejection, not an event-mask workaround. */
+static int remesa_twod_irq_return_fixed_locked(struct sgx535_gma500_fixed_backend *backend)
+{
+ struct remesa_twod_reservation *r=twod_irq_fixed_lender;
+ twod_irq_assert_locked();
+ if(fixed_irq_owner!=backend)return -ENOENT;
+ if(!r){fixed_irq_owner=NULL;return 0;}
+ if(twod_irq_owner||!r->held||!r->device||r->device->remesa_twod_owner!=r||
+    r->mmu_owner!=twod_irq_fixed_token)return -EIO;
+ if(r->irq_cookie||r->irq_issued||r->irq_retired||r->pending1||r->pending2||
+    backend->pending_status1||backend->pending_status2)return -EBUSY;
+ twod_irq_owner=r;fixed_irq_owner=NULL;
+ twod_irq_fixed_lender=NULL;twod_irq_fixed_token=NULL;return 0;
+}
+static u32 remesa_twod_irq_guarded_extra_locked(
+ struct sgx535_gma500_fixed_backend *backend,u32 status1)
+{
+ twod_irq_assert_locked();
+ /* Existing normal3D masks are untouched; guarded3D must retain an unexpected
+  * 2D completion because its producer reservation prevents any owned2D job. */
+ return twod_irq_fixed_lender&&fixed_irq_owner==backend?status1&(1u<<27):0;
+}
+#endif

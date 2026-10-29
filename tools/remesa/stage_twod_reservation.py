@@ -31,6 +31,66 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
+
+def private_fixed_sources(fixed, header):
+    """Preserve original begin/source/retirement gates, add an owned IRQ loan."""
+    fixed = replace_once(fixed,
+        'int sgx535_gma500_fixed_backend_begin(\n'
+        '    struct sgx535_gma500_fixed_backend *backend,\n'
+        '    struct sgx535_gma500_owner *owner)',
+        'static int remesa_fixed_backend_begin(\n'
+        '    struct sgx535_gma500_fixed_backend *backend,\n'
+        '    struct sgx535_gma500_owner *owner,\n'
+        '    struct remesa_twod_reservation *guard, const void *token)')
+    ready = '(guard ? remesa_twod_irq_handoff_ready_locked(guard, token, owner->dev) : remesa_twod_irq_busy_locked())'
+    fixed = replace_once(fixed,
+        'if (fixed_irq_owner || remesa_twod_irq_busy_locked() ||\n'
+        '        !remesa_route_source_begin(backend, owner->dev))',
+        'if (fixed_irq_owner || ' + ready + ' ||\n'
+        '        !remesa_route_source_begin(backend, owner->dev))')
+    fixed = replace_once(fixed,
+        '    if (fixed_irq_owner || remesa_twod_irq_busy_locked()) {\n',
+        '    if (fixed_irq_owner || ' + ready + ') {\n')
+    fixed = replace_once(fixed, '    fixed_irq_owner = backend;\n',
+        '    if (guard) {\n'
+        '        int e = remesa_twod_irq_handoff_fixed_locked(guard, token, backend, owner->dev);\n'
+        '        if (e) {\n'
+        '            backend->power_held = false; backend->active = false; backend->owner = NULL;\n'
+        '            sgx535_gma500_fixed_irq_unlock(flags); return e;\n'
+        '        }\n'
+        '    } else fixed_irq_owner = backend;\n')
+    wrappers = (
+        'int sgx535_gma500_fixed_backend_begin(\n'
+        '    struct sgx535_gma500_fixed_backend *b, struct sgx535_gma500_owner *o)\n'
+        '{ return remesa_fixed_backend_begin(b, o, NULL, NULL); }\n'
+        'int sgx535_gma500_fixed_backend_begin_guarded(\n'
+        '    struct sgx535_gma500_fixed_backend *b, struct sgx535_gma500_owner *o,\n'
+        '    struct remesa_twod_reservation *guard, const void *token)\n'
+        '{ if (!guard || !token) return -EINVAL;\n'
+        '  return remesa_fixed_backend_begin(b, o, guard, token); }\n\n')
+    fixed = replace_once(fixed, 'int sgx535_gma500_fixed_backend_end(\n',
+                         wrappers + 'int sgx535_gma500_fixed_backend_end(\n')
+    fixed = replace_once(fixed,
+        '    struct sgx535_gma500_fixed_backend *backend)\n{\n    unsigned long flags;\n',
+        '    struct sgx535_gma500_fixed_backend *backend)\n{\n    unsigned long flags;\n    int loan_error;\n')
+    fixed = replace_once(fixed, '    fixed_irq_owner = NULL;\n',
+        '    loan_error = remesa_twod_irq_return_fixed_locked(backend);\n'
+        '    if (loan_error) { sgx535_gma500_fixed_irq_unlock(flags); return loan_error; }\n')
+    fixed = replace_once(fixed,
+        '        backend->pending_status1 |= status1 & ~fixed_benign_status1;\n',
+        '        backend->pending_status1 |= status1 & ~fixed_benign_status1;\n'
+        '#ifdef REMESA_PRIVATE_IRQ_HANDOFF\n'
+        '        backend->pending_status1 |= remesa_twod_irq_guarded_extra_locked(backend, status1);\n'
+        '#endif\n')
+    header = replace_once(header, '\n#endif\n',
+        '\n/* Trusted kernel caller retains exact guarded MMU loan and original owner.\n'
+        ' * Original source-history admission and retirement gates remain required. */\n'
+        'struct remesa_twod_reservation;\n'
+        'int sgx535_gma500_fixed_backend_begin_guarded(\n'
+        ' struct sgx535_gma500_fixed_backend *, struct sgx535_gma500_owner *,\n'
+        ' struct remesa_twod_reservation *, const void *);\n#endif\n')
+    return fixed, header
+
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
         raise ValueError("native fill requires the separate normal copy profile")
@@ -123,6 +183,12 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_FILL, remesa_twod_fill_ioctl, DRM_ROOT_ONLY),\n'
             '#endif\n')
     if private:
+        private_header = native / 'gma500_fixed_backend.h'
+        if hashlib.sha256(private_header.read_bytes()).hexdigest() != '97c2f97e00d61970195b79cb7ddb4acc1a5c4b314c739f707ded12df3cc1260f':
+            raise ValueError('unreviewed private backend header')
+        result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = private_fixed_sources(
+            result['gma500_fixed_backend.c'], private_header.read_text())
+        result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1\n'
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n'
     return result

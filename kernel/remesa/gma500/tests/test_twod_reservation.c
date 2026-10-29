@@ -20,9 +20,21 @@ struct drm_psb_private {
 };
 static unsigned long jiffies;
 static unsigned irq_lock_held;
-struct model_scene_owner {struct drm_device *dev;};
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+struct model_scene_session {unsigned phase;};
+struct model_fixed_service {struct model_scene_session *session;const void *observer,*observer_context;bool may_release;};
+#endif
+struct model_scene_owner {struct drm_device *dev;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ bool initialized,device_claimed,power_held;
+ struct model_scene_session session;struct model_fixed_service fixed_service;
+#endif
+};
 struct sgx535_gma500_fixed_backend {
  bool active,fire_possible;struct model_scene_owner *owner;u32 pending_status1,pending_status2;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ bool power_held,use_reserved;u32 last_stage;
+#endif
 };
 static struct sgx535_gma500_fixed_backend *fixed_irq_owner;
 unsigned long sgx535_gma500_fixed_irq_lock(void)
