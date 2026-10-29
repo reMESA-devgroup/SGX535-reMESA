@@ -22,7 +22,7 @@ struct remesa_gem_private {
  struct remesa_mmu_private *owner;
  struct remesa_twod_reservation *guard;
  struct remesa_gem_private_rule rules[16];
- bool live;
+ bool live,host_published;
 };
 /* Exact job IDs/order required; rules narrow private PTE access/cache policy.
  * CPU-only sidecars stay retained outside the private GPU allowlist. At least
@@ -48,5 +48,17 @@ int remesa_gem_private_release(struct remesa_gem_private *);
  * CPU views, when present, must be the existing job-owned cached mappings.
  * Publication/commands and completion remain the qualified executor's job. */
 int remesa_gem_private_validate_locked(struct remesa_gem_private *,
+ const struct remesa_memory_view *,unsigned count);
+/* Final CPU upload publication, after private bind and before any issue.
+ * Same locks/exclusion as validate_locked. Caller has finished ALL writes
+ * through the borrowed kernel views and must exclude further CPU access until
+ * GPU retirement/CPU ownership transfer. No alias is unmapped or freed here.
+ * Flushes GPU-visible backing only, including destinations whose old CPU cache
+ * lines must not survive GPU writes; CPU_ONLY sidecars are untouched. One
+ * publication per loan: repetition returns EALREADY rather than flushing again.
+ * This is a cold-upload path, not a cache-epoch/reuse protocol. No prior MEM_SYNC
+ * receipt is inferred; streaming reuse still needs its own ownership protocol.
+ * Does NOT publish commands, issue work or authorize visibility/retirement. */
+int remesa_gem_private_publish_locked(struct remesa_gem_private *,
  const struct remesa_memory_view *,unsigned count);
 #endif

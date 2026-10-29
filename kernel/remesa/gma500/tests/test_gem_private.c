@@ -62,6 +62,7 @@ int remesa_mmu_private_release(struct remesa_mmu_private **out)
  free(*out);*out=NULL;return 0;
 }
 static unsigned bound_checks;
+static int bound_error;
 int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *owner,
  const struct remesa_mmu_allowed_binding *b,u32 count)
 {
@@ -71,9 +72,20 @@ int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *owner,
   CHECK(b[i].pages==owner->bindings[i].pages&&b[i].page_count==owner->bindings[i].page_count);
   CHECK(b[i].access==owner->bindings[i].access&&b[i].cached==owner->bindings[i].cached);
  }
- return 0;
+ return bound_error;
 }
 #include "../remesa_gem_private.inc"
+static struct remesa_gem_private *publishing;
+static unsigned publish_index,publish_wmb;
+static void publication_flush(struct page **pages,unsigned count)
+{
+ struct retained_job *j=ticket_job(publishing->memory,publishing->ticket);
+ while(publish_index<j->count&&!publishing->rules[publish_index].access)publish_index++;
+ CHECK(publish_index<j->count&&!publishing->host_published&&test_wmb==publish_wmb);
+ struct backing *b=&publishing->memory->bo[j->ids[publish_index]&31];
+ CHECK(pages==b->pages&&count==b->inserted&&b->holds==1&&!b->lease);
+ publish_index++;
+}
 static void one_case(unsigned width,unsigned height,unsigned fault)
 {
  struct test_mmu mmu={.has_clflush=true,.pd={.driver=&driver}};
@@ -92,7 +104,12 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
  }
  CHECK(!remesa_gem_job_prepare(s,uses,3,&command,sizeof(command),&ticket));
  struct retained_job *j=ticket_job(s,ticket);CHECK(j&&j->count==3);
- if(fault==7)rules[0].access=REMESA_GEM_PRIVATE_CPU_ONLY;
+ if(fault==7){
+  struct remesa_memory_view mapped[3];
+  CHECK(remesa_gem_job_views(s,ticket,mapped,3)==3);
+  for(unsigned i=0;i<3;i++)CHECK(mapped[i].cpu&&mapped[i].cpu==j->cpu_views[i]);
+  rules[0].access=REMESA_GEM_PRIVATE_CPU_ONLY;
+ }
  for(unsigned test=0;test<9;test++){
   struct remesa_gem_private_rule bad[3];memcpy(bad,rules,sizeof(bad));
   struct remesa_memory_ticket t=ticket;unsigned n=3;int expected=0;
@@ -141,7 +158,7 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
    struct remesa_memory_view views[3];
    for(unsigned i=0;i<3;i++){
     struct backing *bo=&s->bo[j->ids[i]&31];
-    views[i]=(struct remesa_memory_view){uses[i],bo->pages,bo->inserted,NULL};
+    views[i]=(struct remesa_memory_view){uses[i],bo->pages,bo->inserted,j->cpu_views[i]};
    }
    unsigned old_bound=bound_checks;
    rules[0].access=3; /* original caller metadata no longer authoritative */
@@ -160,6 +177,29 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
    }
    CHECK(remesa_gem_private_validate_locked(&loan,views,2)==-EACCES);
    CHECK(vmap_calls==oldmaps&&flushes==oldflush&&test_wmb==oldw&&test_rmb==oldr);
+   /* Publication refuses stale views or bound authority before any flush,
+    * including a bad final resource after earlier resources were valid. */
+   struct remesa_memory_view bad[3];memcpy(bad,views,sizeof bad);bad[2].binding.bytes--;
+   CHECK(remesa_gem_private_publish_locked(&loan,bad,3)==-EACCES);
+   bound_error=-EIO;
+   CHECK(remesa_gem_private_publish_locked(&loan,views,3)==-EIO);bound_error=0;
+   j->state=REMESA_JOB_ISSUED;
+   CHECK(remesa_gem_private_publish_locked(&loan,views,3)==-EBUSY);j->state=REMESA_JOB_PREPARED;
+   j->cookie=1;
+   CHECK(remesa_gem_private_publish_locked(&loan,views,3)==-EBUSY);j->cookie=0;
+   CHECK(!loan.host_published&&flushes==oldflush&&test_wmb==oldw);
+   publishing=&loan;publish_index=0;publish_wmb=test_wmb;test_flush_hook=publication_flush;
+   CHECK(!remesa_gem_private_publish_locked(&loan,views,3));test_flush_hook=NULL;
+   CHECK(loan.host_published&&publish_index==3);
+   CHECK(flushes==oldflush+(fault==7?2u:3u)&&test_wmb==oldw+1&&test_rmb==oldr);
+   CHECK(vmap_calls==oldmaps); /* no mappings created, dropped or replaced */
+   for(unsigned i=0;i<3;i++){
+    struct backing *b=&s->bo[j->ids[i]&31];
+    CHECK(views[i].cpu==j->cpu_views[i]&&j->cpu_views[i]==b->cached_job_view&&!b->cpu);
+   }
+   unsigned published_flushes=flushes;
+   CHECK(remesa_gem_private_publish_locked(&loan,views,3)==-EALREADY);
+   CHECK(flushes==published_flushes&&test_wmb==oldw+1&&loan.host_published);
    mutex_unlock(&s->lock);
    CHECK(remesa_gem_job_issue(s,ticket)==-EOPNOTSUPP);
    CHECK(j->state==REMESA_JOB_PREPARED&&!j->cookie&&!j->quarantined);

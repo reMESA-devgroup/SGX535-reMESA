@@ -136,3 +136,23 @@ int remesa_gem_private_validate_locked(struct remesa_gem_private *loan,
  }
  return remesa_mmu_private_validate_bound_locked(loan->owner,expected,gpu_count);
 }
+
+int remesa_gem_private_publish_locked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count)
+{
+ struct remesa_gem_memory *s;struct retained_job *j;unsigned i;int error;
+ /* Authenticate the entire closure before the first cache side effect. */
+ error=remesa_gem_private_validate_locked(loan,views,count);if(error)return error;
+ s=loan->memory;j=ticket_job(s,loan->ticket);
+ if(j->state!=REMESA_JOB_PREPARED||j->cookie)return -EBUSY;
+ if(loan->host_published)return -EALREADY;
+ for(i=0;i<count;i++)if(loan->rules[i].access){
+  struct backing *b=&s->bo[j->ids[i]&31];
+  /* CPU dirty lines are unsafe even for a GPU write-only destination.
+   * Job holds exclude userspace leases and backing/topology changes. The
+   * trusted caller additionally excludes access through its borrowed views. */
+  drm_clflush_pages(b->pages,b->inserted);
+ }
+ dma_wmb();loan->host_published=true;
+ return 0;
+}
