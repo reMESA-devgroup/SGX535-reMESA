@@ -22,4 +22,12 @@ int remesa_mmu_private_prepare(struct psb_mmu_driver *,
  * This is not retirement/default-restoration proof for a future bound job.
  */
 int remesa_mmu_private_release(struct remesa_mmu_private **owner);
+/* Trusted serialized caller, device idle/excluded, directory still unbound.
+ * Re-audits exact retained mappings, then cleans every private table/control
+ * page from CPU cache with barriers, root last. Does not bind, invalidate GPU
+ * TLBs, synchronize data buffers or create a durable publication/retirement
+ * token. Any subsequent table mutation requires another sync before binding.
+ * No MMIO. Unsupported cache geometry fails closed before cache maintenance.
+ */
+int remesa_mmu_private_sync_tables(struct remesa_mmu_private *owner);
 #endif

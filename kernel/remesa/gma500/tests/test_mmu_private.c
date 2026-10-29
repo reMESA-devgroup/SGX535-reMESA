@@ -48,6 +48,26 @@ int psb_mmu_insert_pages(struct psb_mmu_pd *pd,struct page **pages,unsigned long
  }
  return 0;
 }
+#define CONFIG_X86 1
+static unsigned cache_lines,barriers;
+static unsigned cache_stride=64,cache_seen[16][1024];
+static struct page *last_cache_page;
+static void mb(void){assert(active&&!maps);barriers++;}
+static void psb_clflush(void *address)
+{
+ unsigned char *p=address;unsigned i;
+ assert(active&&maps==1&&barriers%2==1);
+ for(i=0;i<16;i++){
+  unsigned char *base=(unsigned char *)f.pages[i].words;
+  if((uintptr_t)p>=(uintptr_t)base&&(uintptr_t)p<(uintptr_t)base+4096){
+   unsigned offset=(unsigned)((uintptr_t)p-(uintptr_t)base);
+   assert(!(offset%cache_stride));
+   assert(!cache_seen[i][offset/4]++);
+   last_cache_page=&f.pages[i];cache_lines++;return;
+  }
+ }
+ assert(0);
+}
 #include "../remesa_mmu_private.inc"
 static void setup_owner(void)
 {
@@ -108,5 +128,43 @@ int main(void)
  CHECK(remesa_mmu_private_prepare(&f.driver,f.bindings,33,&owner)==-E2BIG);
  f.bindings[2].page_count=2;CHECK(remesa_mmu_private_prepare(&f.driver,f.bindings,3,&owner)==-ERANGE);released();
  CHECK(remesa_mmu_private_release(NULL)==-EINVAL);
+ setup_owner();CHECK(!remesa_mmu_private_prepare(&f.driver,f.bindings,3,&owner));
+ f.driver.has_clflush=1;f.driver.clflush_add=65536;
+ CHECK(!remesa_mmu_private_sync_tables(owner));
+ CHECK(cache_lines==7*64&&barriers==2&&last_cache_page==owner->pd->p);
+ CHECK(owner->pd->hw_context==-1&&live_pd&&f.driver.needs_tlbflush==71);
+ f.pages[7].words[1023]^=4;
+ CHECK(remesa_mmu_private_sync_tables(owner)==-EPERM);
+ CHECK(cache_lines==7*64&&barriers==2);
+ f.pages[7].words[1023]^=4;
+ owner->pd->hw_context=0;
+ CHECK(remesa_mmu_private_sync_tables(owner)==-EBUSY);
+ owner->pd->hw_context=-1;
+ f.driver.has_clflush=0;
+ CHECK(remesa_mmu_private_sync_tables(owner)==-EOPNOTSUPP);
+ f.driver.has_clflush=1;
+ for(unsigned i=0;i<4;i++){
+  const int invalid[]={0,65537,3072,8388608};
+  f.driver.clflush_add=invalid[i];
+  CHECK(remesa_mmu_private_sync_tables(owner)==-EOPNOTSUPP);
+ }
+ f.driver.clflush_add=65536;fail_allocation=allocations+1;
+ CHECK(remesa_mmu_private_sync_tables(owner)==-ENOMEM);
+ CHECK(remesa_mmu_private_sync_tables(NULL)==-EINVAL);
+ CHECK(cache_lines==7*64&&barriers==2);
+ /* Exercise every accepted line geometry; exact coverage, no data/default
+  * page cleaning, and root last. Each run is still unbound CPU-only. */
+ for(unsigned stride=4;stride<=4096;stride*=2){
+  cache_stride=stride;cache_lines=barriers=0;
+  memset(cache_seen,0,sizeof cache_seen);last_cache_page=NULL;
+  f.driver.clflush_add=(int)(stride*1024);
+  CHECK(!remesa_mmu_private_sync_tables(owner));
+  CHECK(cache_lines==7*(4096/stride)&&barriers==2&&last_cache_page==owner->pd->p);
+  for(unsigned page=0;page<16;page++)for(unsigned offset=0;offset<4096;offset+=4){
+   unsigned expected=(page<3||(page>=7&&page<=10))&&!(offset%stride);
+   CHECK(cache_seen[page][offset/4]==expected);
+  }
+ }
+ CHECK(!remesa_mmu_private_release(&owner));released();
  printf("PASS %u owner/auditor checks; no publication, binding or GPU operations\n",checks);
 }

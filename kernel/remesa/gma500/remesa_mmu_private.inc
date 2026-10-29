@@ -12,6 +12,47 @@ struct remesa_mmu_private {
  struct page **pages;
  u32 count,held;
 };
+#if defined(CONFIG_X86)
+static void remesa_mmu_private_sync_page(struct page *page,u32 stride)
+{
+ unsigned char *v=(void *)kmap_atomic(page);u32 offset;
+ for(offset=0;offset<PAGE_SIZE;offset+=stride)psb_clflush(v+offset);
+ kunmap_atomic(v);
+}
+#endif
+int remesa_mmu_private_sync_tables(struct remesa_mmu_private *s)
+{
+#if defined(CONFIG_X86)
+ u32 stride,i,*workspace;int ret;
+ if(!s||!s->driver||!s->pd)return -EINVAL;
+ /* Original driver stores the VA advance for one PTE cache line, not
+  * a byte count: PAGE_SIZE * CPUID_line_bytes / sizeof(u32). */
+ if(!s->driver->has_clflush||s->driver->clflush_add<=0||
+    s->driver->clflush_add%(PAGE_SIZE/sizeof(u32)))return -EOPNOTSUPP;
+ stride=s->driver->clflush_add/(PAGE_SIZE/sizeof(u32));
+ if(stride<sizeof(u32)||stride>PAGE_SIZE||(stride&(stride-1)))return -EOPNOTSUPP;
+ workspace=kvcalloc(s->held+REMESA_MMU_AUDIT_OVERHEAD_WORDS,
+                    sizeof(*workspace),GFP_KERNEL);
+ if(!workspace)return -ENOMEM;
+ ret=psb_mmu_audit_unbound_pd(s->pd,s->bindings,s->count,workspace,
+                            s->held+REMESA_MMU_AUDIT_OVERHEAD_WORDS);
+ kvfree(workspace);if(ret)return ret;
+ /* Caller exclusion spans audit and cache maintenance; no other thread
+  * may mutate/release this owner. Semaphore additionally excludes MMU writers. */
+ down_write(&s->driver->sem);
+ if(s->pd->hw_context!=-1){ret=-EBUSY;goto done_sync;}
+ mb();
+ for(i=0;i<1024;i++)if(s->pd->tables[i])
+  remesa_mmu_private_sync_page(s->pd->tables[i]->p,stride);
+ remesa_mmu_private_sync_page(s->pd->dummy_pt,stride);
+ remesa_mmu_private_sync_page(s->pd->dummy_page,stride);
+ remesa_mmu_private_sync_page(s->pd->p,stride);
+ mb();
+ done_sync:up_write(&s->driver->sem);return ret;
+#else
+ (void)s;return -EOPNOTSUPP;
+#endif
+}
 int remesa_mmu_private_release(struct remesa_mmu_private **owner)
 {
  struct remesa_mmu_private *s;u32 i;int bound;
