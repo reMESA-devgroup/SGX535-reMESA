@@ -300,6 +300,27 @@ def private_opregion_source(source):
         '\t\tsystem_opregion = NULL;')
 
 
+def private_power_sources(header, source):
+    # The retained native runtime-PM enable is disabled. Offline forced claims
+    # cannot safely restore KMS state while callers may hold modeset locks.
+    if hashlib.sha256(source.encode()).hexdigest() != '8d16ef8434418afe6a286f8f978f0ee1cc4a369874198c15311e685e581e16a6':
+        raise ValueError('unreviewed private power input')
+    header = replace_once(header, '\tbool remesa_private_fbdev_unregistered;\n',
+        '\tbool remesa_private_fbdev_unregistered;\n'
+        '\tbool remesa_private_power_transition, remesa_private_power_owner_usable;\n'
+        '\tstruct task_struct *remesa_private_power_owner;\n')
+    source = replace_once(source, '\tdev_priv->display_count = 0;\t/* Currently no users */\n',
+        '\tdev_priv->display_count = 0;\t/* Currently no users */\n'
+        '\tdev_priv->remesa_private_power_transition = false;\n'
+        '\tdev_priv->remesa_private_power_owner_usable = false;\n'
+        '\tdev_priv->remesa_private_power_owner = NULL;\n')
+    start=source.index('static void gma_suspend_display(')
+    pci_start=source.index('static void gma_suspend_pci(')
+    pci_end=source.index('\n/**',pci_start)
+    end=source.index('int psb_runtime_suspend(')
+    return header, source[:start]+source[pci_start:pci_end]+'\n#include "remesa_private_power.inc"\n\n'+source[end:]
+
+
 def private_lid_sources(header, source):
     header = '#include <linux/workqueue.h>\n'+header
     header = replace_once(header, '\tbool remesa_private_fbdev_unregistered;\n',
@@ -560,6 +581,8 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             raise ValueError('unreviewed fbdev legacy modeset input')
         result['psb_drv.h'],result['framebuffer.c'],result['gma_display.c']=private_fbdev_sources(
             result['psb_drv.h'],result['framebuffer.c'],display.decode())
+        result['psb_drv.h'],result['power.c']=private_power_sources(
+            result['psb_drv.h'],(native/'power.c').read_text())
         result['psb_drv.h'],result['psb_lid.c']=private_lid_sources(
             result['psb_drv.h'],(native/'psb_lid.c').read_text())
         for name, digest, fragment in [
@@ -610,7 +633,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_fbdev.h', 'remesa_private_fbdev_map.inc',
                      'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
                      'remesa_private_fbdev_config.inc',
-                     'remesa_private_lid.inc',
+                     'remesa_private_lid.inc', 'remesa_private_power.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
