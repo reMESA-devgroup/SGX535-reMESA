@@ -32,6 +32,23 @@ def replace_once(source, old, new):
 
 
 
+def private_mmu_flush_source(mmu):
+    """Keep original flush writes; provide an already-locked private variant."""
+    start = mmu.index('void psb_mmu_flush(struct psb_mmu_driver *driver)\n')
+    end = mmu.index('\nvoid psb_mmu_set_pd_context(', start)
+    original = mmu[start:end]
+    body = replace_once(original,
+        'void psb_mmu_flush(struct psb_mmu_driver *driver)',
+        'static void remesa_mmu_original_flush_locked(struct psb_mmu_driver *driver)')
+    body = replace_once(body, '\tdown_write(&driver->sem);\n', '')
+    body = replace_once(body, '\tup_write(&driver->sem);\n', '')
+    wrapper = ('void psb_mmu_flush(struct psb_mmu_driver *driver)\n{\n'
+               '\tdown_write(&driver->sem);\n'
+               '\tremesa_mmu_original_flush_locked(driver);\n'
+               '\tup_write(&driver->sem);\n}\n')
+    return mmu[:start] + body + '\n' + wrapper + mmu[end:]
+
+
 def private_fixed_sources(fixed, header):
     """Preserve original begin/source/retirement gates, add an owned IRQ loan."""
     fixed = replace_once(fixed,
@@ -189,6 +206,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = private_fixed_sources(
             result['gma500_fixed_backend.c'], private_header.read_text())
         result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1\n'
+        result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n'
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'

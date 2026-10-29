@@ -105,7 +105,10 @@ static void preflight_fault(u32 reg,u32 value,int expected)
  CHECK(!writes&&!s->root_active&&!s->root_uncertain);
  CHECK(s->pd->hw_context==-1&&f.def.hw_context==0);destroy(&s);
 }
-int main(void)
+#ifndef REMESA_SWITCH_TEST_MAIN
+#define REMESA_SWITCH_TEST_MAIN main
+#endif
+int REMESA_SWITCH_TEST_MAIN(void)
 {
  struct remesa_mmu_private *s=NULL;
  CHECK(remesa_mmu_private_bind_exclusive(NULL)==-EINVAL);

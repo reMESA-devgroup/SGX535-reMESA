@@ -150,3 +150,30 @@ int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *s)
  (void)s;return -EOPNOTSUPP;
 #endif
 }
+
+int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *s)
+{
+#if defined(CONFIG_X86) && defined(REMESA_PRIVATE_IRQ_HANDOFF)
+ struct drm_psb_private *dev_priv;int ret;
+ if(!s||!s->driver||!s->driver->dev||!s->pd)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
+ if(s->root_uncertain)return -EIO;
+ if(!s->root_active||!s->restore_pd)return -ENOENT;
+ if(s->driver->default_pd!=s->restore_pd||s->restore_pd->driver!=s->driver||
+    s->restore_pd->hw_context!=-1||s->pd->hw_context!=0){ret=-ESTALE;goto failed;}
+ ret=remesa_mmu_switch_quiet(s,s->private_root);if(ret)goto failed;
+ dev_priv=s->driver->dev->dev_private;
+ if(PSB_RSGX32(PSB_CR_BIF_CTRL)!=s->restore_ctrl){ret=-ESTALE;goto failed;}
+ /* Factored verbatim hardware body; original wrapper still owns its lock.
+  * Calling that wrapper here would recursively acquire the MMU semaphore. */
+ remesa_mmu_original_flush_locked(s->driver);
+ ret=remesa_mmu_switch_quiet(s,s->private_root);
+ if(ret||PSB_RSGX32(PSB_CR_BIF_CTRL)!=s->restore_ctrl){ret=-EIO;goto failed;}
+ return 0;
+ failed:s->root_uncertain=1;return ret;
+#else
+ (void)s;return -EOPNOTSUPP;
+#endif
+}

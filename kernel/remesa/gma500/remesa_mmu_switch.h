@@ -20,4 +20,12 @@ struct remesa_mmu_private;
  */
 int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *);
 int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *);
+/* Private integration profile only. Caller ALREADY holds driver->sem for
+ * writing plus the retained device/producer/IRQ/power contract. For the
+ * pre-issue DEVICE_MAINTAIN stage, corroborates the exact bound private root,
+ * calls the original driver cache-maintenance body WITHOUT reacquiring sem,
+ * then checks unchanged root/control/identity. No PTE data or flags are guessed.
+ * Failure retains the active owner and marks uncertainty. No GPU completion,
+ * default restore, command issue, ACK, reset or permission is produced. */
+int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *);
 #endif
