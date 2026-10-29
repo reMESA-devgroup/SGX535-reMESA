@@ -288,6 +288,16 @@ def private_entry_sources(driver, memory):
     return driver, memory[:start]+fault+memory[end:]
 
 
+def private_opregion_source(source):
+    # ACPI uses a blocking notifier chain on this target. Unregister joins
+    # its readers; keep the callback's global owner valid until that join.
+    return replace_once(source,
+        '\t\tsystem_opregion = NULL;\n\t\tunregister_acpi_notifier(&psb_intel_opregion_notifier);',
+        '\t\tunregister_acpi_notifier(&psb_intel_opregion_notifier);\n'
+        '\t\t/* No notifier reader remains after unregister returns. */\n'
+        '\t\tsystem_opregion = NULL;')
+
+
 def private_file_lost_sources(memory):
     memory = replace_once(memory,
         ' int (*pds_write_guard)(u64,const void *,unsigned);\n',
@@ -527,6 +537,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
         result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
             result['psb_drv.c'], result['remesa_gem_memory.c'])
+        result['opregion.c'] = private_opregion_source((native/'opregion.c').read_text())
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
         result.update(private_gem_lifetime_sources(native))
         display=(native/'gma_display.c').read_bytes()
