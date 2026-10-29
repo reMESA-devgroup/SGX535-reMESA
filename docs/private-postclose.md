@@ -40,6 +40,12 @@ protect those earlier standard GEM destructor calls. Other KMS/console/PM paths
 also retain their own lifetime requirements. No reset, forced retirement, or
 wholesale deferred unload has been substituted for that missing protocol.
 
+The [standard GEM counterexample](private-gem-removal-counterexample.md) now
+reproduces both an unjoined destructor started before unplug and a destructor
+started after removal, using actual GEM/GTT-free/remove bodies. This supplies
+an executable regression target for the missing destruction protocol, not a
+physical safety pass.
+
 ## Evidence
 
 All evidence is CPU-only; there was no device access or Mini 12 change.
