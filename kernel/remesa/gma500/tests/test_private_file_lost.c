@@ -11,7 +11,8 @@
 #include "remesa_private_file_lost.h"
 #define OBJECTS 32
 #define THIS_MODULE NULL
-enum {REMESA_JOB_PREPARED=1,REMESA_JOB_QUARANTINED=9,STREAM_QUARANTINED=7};
+enum {REMESA_JOB_PREPARED=1,REMESA_JOB_QUARANTINED=9,
+ STREAM_IDLE=1,STREAM_STAGING=2,STREAM_ISSUED=3,STREAM_QUARANTINED=5};
 struct drm_device {unsigned id;};struct drm_file {unsigned id;};
 struct mutex {unsigned rank;bool held;};
 static unsigned rank,cleanup_calls,source_poison_calls,prior_rank[4];
@@ -60,6 +61,18 @@ static void drm_dev_put(struct drm_device *d){(void)d;cleanup_calls++;}
 static void module_put(void *m){(void)m;cleanup_calls++;}
 static void kfree(void *p){(void)p;cleanup_calls++;}
 #include "memory_close_actual.inc"
+static int native_close_error;
+static unsigned native_closes,native_quarantines;
+static int modeled_close(void *who)
+{assert(who==&stream&&rank==1);native_closes++;if(native_close_error)return native_close_error;
+ assert(!stream.op);stream.claimed=false;stream.memory=NULL;return 0;}
+static void modeled_quarantine(void *who)
+{assert(who==&stream&&rank==1);native_quarantines++;stream.quarantined=true;remesa_stream_source_poison(who);}
+static void remesa_gem_memory_postclose(struct drm_device *d,struct drm_file *f)
+{assert(!rank);if(endpoint&&endpoint->dev==d&&endpoint->file==f){
+ if(!native_close_error&&!stream.claimed)endpoint=NULL;else endpoint->file=NULL;
+}}
+#include "native_postclose_actual.inc"
 static int forbidden_close(void *p){(void)p;assert(0);return -EIO;}
 static void forbidden_quarantine(void *p){(void)p;assert(0);}
 static struct drm_device dev={1},otherdev={2};
@@ -70,6 +83,7 @@ static void fixture(bool resources)
 {
  assert(!rank&&!stream_lock.held&&!endpoint_lock.held);
  cleanup_calls=source_poison_calls=0;permanently_quarantined=false;
+ native_close_error=0;native_closes=native_quarantines=0;
  memory=(struct remesa_gem_memory){.dev=&dev,.file=&file,.lock={3,false},
   .device_refs=1,.module_refs=1,.power_refs=1};
  if(resources){
@@ -142,5 +156,28 @@ int main(void)
  fixture(false);stream.claimed=false;
  remesa_private_stream_device_lost(&dev);
  assert(!source_poison_calls&&!stream.quarantined&&!stream.file);
+ /* Native postclose retains file identities on an issued/quarantined stream.
+  * The actual follow-up helper removes them without releasing ownership. */
+ fixture(true);bridge.state=STREAM_ISSUED;bridge.ops.close=modeled_close;bridge.ops.quarantine=modeled_quarantine;
+ remesa_stream_postclose(&dev,&file);
+ assert(owner==&file&&owner_device==&dev&&stream.file==&file&&!memory.file);
+ assert(native_quarantines==1&&!native_closes&&permanently_quarantined&&!cleanup_calls);
+ remesa_private_stream_file_lost(&dev,&file);
+ assert(!owner&&!owner_device&&!stream.file&&stream.claimed&&stream.quarantined);
+ assert(memory.device_refs==1&&memory.module_refs==1&&memory.power_refs==1&&!cleanup_calls);
+ /* A failed close from IDLE must retain backing and drop file identities too. */
+ fixture(true);bridge.state=STREAM_IDLE;bridge.ops.close=modeled_close;bridge.ops.quarantine=modeled_quarantine;native_close_error=-EIO;
+ remesa_stream_postclose(&dev,&file);
+ assert(native_closes==1&&native_quarantines==1&&owner==&file&&stream.file==&file&&!memory.file);
+ remesa_private_stream_file_lost(&dev,&file);
+ assert(active==&bridge&&!owner&&!owner_device&&!stream.file&&stream.claimed&&stream.quarantined);
+ assert(memory.device_refs==1&&memory.module_refs==1&&memory.power_refs==1&&!cleanup_calls);
+ /* A successful native close leaves only stale trusted metadata. Clearing
+  * that identity must not poison or quarantine a released source. */
+ fixture(false);bridge.state=STREAM_IDLE;bridge.ops.close=modeled_close;bridge.ops.quarantine=modeled_quarantine;stream.op=NULL;
+ remesa_stream_postclose(&dev,&file);
+ assert(!active&&!owner&&!owner_device&&!endpoint&&!stream.claimed&&stream.file==&file);
+ remesa_private_stream_file_lost(&dev,&file);
+ assert(!stream.file&&!stream.quarantined&&!source_poison_calls&&!native_quarantines&&native_closes==1);
  puts("PASS actual file-lost fragments retain handles/views/refs/cookies, clear file identities, quarantine without backend/cleanup callbacks, deny late close even empty endpoint; mutex/backing modeled, GPU0");
 }

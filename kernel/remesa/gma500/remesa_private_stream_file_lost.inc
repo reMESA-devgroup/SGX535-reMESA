@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Only software quarantine and identity removal after unplug. Deliberately
+/* Only software quarantine and identity removal after postclose or unplug. Deliberately
  * bypass ops.close/ops.quarantine, whose callbacks may depend on live hardware. */
 #include "remesa_private_file_lost.h"
 void remesa_private_stream_file_lost(struct drm_device *dev,struct drm_file *file)

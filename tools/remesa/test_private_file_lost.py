@@ -18,6 +18,7 @@ def main():
     output=a.output.resolve();output.mkdir(parents=True,exist_ok=False)
     source=(a.module/'remesa_gem_memory.c').read_text()
     (output/'memory_close_actual.inc').write_text(extract(source,'remesa_gem_memory_close'))
+    (output/'native_postclose_actual.inc').write_text(extract((a.module/'remesa_stream_bridge.c').read_text(),'remesa_stream_postclose'))
     test=root/'kernel/remesa/gma500/tests/test_private_file_lost.c';rows=[]
     def limits():
         resource.setrlimit(resource.RLIMIT_CORE,(0,0))
@@ -30,11 +31,11 @@ def main():
             (output/(label+'.log')).write_text(r.stdout+r.stderr)
             rows.append(dict(label=label,argv=argv,exit=r.returncode))
             if r.returncode or r.stderr:raise RuntimeError(label+': '+r.stderr)
-    files=[test,a.module/'remesa_gem_memory.c']+[a.module/n for n in
+    files=[test,a.module/'remesa_gem_memory.c',a.module/'remesa_stream_bridge.c']+[a.module/n for n in
           ('remesa_private_file_lost.h','remesa_private_trusted_file_lost.inc',
            'remesa_private_stream_file_lost.inc','remesa_private_memory_file_lost.inc')]
     report=dict(status='PRIVATE_FILE_LOST_RETENTION_MODEL_PASS',GPU_operations=0,
-        scope='Actual orphan helpers and memory close; mutex/backing/source-poison APIs modeled',
+        scope='Actual orphan helpers, native bridge postclose and memory close; mutex/backing/source-poison/native callbacks/memory-postclose modeled',
         sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},commands=rows)
     (output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(dict(status=report['status'],GPU_operations=0)))

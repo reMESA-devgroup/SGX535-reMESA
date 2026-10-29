@@ -11,6 +11,9 @@ static void remesa_private_postclose(struct drm_device *dev,struct drm_file *fil
   remesa_private_stream_file_lost(dev,file);return;
  }
  remesa_stream_postclose(dev,file);
+ /* Native cleanup can retain a quarantined stream. Never retain its dying
+  * drm_file identity after returning to drm_file_free. */
+ remesa_private_stream_file_lost(dev,file);
  drm_dev_exit(index);
 }
 static void remesa_private_lastclose(struct drm_device *dev)

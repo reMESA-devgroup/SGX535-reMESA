@@ -26,6 +26,7 @@ struct backing {struct remesa_gem_memory *memory;struct page **pages;};
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t change=PTHREAD_COND_INITIALIZER;
 static unsigned readers,calls,teardowns,dev_puts,unregisters,inserts,orphans,device_orphans;
+static unsigned live_orphans;static bool native_postclose_finished;
 static bool block_call,call_started,release_call,remove_done;
 static _Thread_local unsigned entries;
 static bool drm_dev_enter(struct drm_device *dev,int *index)
@@ -58,11 +59,12 @@ static int remesa_gem_color_mmap(struct file *file,struct vm_area_struct *vma)
 static vm_fault_t psb_gem_fault(struct vm_fault *fault)
 {assert(fault&&fault->vma);return (vm_fault_t)backend_call();}
 static void remesa_stream_postclose(struct drm_device *dev,struct drm_file *file)
-{assert(dev&&file);(void)backend_call();}
+{assert(dev&&file);(void)backend_call();native_postclose_finished=true;}
 static void drm_fb_helper_lastclose(struct drm_device *dev)
 {assert(dev);(void)backend_call();}
 void remesa_private_stream_file_lost(struct drm_device *dev,struct drm_file *file)
-{assert(dev&&file&&dev->unplugged&&!entries);orphans++;}
+{assert(dev&&file);if(entries){assert(native_postclose_finished);native_postclose_finished=false;live_orphans++;}
+ else {assert(dev->unplugged);orphans++;}}
 void remesa_private_stream_device_lost(struct drm_device *dev)
 {assert(dev&&dev->unplugged&&!entries&&!teardowns&&!readers);device_orphans++;}
 static void *pci_get_drvdata(struct pci_dev *pci){return pci->data;}
@@ -95,6 +97,7 @@ static void fixture(void)
 {
  assert(!entries&&!readers);device.unplugged=false;
  calls=teardowns=dev_puts=unregisters=inserts=orphans=device_orphans=0;
+ live_orphans=0;native_postclose_finished=false;
  block_call=call_started=release_call=remove_done=false;
 }
 static void *ioctl_worker(void *unused)
@@ -144,7 +147,7 @@ int main(void)
 {
  scenario(true);scenario(false);fixture();
  remesa_private_postclose(&device,&drm_file);
- remesa_private_lastclose(&device);assert(calls==2&&!orphans&&!readers);
+ remesa_private_lastclose(&device);assert(calls==2&&!orphans&&!readers&&live_orphans==1&&!native_postclose_finished);
  struct drm_gem_object object={&device};struct vm_area_struct vma={&object};struct vm_fault vmf={&vma,0,0,0};
  assert(remesa_private_mmap(&file,&vma)==1234);
  assert(remesa_private_gem_fault(&vmf)==1234);

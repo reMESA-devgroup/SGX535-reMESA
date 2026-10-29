@@ -3,7 +3,7 @@
 #define REMESA_PRIVATE_FILE_LOST_H
 #include <linux/types.h>
 struct drm_device;struct drm_file;
-/* Internal post-unplug orphaning, never a release/retirement receipt.
+/* Internal postclose/post-unplug orphaning, never a release/retirement receipt.
  * Stream bridge holds stream_lock while calling the trusted helper; it drops
  * that lock before endpoint_lock -> memory lock. No hardware callback runs. */
 void remesa_private_stream_file_lost(struct drm_device *,struct drm_file *);

@@ -6,8 +6,9 @@ void remesa_private_trusted_file_lost(struct drm_device *dev,struct drm_file *fi
 {
  if(!dev||!file)return;
  if(stream.dev==dev&&stream.file==file){
-  stream.file=NULL;stream.quarantined=true;
-  remesa_stream_source_poison(&stream);
+  stream.file=NULL;
+  /* A successful native close already released the source/stream lease. */
+  if(stream.claimed){stream.quarantined=true;remesa_stream_source_poison(&stream);}
  }
 }
 void remesa_private_trusted_device_lost(struct drm_device *dev)
