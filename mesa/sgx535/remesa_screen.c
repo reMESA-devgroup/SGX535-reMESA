@@ -39,17 +39,30 @@ struct screen {
  remesa_copy_region_fn native_copy;
  remesa_fill_region_fn native_fill;
 };
-static void screen_hold(struct screen *sc) { ++sc->refs; }
+static void screen_hold(struct screen *sc)
+{ __atomic_add_fetch(&sc->refs,1,__ATOMIC_RELAXED); }
 static void screen_drop(struct screen *sc)
 {
- if(!--sc->refs) {
+ if(!__atomic_sub_fetch(&sc->refs,1,__ATOMIC_ACQ_REL)) {
   int error=sc->release_device ? sc->release_device(&sc->device) : 0;
   if(error) {
    /* Backend still owns pending/quarantined resources. Retain the owner. */
-   sc->refs=1;sc->release_pending=true;sc->release_error=error;return;
+   __atomic_store_n(&sc->refs,1,__ATOMIC_RELEASE);
+   sc->release_pending=true;sc->release_error=error;return;
   }
   free(sc);
  }
+}
+/* Screen-wide identities must remain unique across independent contexts.
+ * Saturation refuses allocation rather than reusing an old pass identity. */
+static bool screen_next_resource_cookie(struct screen *sc,uint64_t *cookie)
+{
+ uint64_t previous=__atomic_load_n(&sc->resource_cookie,__ATOMIC_RELAXED);
+ do {
+  if(previous==UINT64_MAX)return false;
+ }while(!__atomic_compare_exchange_n(&sc->resource_cookie,&previous,previous+1,
+                                   true,__ATOMIC_RELAXED,__ATOMIC_RELAXED));
+ *cookie=previous+1;return true;
 }
 struct resource {
  struct pipe_resource base; void *bo; size_t bytes; unsigned maps;unsigned stride;
@@ -203,7 +216,7 @@ static bool format(struct pipe_screen *p,enum pipe_format f,enum pipe_texture_ta
 }
 static struct pipe_resource *create_resource(struct pipe_screen *p,const struct pipe_resource *t)
 {
- struct resource *b;size_t bytes;unsigned stride=0;struct remesa_texture_layout layout={0};
+ struct resource *b;size_t bytes;uint64_t cookie;unsigned stride=0;struct remesa_texture_layout layout={0};
  if(s(p)->closing || !t || !format(p,t->format,t->target,t->nr_samples,t->nr_storage_samples,t->bind) ||
     t->array_size!=1 || t->depth0!=1 ||
     (t->flags&~PIPE_RESOURCE_FLAG_SINGLE_THREAD_USE) ||
@@ -228,9 +241,9 @@ static struct pipe_resource *create_resource(struct pipe_screen *p,const struct 
   if(remesa_texture_layout(&limits,t->width0,t->height0,4,t->last_level,&layout))return NULL;
   bytes=layout.bytes;stride=layout.levels[0].stride;
  }
- if(s(p)->resource_cookie==UINT64_MAX)return NULL;
  b=calloc(1,sizeof(*b));if(!b) return NULL;b->base=*t;b->base.screen=p;
- remesa_render_pass_init(&b->pass,++s(p)->resource_cookie);
+ if(!screen_next_resource_cookie(s(p),&cookie)){free(b);return NULL;}
+ remesa_render_pass_init(&b->pass,cookie);
  b->base.reference.count=1;b->bytes=bytes;b->stride=stride;b->layout=layout;
  if(s(p)->device.ops->allocate(s(p)->device.priv,bytes,&b->bo) || !b->bo) {
   if(b->bo) s(p)->device.ops->destroy_bo(s(p)->device.priv,b->bo);
@@ -2034,7 +2047,7 @@ int remesa_screen_collect(struct pipe_screen *p)
 {
  struct screen *sc;
  if(!p || p->destroy!=destroy_screen) return EINVAL;
- sc=s(p);if(!sc->closing || !sc->release_pending || sc->refs!=1) return EBUSY;
+ sc=s(p);if(!sc->closing || !sc->release_pending || __atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1) return EBUSY;
  if(sc->release_error!=EBUSY && sc->release_error!=EAGAIN) return sc->release_error;
  /* Only backend collection/release may retry. No draw can be redispatched. */
  int error=sc->release_device(&sc->device);
@@ -2056,7 +2069,8 @@ int remesa_screen_enable_gears_runtime(struct pipe_screen *p)
  struct screen *sc=s(p);const struct remesa_gears_runtime_ops *ops=sc->device.gears_runtime;
  if(!ops||!ops->queue||!ops->flush||!ops->cancel||sc->device.resource_only_backend||
     sc->device.retained_fragment_carrier||sc->device.offline_test_backend==sc->device.qualified_hardware_backend)return ENOTSUP;
- if(sc->closing||sc->refs!=1||sc->resource_cookie)return EBUSY;
+ if(sc->closing||__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||
+    __atomic_load_n(&sc->resource_cookie,__ATOMIC_RELAXED))return EBUSY;
  sc->gears_runtime=true;sc->cpu_depth24_lab=true;set_capabilities(sc);return 0;
 #else
  (void)p;return ENOTSUP;
@@ -2067,7 +2081,8 @@ int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *p)
  if(!p||p->destroy!=destroy_screen)return EINVAL;
  struct screen *sc=s(p);
  if(!sc->device.offline_test_backend||sc->device.qualified_hardware_backend||sc->device.resource_only_backend)return ENOTSUP;
- if(sc->closing||sc->refs!=1||sc->resource_cookie)return EBUSY;
+ if(sc->closing||__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||
+    __atomic_load_n(&sc->resource_cookie,__ATOMIC_RELAXED))return EBUSY;
  sc->cpu_depth24_lab=true;set_capabilities(sc);return 0;
 }
 int remesa_resource_wait_writer(struct pipe_context *ctx,struct pipe_resource *res,uint64_t timeout)
@@ -2109,7 +2124,7 @@ uint64_t remesa_context_cpu_clear_count(const struct pipe_context *p) { return p
 int remesa_screen_enable_native_fill(struct pipe_screen *p,remesa_fill_region_fn fn)
 {
  if(!p||p->context_create!=create_context||!fn)return EINVAL;
- struct screen *sc=s(p);if(sc->closing||sc->refs!=1||sc->native_fill)return EBUSY;
+ struct screen *sc=s(p);if(sc->closing||__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||sc->native_fill)return EBUSY;
  sc->native_fill=fn;return 0;
 }
 uint64_t remesa_context_native_fill_count(const struct pipe_context *p)
@@ -2117,7 +2132,7 @@ uint64_t remesa_context_native_fill_count(const struct pipe_context *p)
 int remesa_screen_enable_native_copy(struct pipe_screen *p,remesa_copy_region_fn fn)
 {
  if(!p||p->context_create!=create_context||!fn)return EINVAL;
- struct screen *sc=s(p);if(sc->closing||sc->refs!=1||sc->native_copy)return EBUSY;
+ struct screen *sc=s(p);if(sc->closing||__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||sc->native_copy)return EBUSY;
  sc->native_copy=fn;return 0;
 }
 uint64_t remesa_context_native_copy_count(const struct pipe_context *p)

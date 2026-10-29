@@ -19,6 +19,7 @@ class Transport:
         self.calls = []
         self.objects = {}
         self.probed = False
+        self.context = None
 
     def ioctl(self, fd, number, packet, mutate):
         assert fd == 123 and mutate is True
@@ -26,6 +27,7 @@ class Transport:
             self.probed = True
             self.calls.append(("probe", 0))
             q = list(p.PROBE.unpack(packet))
+            assert q[2] == self.context
             q[15:] = [1, 1, 0x01130000, 0x00010201, 9, 7, 0, 0, 15, 0]
             fields = {"cookie": 16, "core": 17, "revision": 18, "phase": 19,
                       "ledger": 20, "retained": 22, "stages": 23, "reserved": 24}
@@ -36,11 +38,19 @@ class Transport:
             if self.fault == "ioctl_error":
                 raise OSError(errno.EIO, "modeled uncertain execution")
             packet[:] = p.PROBE.pack(*q)
-            return 0
+            return 1 if self.fault == "probe_return" else 0
         assert number == p.ioctl_number(2, p.MEMORY.size)
         q = list(p.MEMORY.unpack(packet))
         version, action, rid, flags, context, size, va, at, n, reserved, data = q
-        assert version == 1 and context and reserved == 0
+        assert version == 1 and reserved == 0
+        if action == p.OPEN:
+            assert context == 0
+            assert not any(q[i] for i in (2, 3, 5, 6, 7, 8)) and not any(data)
+            assert self.context is None
+            self.context = 0x123456789abcdef
+            q[4] = self.context if self.fault != "open_no_context" else 0
+        else:
+            assert context == self.context
         self.calls.append((action, rid))
         if action == p.CREATE:
             rid = len(self.objects) + 32
@@ -126,7 +136,7 @@ class ProbeClient(unittest.TestCase):
     def test_uncertain_responses_never_send_free_or_close(self):
         for fault in ("cookie", "core", "revision", "phase", "ledger", "retained",
                       "stages", "reserved", "immutable", "ioctl_error",
-                      "provider_job", "provider_quarantine", "mapping"):
+                      "provider_job", "provider_quarantine", "mapping", "probe_return"):
             with self.subTest(fault=fault):
                 with self.assertRaises((ValueError, RuntimeError, OSError)):
                     self.collect(fault)
@@ -158,16 +168,44 @@ class ProbeClient(unittest.TestCase):
         self.assertEqual(report["memory_cleanup"], "failed")
         self.assertNotIn((p.CLOSE, 0), self.transport.calls)
 
+    def test_open_requires_server_context_and_never_allocates_without_it(self):
+        with self.assertRaisesRegex(RuntimeError, "ownership"):
+            self.collect("open_no_context")
+        self.assertEqual(self.transport.calls, [(p.OPEN, 0)])
+        self.assertFalse(self.transport.probed)
+        report = json.loads((self.output / "RESULT.json").read_text())
+        self.assertEqual(report["status"], "FAILED")
+
+    def test_bad_memory_envelope_stops_all_subsequent_ioctls(self):
+        for field in range(11):
+            with self.subTest(field=field):
+                m = p.Memory(123, 77)
+                def corrupt(fd, number, packet, mutate):
+                    q = list(p.MEMORY.unpack(packet))
+                    q[field] = bytes([1])+q[field][1:] if field == 10 else q[field]^1
+                    packet[:] = p.MEMORY.pack(*q)
+                    return 0
+                with patch.object(p.fcntl, "ioctl", side_effect=corrupt) as call:
+                    with self.assertRaisesRegex(RuntimeError, "ownership"):
+                        m.request(p.SYNC, 32)
+                    self.assertTrue(m.poisoned)
+                    with self.assertRaises(RuntimeError):m.request(p.CLOSE)
+                    self.assertEqual(call.call_count, 1)
+        with patch.object(p.fcntl, "ioctl", return_value=1):
+            with self.assertRaisesRegex(RuntimeError, "ownership"):
+                p.Memory(123, 77).request(p.SYNC, 32)
+
     def test_upload_and_read_use_lease_chunk_bounds_and_sync(self):
         transport = Transport()
         with patch.object(p.fcntl, "ioctl", side_effect=transport.ioctl):
-            m = p.Memory(123, 7)
+            m = p.Memory(123, 0)
+            m.context = m.request(p.OPEN)[4]
             rid = m.request(p.CREATE, size=8192)[2]
             data = bytes(range(256))*32
             m.upload(rid, data)
             self.assertEqual(m.read(rid, len(data)), data)
         self.assertEqual([a for a, _ in transport.calls],
-                         [p.CREATE, p.LEASE, p.WRITE, p.WRITE, p.UNLEASE, p.SYNC,
+                         [p.OPEN, p.CREATE, p.LEASE, p.WRITE, p.WRITE, p.UNLEASE, p.SYNC,
                           p.LEASE, p.READ, p.READ, p.UNLEASE])
 
     def test_offline_default_never_opens_device(self):

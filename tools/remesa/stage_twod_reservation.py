@@ -10,7 +10,6 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import shutil
 
 PINNED = {
     'accel_2d.c': '2de5bef67e6813fa2f238a1792fab42bd5dbf8942273ba5a462bc24e3e7a5b7e',
@@ -128,7 +127,19 @@ def private_fixed_sources(fixed, header):
         '    unsigned long deadline;\n'
         '    /* Private integration only; views copied, backing remains loan-owned. */\n'
         '    struct remesa_gem_private *private_loan;\n'
-        '    struct remesa_memory_view private_views[SGX535_BO_COUNT];\n')
+        '    struct remesa_memory_view private_views[SGX535_BO_COUNT];\n'
+        '    bool prefire_load_active; /* fixed_irq_lock, not last_stage */\n')
+    fixed = replace_once(fixed,
+        '        ret = fixed_actions(backend, payload, expected, 29);\n',
+        '        {\n'
+        '            unsigned long flags = sgx535_gma500_fixed_irq_lock();\n'
+        '            backend->prefire_load_active = true;\n'
+        '            sgx535_gma500_fixed_irq_unlock(flags);\n'
+        '            ret = fixed_actions(backend, payload, expected, 29);\n'
+        '            flags = sgx535_gma500_fixed_irq_lock();\n'
+        '            backend->prefire_load_active = false;\n'
+        '            sgx535_gma500_fixed_irq_unlock(flags);\n'
+        '        }\n')
     header = replace_once(header, '\n#endif\n',
         '\n/* Caller holds endpoint mutex THEN MMU write semaphore throughout all\n'
         ' * stages and retains whole-device exclusion through retirement/restore.\n'
@@ -158,6 +169,29 @@ def private_fixed_sources(fixed, header):
         '    memset(backend->private_views, 0, sizeof(backend->private_views));\n'
         '    return 0;\n}')
     return fixed, header
+
+
+def private_stream_source(source):
+    source = replace_once(source, '#endif\nstatic DEFINE_SPINLOCK(source_lock);',
+        '#endif\n#include "remesa_private_prefire_irq.h"\nstatic DEFINE_SPINLOCK(source_lock);')
+    source = replace_once(source, ' else if(lease&&pending) {\n',
+        ' else if(lease&&(pending||(a&(1U<<27)))) {\n')
+    return replace_once(source,
+        '  if(operation->finished || operation->evidence.state>=SGX535_CAP_TERMINAL)lost();\n',
+        '  if(operation->finished || operation->evidence.state>=SGX535_CAP_TERMINAL)lost();\n'
+        '  /* IRQ capture owns fixed_irq_lock; preserve unexpected prefire\n'
+        '   * events before the existing IRQ path acknowledges the status. */\n'
+        '  if(!operation->backend->fire_possible &&\n'
+        '     remesa_private_prefire_unexpected(a,d,operation->backend->prefire_load_active))lost();\n')
+
+
+def trap_gem_unmap_source(source):
+    # Retained native psb_driver_load constructs the default PD with trap=1:
+    # an invalid PTE returns -EINVAL. Any successful lookup after removal,
+    # including a foreign PFN, must retain the VA/backing instead of freeing it.
+    return replace_once(source,
+        '   if((e && e!=-EINVAL) || (!e && pfn==page_to_pfn(b->pages[page]))) {b->quarantine=true;return -EIO;}\n',
+        '   if(e!=-EINVAL) {b->quarantine=true;return -EIO;}\n')
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
@@ -219,7 +253,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
     fixed = replace_once(fixed, '    if (fixed_irq_owner) {\n',
         '    if (fixed_irq_owner || remesa_twod_irq_busy_locked()) {\n')
     mmu = (native / 'mmu.c').read_text() + '\n#include "remesa_mmu_verify_access.inc"\n#include "remesa_mmu_default_root.inc"\n'
-    gem = (native / 'remesa_gem_memory.c').read_text() + '\n#include "remesa_twod.c"\n#include "remesa_gem_twod.inc"\n#include "remesa_gem_twod_job.inc"\n#ifdef REMESA_TWOD_LAB_IOCTL\n#include "remesa_twod_lab.inc"\n#endif\n#ifdef REMESA_TWOD_COPY_IOCTL\n#include "remesa_twod_copy.inc"\n#endif\n'
+    gem = trap_gem_unmap_source((native / 'remesa_gem_memory.c').read_text()) + '\n#include "remesa_twod.c"\n#include "remesa_gem_twod.inc"\n#include "remesa_gem_twod_job.inc"\n#ifdef REMESA_TWOD_LAB_IOCTL\n#include "remesa_twod_lab.inc"\n#endif\n#ifdef REMESA_TWOD_COPY_IOCTL\n#include "remesa_twod_copy.inc"\n#endif\n'
     driver = replace_once((native / 'psb_drv.c').read_text(),
         '#include "remesa_retained_uapi.h"\n',
         '#include "remesa_retained_uapi.h"\n#include "remesa_twod_lab.h"\n#include "remesa_twod_lab_uapi.h"\n#include "remesa_twod_copy.h"\n#include "remesa_twod_copy_uapi.h"\n')
@@ -259,6 +293,10 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = private_fixed_sources(
             result['gma500_fixed_backend.c'], private_header.read_text())
         result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1\n'
+        source = (native / 'remesa_stream_source.c').read_text()
+        if hashlib.sha256(source.encode()).hexdigest() != '45fbe31cfdf36c96433ffaef97167477a5f7ad090fa2f5040943aa64ac600bca':
+            raise ValueError('unreviewed private stream source')
+        result['remesa_stream_source.c'] = private_stream_source(source)
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
@@ -275,6 +313,11 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
 def stage(native, output, lab=False, vendor=False, copy=False, fill=False, private=False):
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
+    # Inventory all copied sources, including files outside the patch anchors.
+    # This records provenance; only PINNED entries are approved hash anchors.
+    native_files = {source.name: source.read_bytes() for source in native.iterdir()
+                    if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
+                                             source.name in ['Makefile', 'Kconfig'])}
     patched = patched_sources(native, lab, vendor, copy, fill, private)
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
@@ -295,6 +338,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_gem_private_execute.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
+                     'remesa_private_prefire_irq.h',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
@@ -308,19 +352,23 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
         for name in ['remesa_twod_fill.h', 'remesa_twod_fill.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_twod_fill_uapi.h'] = (root / 'include/remesa/twod_fill_uapi.h').read_bytes()
+    for name, contents in native_files.items():
+        if (native / name).read_bytes() != contents:
+            raise ValueError('native input changed during staging: ' + name)
     output.mkdir(parents=True)
-    for source in native.iterdir():
-        if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
-                                 source.name in ['Makefile', 'Kconfig']):
-            shutil.copyfile(source, output / source.name)
+    for name, contents in native_files.items():
+        (output / name).write_bytes(contents)
     for name, source in patched.items():
         (output / name).write_text(source)
     for name, source in components.items():
         (output / name).write_bytes(source)
     manifest = {
         'native_source': str(native.resolve()), 'pinned_inputs': PINNED,
+        'native_input_sha256': {name: hashlib.sha256(contents).hexdigest()
+                                for name, contents in sorted(native_files.items())},
         'output_sha256': {name: hashlib.sha256((output / name).read_bytes()).hexdigest()
-                          for name in [*patched, *components]},
+                          for name in sorted(set(native_files) | set(patched) | set(components))},
+        'provenance_scope': 'All copied native and staged sources inventoried; pinned_inputs lists only approved patch anchors',
         'lab_ioctl_compiled': lab,
         'vendor_stream_lab_compiled': vendor,
         'normal_copy_compiled': copy,

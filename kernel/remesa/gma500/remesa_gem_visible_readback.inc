@@ -26,6 +26,13 @@ int remesa_gem_job_copy_visible(struct remesa_gem_memory *s,
   mapping=vmap(b->pages,b->gem.size/PAGE_SIZE,VM_MAP,PAGE_KERNEL);
   if(!mapping){e=-ENOMEM;goto done;}
  }
+ /* Publication can leave sealed reusable TA pools GPU-dirty deliberately.
+  * A diagnostic read must perform the same domain transfer as a READ lease
+  * and record CPU caching so the next GPU reuse invalidates it again. */
+ if(ta_domain(s,b)){
+  ta_for_cpu(b);
+  b->ta_cpu_cached=true;
+ }
  memcpy(out,(u8 *)mapping+(size_t)offset,bytes);
  if(!j->cpu_views[i])vunmap(mapping);
  e=0;

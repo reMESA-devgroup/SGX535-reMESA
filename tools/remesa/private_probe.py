@@ -6,6 +6,7 @@ client does not enable module parameters, install modules, reboot or present a
 frame. Physical use requires completing that driver qualification first.
 """
 import argparse
+import errno
 import fcntl
 import hashlib
 import json
@@ -60,14 +61,36 @@ def load_assets(directory):
 class Memory:
     def __init__(self, fd, context):
         self.fd, self.context = fd, context
+        self.poisoned = False
+        self.ids = set()
 
     def request(self, action, object_id=0, flags=0, size=0, va=0, offset=0, length=0, data=b""):
+        if self.poisoned:
+            raise RuntimeError("memory transport ownership is uncertain")
         if len(data) > 4096:
             raise ValueError("memory chunk exceeds ABI")
         packet = bytearray(MEMORY.pack(1, action, object_id, flags, self.context,
                                       size, va, offset, length, 0, data.ljust(4096, b"\0")))
-        fcntl.ioctl(self.fd, ioctl_number(2, MEMORY.size), packet, True)
-        return MEMORY.unpack(packet)
+        before = MEMORY.unpack(packet)
+        try:
+            result = fcntl.ioctl(self.fd, ioctl_number(2, MEMORY.size), packet, True)
+        except OSError as error:
+            if error.errno not in (errno.EINVAL, errno.ENOTTY, errno.EOPNOTSUPP,
+                                   errno.ENOENT, errno.ENOMEM, errno.ENOSPC, errno.EBUSY):
+                self.poisoned = True
+            raise
+        response = MEMORY.unpack(packet)
+        mutable = {4} if action == OPEN else {2} if action == CREATE else set()
+        if action in (READ, INFO):mutable.add(10)
+        valid = not result and all(response[i] == before[i] for i in range(11) if i not in mutable)
+        if action == OPEN:valid = valid and not self.context and bool(response[4])
+        if action == CREATE:valid = valid and bool(response[2] >> 5) and response[2] not in self.ids
+        if not valid:
+            self.poisoned = True
+            raise RuntimeError("memory ioctl response changed ownership or immutable fields")
+        if action == CREATE:self.ids.add(response[2])
+        if action == DESTROY:self.ids.discard(object_id)
+        return response
 
     def upload(self, object_id, data):
         self.request(LEASE, object_id, flags=1)
@@ -128,10 +151,15 @@ def collect(device, output, plan, images, budget):
         (output / "RESULT.json").write_text(json.dumps(report, indent=2) + "\n")
     save()
     fd = os.open(device, os.O_RDWR | os.O_CLOEXEC)
-    memory = Memory(fd, (time.time_ns() ^ os.getpid()) & ((1 << 64)-1) or 1)
+    # OPEN accepts context zero; the kernel allocates the context identifier.
+    memory = Memory(fd, 0)
     objects, opened, probe_attempted, probe_complete = [], False, False, False
     try:
-        memory.request(OPEN);opened = True
+        response = memory.request(OPEN)
+        memory.context = response[4]
+        if not memory.context:
+            raise RuntimeError("memory OPEN returned no server context")
+        opened = True
         start = time.monotonic()
         for binding in plan["bindings"]:
             object_id = memory.request(CREATE, size=binding["bytes"])[2]
@@ -158,7 +186,9 @@ def collect(device, output, plan, images, budget):
         probe_attempted = True;report["probe_ioctl_calls"] = 1;save()
         start = time.monotonic()
         try:
-            fcntl.ioctl(fd, ioctl_number(9, PROBE.size), packet, True)
+            result = fcntl.ioctl(fd, ioctl_number(9, PROBE.size), packet, True)
+            if result:
+                raise RuntimeError("private probe ioctl returned a nonzero success value")
         finally:
             (output / "RESPONSE.bin").write_bytes(packet)
             report["probe_ioctl_wall_seconds"] = time.monotonic()-start
@@ -198,7 +228,7 @@ def collect(device, output, plan, images, budget):
     finally:
         # Never send unmap/free/close ioctls after an uncertain probe response.
         # Closing the OS FD delegates retained-state handling to the driver.
-        if opened and (not probe_attempted or probe_complete):
+        if opened and not memory.poisoned and (not probe_attempted or probe_complete):
             try:
                 for obj in reversed(objects):
                     if obj["mapped"]:memory.request(UNMAP, obj["id"])
@@ -211,7 +241,8 @@ def collect(device, output, plan, images, budget):
                 report["collection_status"] = report["status"]
                 report["status"] = "FAILED"
         else:
-            report["memory_cleanup"] = "suppressed_after_uncertain_probe"
+            report["memory_cleanup"] = ("suppressed_after_uncertain_memory_response" if memory.poisoned
+                                        else "suppressed_after_uncertain_probe")
         try:
             os.close(fd)
         finally:

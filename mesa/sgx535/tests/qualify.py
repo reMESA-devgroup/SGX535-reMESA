@@ -57,7 +57,8 @@ for name, compiler, flags, prefix in variants:
         if target=='persistent':
             extra += [str(here/n) for n in ['remesa_persistent.c','remesa_shader_program.c','remesa_shader_ir.c','remesa_usse.c','remesa_pds.c','remesa_pds_structure.c','remesa_program_registers.c','remesa_fragment_body.c','remesa_shader_storage.c','remesa_nir.c']]
             extra.append(str(here.parents[1]/'common/remesa/shader_request.c'))
-        command=compiler+base+flags+sources+extra+[str(here/'tests'/source),'-o',str(exe)]
+        # Screen-wide 64-bit cookie atomics require libatomic on i486.
+        command=compiler+base+flags+sources+extra+[str(here/'tests'/source),'-o',str(exe),'-latomic']
         built=subprocess.run(command, capture_output=True, text=True, env=env)
         (a.output/(name+'-'+target+'-compile.log')).write_text(built.stdout+built.stderr)
         if built.returncode: raise SystemExit('Compile failed: '+name+' '+target)

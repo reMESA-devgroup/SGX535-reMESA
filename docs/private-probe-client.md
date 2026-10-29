@@ -19,6 +19,9 @@ and guard placement. These are LAB costs; they are not added to FAST.
 The explicitly selected execution branch, reserved for later qualification,
 checks the DRM character device's PCI identity, creates file-owned backing,
 uploads inputs under CPU leases, and submits the typed fixed-profile ioctl once.
+OPEN sends context zero and adopts the kernel-issued context. Memory replies
+must preserve their envelope except for explicitly defined output fields;
+malformed responses poison the transport and suppress further explicit cleanup.
 It checks the returned SGX core/revision, operation/cookie, retirement phase,
 lifecycle ledger, released-state flags, and restored provider ownership/mappings
 before allowing explicit cleanup. An uncertain response suppresses UNMAP, UNPIN,
@@ -35,6 +38,13 @@ Run the CPU-only client wire/cleanup tests with:
 ```sh
 python3 tools/remesa/test_private_probe.py
 ```
+
+The additional `test_private_probe_memory_contract.py` runner compiles the actual
+retained memory ioctl into a host shim and passes Python packets to it. It accepts
+`--native` (native module sources), `--shim` (compatible GEM test shim header),
+and `--output` (fresh artifact directory). Kernel GEM/MMU/PM dependencies remain
+modeled; the ioctl's context and wire validation are actual source. This caught
+an OPEN mismatch that the initial Python-only transport fixture missed.
 
 Run the actual C ioctl controller against modeled dependencies with an existing
 staged private module source directory:
