@@ -20,6 +20,17 @@ struct remesa_mmu_private;
  */
 int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *);
 int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *);
+/* Same root sequences and device/lifecycle contract, with MMU writer semaphore
+ * ALREADY held by this task. Neither routine acquires nor releases it, even on
+ * failure. Bind includes the complete audit/table cache publication under that
+ * same interval. Caller can span bind -> job -> owned retirement -> restore in
+ * one synchronous call. No lock may be carried across ioctl/task boundaries.
+ * Uncertain failure still retains roots and all original exclusion obligations.
+ * The private integration profile also retains a driver owner that defers
+ * ordinary queued flushes; that does not exclude context setters, prove
+ * retirement, or establish a complete device recovery protocol. */
+int remesa_mmu_private_bind_locked(struct remesa_mmu_private *);
+int remesa_mmu_private_restore_locked(struct remesa_mmu_private *);
 /* Private integration profile only. Caller ALREADY holds driver->sem for
  * writing plus the retained device/producer/IRQ/power contract. For the
  * pre-issue DEVICE_MAINTAIN stage, corroborates the exact bound private root,

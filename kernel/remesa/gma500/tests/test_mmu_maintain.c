@@ -16,7 +16,10 @@ static void maintain_fault(u32 reg,u32 value,int expected)
  up_write(&s->driver->sem);
  CHECK(s->root_uncertain&&s->root_active&&!cache_lines);check_retained(&s);
 }
-int main(void)
+#ifndef REMESA_MAINTAIN_TEST_MAIN
+#define REMESA_MAINTAIN_TEST_MAIN main
+#endif
+int REMESA_MAINTAIN_TEST_MAIN(void)
 {
  struct remesa_mmu_private *s=NULL;
  CHECK(!existing_switch_test_main());

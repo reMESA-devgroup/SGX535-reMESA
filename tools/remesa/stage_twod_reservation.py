@@ -32,6 +32,13 @@ def replace_once(source, old, new):
 
 
 
+def private_mmu_header_source(header):
+    return replace_once(header, '\tstruct drm_device *dev;\n};',
+        '\tstruct drm_device *dev;\n'
+        '\t/* MMU writer semaphore protects this retained root owner. */\n'
+        '\tstruct remesa_mmu_private *remesa_private_owner;\n};')
+
+
 def private_mmu_flush_source(mmu):
     """Keep original flush writes; provide an already-locked private variant."""
     start = mmu.index('void psb_mmu_flush(struct psb_mmu_driver *driver)\n')
@@ -44,9 +51,15 @@ def private_mmu_flush_source(mmu):
     body = replace_once(body, '\tup_write(&driver->sem);\n', '')
     wrapper = ('void psb_mmu_flush(struct psb_mmu_driver *driver)\n{\n'
                '\tdown_write(&driver->sem);\n'
-               '\tremesa_mmu_original_flush_locked(driver);\n'
+               '\t/* A queued default flush must not touch a retained private root. */\n'
+               '\tif (driver->remesa_private_owner)\n'
+               '\t\tatomic_set(&driver->needs_tlbflush, 1);\n'
+               '\telse\n'
+               '\t\tremesa_mmu_original_flush_locked(driver);\n'
                '\tup_write(&driver->sem);\n}\n')
-    return mmu[:start] + body + '\n' + wrapper + mmu[end:]
+    result = mmu[:start] + body + '\n' + wrapper + mmu[end:]
+    return replace_once(result, '\tdriver->dev = dev;\n',
+        '\tdriver->dev = dev;\n\tdriver->remesa_private_owner = NULL;\n')
 
 
 def private_fixed_sources(fixed, header):
@@ -243,6 +256,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             result['gma500_fixed_backend.c'], private_header.read_text())
         result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1\n'
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
+        result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n'
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'

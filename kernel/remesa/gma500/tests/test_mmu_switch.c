@@ -95,6 +95,9 @@ static void check_retained(struct remesa_mmu_private **out)
  for(unsigned i=11;i<15;i++)CHECK(references[i]==2);
  /* CPU fixture teardown ONLY, not a real unbind/reset/recovery protocol. */
  (*out)->root_active=(*out)->root_uncertain=0;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ f.driver.remesa_private_owner=NULL; /* CPU fixture teardown ONLY */
+#endif
  (*out)->pd->hw_context=-1;f.def.hw_context=0;destroy(out);
 }
 static void preflight_fault(u32 reg,u32 value,int expected)

@@ -23,11 +23,14 @@ static void remesa_mmu_private_sync_page(struct page *page,u32 stride)
  kunmap_atomic(v);
 }
 #endif
-int remesa_mmu_private_sync_tables(struct remesa_mmu_private *s)
+static int remesa_mmu_private_sync_tables_locked(struct remesa_mmu_private *s)
 {
 #if defined(CONFIG_X86)
  u32 stride,i,*workspace;int ret;
  if(!s||!s->driver||!s->pd)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
  /* Original driver stores the VA advance for one PTE cache line, not
   * a byte count: PAGE_SIZE * CPUID_line_bytes / sizeof(u32). */
  if(!s->driver->has_clflush||s->driver->clflush_add<=0||
@@ -37,12 +40,10 @@ int remesa_mmu_private_sync_tables(struct remesa_mmu_private *s)
  workspace=kvcalloc(s->held+REMESA_MMU_AUDIT_OVERHEAD_WORDS,
                     sizeof(*workspace),GFP_KERNEL);
  if(!workspace)return -ENOMEM;
- ret=psb_mmu_audit_unbound_pd(s->pd,s->bindings,s->count,workspace,
-                            s->held+REMESA_MMU_AUDIT_OVERHEAD_WORDS);
+ ret=remesa_mmu_audit_unbound(s->pd,s->bindings,s->count,workspace,
+                            s->held+REMESA_MMU_AUDIT_OVERHEAD_WORDS,1);
  kvfree(workspace);if(ret)return ret;
- /* Caller exclusion spans audit and cache maintenance; no other thread
-  * may mutate/release this owner. Semaphore additionally excludes MMU writers. */
- down_write(&s->driver->sem);
+ /* The same writer interval spans the full audit and cache maintenance. */
  if(s->pd->hw_context!=-1){ret=-EBUSY;goto done_sync;}
  mb();
  for(i=0;i<1024;i++)if(s->pd->tables[i])
@@ -51,10 +52,18 @@ int remesa_mmu_private_sync_tables(struct remesa_mmu_private *s)
  remesa_mmu_private_sync_page(s->pd->dummy_page,stride);
  remesa_mmu_private_sync_page(s->pd->p,stride);
  mb();
- done_sync:up_write(&s->driver->sem);return ret;
+ done_sync:return ret;
 #else
  (void)s;return -EOPNOTSUPP;
 #endif
+}
+int remesa_mmu_private_sync_tables(struct remesa_mmu_private *s)
+{
+ int ret;
+ if(!s||!s->driver||!s->pd)return -EINVAL;
+ down_write(&s->driver->sem);
+ ret=remesa_mmu_private_sync_tables_locked(s);
+ up_write(&s->driver->sem);return ret;
 }
 int remesa_mmu_private_release(struct remesa_mmu_private **owner)
 {
@@ -62,6 +71,9 @@ int remesa_mmu_private_release(struct remesa_mmu_private **owner)
  if(!owner)return -EINVAL;
  s=*owner;if(!s)return 0;
  if(s->root_active||s->root_uncertain)return -EBUSY;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ if(s->driver->remesa_private_owner==s)return -EBUSY;
+#endif
  if(s->pd){
   down_write(&s->driver->sem);
   bound=s->pd->hw_context!=-1;

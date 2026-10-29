@@ -17,8 +17,9 @@ static int remesa_mmu_record_pfn(u32 *pfns,u32 *n,struct page *p)
  if(pfn>0xfffffUL)return -ERANGE;
  pfns[(*n)++]=(u32)pfn;return 0;
 }
-int psb_mmu_audit_unbound_pd(struct psb_mmu_pd *pd,
- const struct remesa_mmu_allowed_binding *b,u32 count,u32 *workspace,u32 words)
+static int remesa_mmu_audit_unbound(struct psb_mmu_pd *pd,
+ const struct remesa_mmu_allowed_binding *b,u32 count,u32 *workspace,u32 words,
+ int already_locked)
 {
  struct psb_mmu_driver *driver;struct psb_mmu_pd *def;
  struct psb_mmu_pt *pt;u32 *v,*pfns;
@@ -45,7 +46,10 @@ int psb_mmu_audit_unbound_pd(struct psb_mmu_pd *pd,
  /* Exclusive semaphore gives ONE coherent CPU tree snapshot. Other MMU
   * writers take its read side; per-PT spinlocks alone would permit races
   * between tables. No allocation, clflush, MMIO or spin-held sorting here. */
- down_write(&driver->sem);
+ if(!already_locked)down_write(&driver->sem);
+#ifdef __KERNEL__
+ else lockdep_assert_held_write(&driver->sem);
+#endif
  def=driver->default_pd;
  if(!def||!def->p||!def->tables){ret=-EINVAL;goto done;}
  if(pd==def||pd->invalid_pde||pd->invalid_pte||pd->pd_mask!=PSB_PTE_VALID){ret=-EPERM;goto done;}
@@ -95,5 +99,8 @@ int psb_mmu_audit_unbound_pd(struct psb_mmu_pd *pd,
  if(found!=total){ret=-EINVAL;goto done;}
  sort(pfns,n,sizeof(*pfns),remesa_mmu_pfn_compare,NULL);
  for(i=1;i<n;i++)if(pfns[i-1]==pfns[i]){ret=-EPERM;break;}
- done:up_write(&driver->sem);return ret;
+ done:if(!already_locked)up_write(&driver->sem);return ret;
 }
+int psb_mmu_audit_unbound_pd(struct psb_mmu_pd *pd,
+ const struct remesa_mmu_allowed_binding *b,u32 count,u32 *workspace,u32 words)
+{return remesa_mmu_audit_unbound(pd,b,count,workspace,words,0);}

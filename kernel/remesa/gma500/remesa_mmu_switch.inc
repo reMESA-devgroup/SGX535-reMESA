@@ -86,15 +86,20 @@ static int remesa_mmu_sync_restore(struct remesa_mmu_private *s)
  return 0;
 }
 #endif
-int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *s)
+int remesa_mmu_private_bind_locked(struct remesa_mmu_private *s)
 {
 #if defined(CONFIG_X86)
  struct psb_mmu_pd *def;struct drm_psb_private *dev_priv;
  u32 root,restore;int ret;
  if(!s||!s->driver||!s->driver->dev||!s->pd)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
  if(s->root_active||s->root_uncertain)return -EBUSY;
- ret=remesa_mmu_private_sync_tables(s);if(ret)return ret;
- down_write(&s->driver->sem);
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ if(s->driver->remesa_private_owner)return -EBUSY;
+#endif
+ ret=remesa_mmu_private_sync_tables_locked(s);if(ret)return ret;
  def=s->driver->default_pd;
  if(!def||def==s->pd||def->driver!=s->driver||def->hw_context!=0||
     s->pd->hw_context!=-1||atomic_read(&s->driver->needs_tlbflush)){
@@ -109,25 +114,33 @@ int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *s)
  s->restore_ctrl=PSB_RSGX32(PSB_CR_BIF_CTRL);
  /* Retention is established BEFORE the first possibly effective MMIO write. */
  s->root_active=1;s->pd->hw_context=0;def->hw_context=-1;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ s->driver->remesa_private_owner=s;
+#endif
  PSB_WSGX32(root,PSB_CR_BIF_DIR_LIST_BASE0);wmb();
  psb_mmu_flush_pd_locked(s->driver,1);
  ret=remesa_mmu_switch_quiet(s,root);
  if(ret||PSB_RSGX32(PSB_CR_BIF_CTRL)!=s->restore_ctrl){
   s->root_uncertain=1;ret=-EIO;
  }
- bind_done:up_write(&s->driver->sem);return ret;
+ bind_done:return ret;
 #else
  (void)s;return -EOPNOTSUPP;
 #endif
 }
-int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *s)
+int remesa_mmu_private_restore_locked(struct remesa_mmu_private *s)
 {
 #if defined(CONFIG_X86)
  struct drm_psb_private *dev_priv;int ret;
  if(!s||!s->driver||!s->driver->dev||!s->pd)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
  if(s->root_uncertain)return -EIO;
  if(!s->root_active||!s->restore_pd)return -ENOENT;
- down_write(&s->driver->sem);
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ if(s->driver->remesa_private_owner!=s){ret=-ESTALE;goto restore_failed;}
+#endif
  if(s->driver->default_pd!=s->restore_pd||s->restore_pd->driver!=s->driver||
     s->restore_pd->hw_context!=-1||s->pd->hw_context!=0){
   ret=-ESTALE;goto restore_failed;
@@ -142,13 +155,31 @@ int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *s)
  if(ret||PSB_RSGX32(PSB_CR_BIF_CTRL)!=s->restore_ctrl){ret=-EIO;goto restore_failed;}
  s->restore_pd->hw_context=0;s->pd->hw_context=-1;
  s->restore_pd=NULL;s->root_active=0;
- up_write(&s->driver->sem);return 0;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ s->driver->remesa_private_owner=NULL;
+#endif
+ return 0;
  restore_failed:
  /* Do not guess which root may be visible, retry, reset or free tables. */
- s->root_uncertain=1;up_write(&s->driver->sem);return ret;
+ s->root_uncertain=1;return ret;
 #else
  (void)s;return -EOPNOTSUPP;
 #endif
+}
+
+int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *s)
+{
+ int ret;
+ if(!s||!s->driver||!s->driver->dev||!s->pd)return -EINVAL;
+ down_write(&s->driver->sem);ret=remesa_mmu_private_bind_locked(s);
+ up_write(&s->driver->sem);return ret;
+}
+int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *s)
+{
+ int ret;
+ if(!s||!s->driver||!s->driver->dev||!s->pd)return -EINVAL;
+ down_write(&s->driver->sem);ret=remesa_mmu_private_restore_locked(s);
+ up_write(&s->driver->sem);return ret;
 }
 
 int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *s)
@@ -161,6 +192,7 @@ int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *s)
 #endif
  if(s->root_uncertain)return -EIO;
  if(!s->root_active||!s->restore_pd)return -ENOENT;
+ if(s->driver->remesa_private_owner!=s){ret=-ESTALE;goto failed;}
  if(s->driver->default_pd!=s->restore_pd||s->restore_pd->driver!=s->driver||
     s->restore_pd->hw_context!=-1||s->pd->hw_context!=0){ret=-ESTALE;goto failed;}
  ret=remesa_mmu_switch_quiet(s,s->private_root);if(ret)goto failed;
@@ -197,6 +229,9 @@ int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *s,
  }
  if(s->root_uncertain)return -EIO;
  if(!s->root_active||!s->restore_pd)return -ENOENT;
+#ifdef REMESA_PRIVATE_IRQ_HANDOFF
+ if(s->driver->remesa_private_owner!=s){ret=-ESTALE;goto failed;}
+#endif
  if(s->driver->default_pd!=s->restore_pd||s->restore_pd->driver!=s->driver||
     s->restore_pd->hw_context!=-1||s->pd->hw_context!=0){ret=-ESTALE;goto failed;}
  ret=remesa_mmu_switch_quiet(s,s->private_root);if(ret)goto failed;
