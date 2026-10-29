@@ -57,3 +57,14 @@ void cpu_allocation_check(void)
  for(struct allocation *a=head;a;a=a->next)verify(a);
  printf("ALLOCATIONS total=%zu live=%zu bytes=%zu peak=%zu\n",count,live,bytes,peak);
 }
+
+/* Checked interior view used by the separate offline USP finalizer oracle. */
+int cpu_range_owned(const void *p,size_t n)
+{
+ uintptr_t v=(uintptr_t)p;
+ for(struct allocation *a=head;a;a=a->next){
+  verify(a);uintptr_t b=(uintptr_t)(a+1);
+  if(v>=b&&v-b<=a->size&&n<=a->size-(v-b))return 1;
+ }
+ return 0;
+}
