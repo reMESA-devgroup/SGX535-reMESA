@@ -217,7 +217,11 @@ def private_entry_sources(driver, memory):
         '\tdrm_dev_unregister(dev);\n\tpsb_driver_unload(dev);\n',
         '\t/* No endpoint/MMU lock across the SRCU join. This joins guarded\n'
         '\t * CPU entry only; retained GPU resources still need detach policy. */\n'
-        '\tdrm_dev_unplug(dev);\n\tpsb_driver_unload(dev);\n')
+        '\tdrm_dev_unplug(dev);\n'
+        '\t/* CPU entries have joined; revoke private ownership even when\n'
+        '\t * userspace still holds its file. This does not stop SGX DMA. */\n'
+        '\tremesa_private_stream_device_lost(dev);\n'
+        '\tpsb_driver_unload(dev);\n')
     for old, new in [('\t.unlocked_ioctl = psb_unlocked_ioctl,',
                       '\t.unlocked_ioctl = remesa_private_unlocked_ioctl,'),
                      ('\t.compat_ioctl = drm_compat_ioctl,',

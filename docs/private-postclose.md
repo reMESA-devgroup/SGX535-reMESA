@@ -46,6 +46,11 @@ started after removal, using actual GEM/GTT-free/remove bodies. This supplies
 an executable regression target for the missing destruction protocol, not a
 physical safety pass.
 
+The subsequent [device-wide revocation](private-device-revocation.md) also
+clears private ownership during PCI removal when userspace keeps its file open.
+It runs after the DRM unplug/join and before original unload. It retains the
+same resources in software; it does not fix the MMU/GTT destruction blocker.
+
 ## Evidence
 
 All evidence is CPU-only; there was no device access or Mini 12 change.

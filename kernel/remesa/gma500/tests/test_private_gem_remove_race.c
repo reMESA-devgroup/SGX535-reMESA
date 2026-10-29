@@ -57,6 +57,8 @@ static void psb_driver_unload(struct drm_device *dev)
  assert(!pthread_mutex_unlock(&lock));
 }
 static void drm_dev_put(struct drm_device *dev){assert(dev==&device);puts_count++;}
+void remesa_private_stream_device_lost(struct drm_device *dev)
+{assert(dev==&device&&dev->unplugged&&dev->hardware_alive);}
 #include "remove_actual.inc"
 static void fixture(void)
 {

@@ -14,3 +14,15 @@ void remesa_private_stream_file_lost(struct drm_device *dev,struct drm_file *fil
  mutex_unlock(&stream_lock);
  remesa_private_memory_file_lost(dev,file);
 }
+void remesa_private_stream_device_lost(struct drm_device *dev)
+{
+ if(!dev)return;
+ mutex_lock(&stream_lock);
+ if(owner_device==dev){
+  if(active){active->state=STREAM_QUARANTINED;permanently_quarantined=true;}
+  owner=NULL;owner_device=NULL;
+ }
+ remesa_private_trusted_device_lost(dev);
+ mutex_unlock(&stream_lock);
+ remesa_private_memory_device_lost(dev);
+}

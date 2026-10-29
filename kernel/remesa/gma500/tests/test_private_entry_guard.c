@@ -25,7 +25,7 @@ struct remesa_gem_memory {struct drm_device *dev;struct mutex lock;};
 struct backing {struct remesa_gem_memory *memory;struct page **pages;};
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t change=PTHREAD_COND_INITIALIZER;
-static unsigned readers,calls,teardowns,dev_puts,unregisters,inserts,orphans;
+static unsigned readers,calls,teardowns,dev_puts,unregisters,inserts,orphans,device_orphans;
 static bool block_call,call_started,release_call,remove_done;
 static _Thread_local unsigned entries;
 static bool drm_dev_enter(struct drm_device *dev,int *index)
@@ -63,6 +63,8 @@ static void drm_fb_helper_lastclose(struct drm_device *dev)
 {assert(dev);(void)backend_call();}
 void remesa_private_stream_file_lost(struct drm_device *dev,struct drm_file *file)
 {assert(dev&&file&&dev->unplugged&&!entries);orphans++;}
+void remesa_private_stream_device_lost(struct drm_device *dev)
+{assert(dev&&dev->unplugged&&!entries&&!teardowns&&!readers);device_orphans++;}
 static void *pci_get_drvdata(struct pci_dev *pci){return pci->data;}
 static void drm_dev_unregister(struct drm_device *dev){(void)dev;unregisters++;}
 static void drm_dev_unplug(struct drm_device *dev)
@@ -92,7 +94,7 @@ static struct pci_dev pci={&device};
 static void fixture(void)
 {
  assert(!entries&&!readers);device.unplugged=false;
- calls=teardowns=dev_puts=unregisters=inserts=orphans=0;
+ calls=teardowns=dev_puts=unregisters=inserts=orphans=device_orphans=0;
  block_call=call_started=release_call=remove_done=false;
 }
 static void *ioctl_worker(void *unused)
@@ -136,6 +138,7 @@ static void scenario(bool old)
  assert(!pthread_cond_broadcast(&change));assert(!pthread_mutex_unlock(&lock));
  assert(!pthread_join(ioctl_thread,NULL));assert(!pthread_join(remove_thread,NULL));
  assert(!readers&&teardowns==1&&dev_puts==1&&unregisters==1);
+ assert(device_orphans==(old?0u:1u));
 }
 int main(void)
 {

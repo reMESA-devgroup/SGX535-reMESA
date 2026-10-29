@@ -108,5 +108,33 @@ int main(void)
  assert(!stream.file&&stream.quarantined&&!memory.file&&memory.private_device_lost);
  assert(remesa_gem_memory_close(&memory)==-ENODEV&&!cleanup_calls);
  fixture(false);assert(!remesa_gem_memory_close(&memory)&&cleanup_calls&&!rank);
+ /* Device loss must revoke open files without waiting for postclose. */
+ fixture(true);before=memory;trusted_before=stream;bridge_before=bridge;
+ remesa_private_stream_device_lost(NULL);
+ remesa_private_stream_device_lost(&otherdev);
+ assert(!memcmp(&memory,&before,sizeof memory)&&!memcmp(&stream,&trusted_before,sizeof stream));
+ assert(!memcmp(&bridge,&bridge_before,sizeof bridge)&&!source_poison_calls&&!cleanup_calls);
+ remesa_private_stream_device_lost(&dev);
+ assert(!owner&&!owner_device&&!memory.file&&!stream.file);
+ assert(memory.private_device_lost&&stream.quarantined&&permanently_quarantined);
+ assert(memory.jobs[0].quarantined&&memory.bo[0].quarantine&&source_poison_calls==1);
+ before.file=NULL;before.private_device_lost=true;before.jobs[0].quarantined=true;
+ before.jobs[0].state=REMESA_JOB_QUARANTINED;before.bo[0].quarantine=true;
+ assert(!memcmp(&memory,&before,sizeof memory));
+ trusted_before.file=NULL;trusted_before.quarantined=true;
+ assert(!memcmp(&stream,&trusted_before,sizeof stream));
+ remesa_private_stream_device_lost(&dev);
+ remesa_private_stream_file_lost(&dev,&file);
+ assert(source_poison_calls==1&&!cleanup_calls&&!rank);
+ assert(remesa_gem_memory_close(&memory)==-ENODEV&&!cleanup_calls);
+ /* Bridge may already lack its owner while endpoint/trusted state survives. */
+ fixture(true);owner=NULL;owner_device=NULL;
+ remesa_private_stream_device_lost(&dev);
+ assert(!memory.file&&!stream.file&&memory.private_device_lost&&stream.quarantined);
+ assert(source_poison_calls==1&&!cleanup_calls);
+ /* A normally closed stream retains stale dev/file fields. */
+ fixture(false);stream.claimed=false;
+ remesa_private_stream_device_lost(&dev);
+ assert(!source_poison_calls&&!stream.quarantined&&!stream.file);
  puts("PASS actual file-lost fragments retain handles/views/refs/cookies, clear file identities, quarantine without backend/cleanup callbacks, deny late close even empty endpoint; mutex/backing modeled, GPU0");
 }
