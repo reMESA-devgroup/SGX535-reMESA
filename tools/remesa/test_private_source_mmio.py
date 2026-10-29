@@ -6,15 +6,17 @@ CPU-only reduced state; no device opened or physical synchronization attested.
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import resource
 import subprocess
 
 
 def extract(source, name):
-    at = source.index(name+"(")
-    start = source.rfind("\n", 0, at)+1
-    brace = source.index("{", at)
+    match = re.search(r"^[ \t]*[A-Za-z_][\w \t*]*?\b"+re.escape(name)+
+                      r"[ \t]*\([^;{}]*\)[ \t\n]*\{", source, re.M)
+    if not match:raise ValueError("missing C function definition: "+name)
+    start, brace = match.start(), match.end()-1
     depth, end = 1, brace+1
     while depth:
         depth += (source[end] == "{")-(source[end] == "}")

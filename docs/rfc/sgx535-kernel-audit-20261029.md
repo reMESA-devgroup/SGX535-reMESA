@@ -104,6 +104,11 @@ ownership, and active console/KMS callbacks. It is not a recommendation to add a
 single release callback as a partial fix. The private probe stays disabled and
 private hardware tests remain blocked pending an adequate lifecycle design.
 
+Subsequent implementation adds a [private CPU entry/unplug join](../private-entry-guards.md)
+for ioctl, mmap and fault callbacks. It closes their overlap with teardown but
+does not supply the retained-GPU-resource, postclose, late GEM or rebind policy
+required above. The original audit remains a record of the reviewed baseline.
+
 ## P3 / documentation: private staging adds an ioctl
 
 At the reviewed HEAD, `tools/remesa/stage_twod_reservation.py:341-342` describes private mode as

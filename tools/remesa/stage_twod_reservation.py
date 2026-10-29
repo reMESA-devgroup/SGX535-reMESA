@@ -208,6 +208,37 @@ def trap_gem_unmap_source(source):
         '   if((e && e!=-EINVAL) || (!e && pfn==page_to_pfn(b->pages[page]))) {b->quarantine=true;return -EIO;}\n',
         '   if(e!=-EINVAL) {b->quarantine=true;return -EIO;}\n')
 
+
+def private_entry_sources(driver, memory):
+    driver = replace_once(driver, 'static void psb_pci_remove(struct pci_dev *pdev)\n',
+        '#include "remesa_private_entry_guard.inc"\n\n'
+        'static void psb_pci_remove(struct pci_dev *pdev)\n')
+    driver = replace_once(driver,
+        '\tdrm_dev_unregister(dev);\n\tpsb_driver_unload(dev);\n',
+        '\t/* No endpoint/MMU lock across the SRCU join. This joins guarded\n'
+        '\t * CPU entry only; retained GPU resources still need detach policy. */\n'
+        '\tdrm_dev_unplug(dev);\n\tpsb_driver_unload(dev);\n')
+    for old, new in [('\t.unlocked_ioctl = psb_unlocked_ioctl,',
+                      '\t.unlocked_ioctl = remesa_private_unlocked_ioctl,'),
+                     ('\t.compat_ioctl = drm_compat_ioctl,',
+                      '\t.compat_ioctl = remesa_private_compat_ioctl,'),
+                     ('\t.mmap = remesa_gem_color_mmap,',
+                      '\t.mmap = remesa_private_mmap,'),
+                     ('\t.fault = psb_gem_fault,',
+                      '\t.fault = remesa_private_gem_fault,')]:
+        driver = replace_once(driver, old, new)
+    start = memory.index('static vm_fault_t color_fault(struct vm_fault *vmf)\n')
+    end = memory.index('static const struct vm_operations_struct color_vm_ops=', start)
+    fault = memory[start:end]
+    fault = replace_once(fault, ' vm_fault_t result=VM_FAULT_SIGBUS;\n',
+        ' vm_fault_t result=VM_FAULT_SIGBUS;int entry_index;\n')
+    fault = replace_once(fault, ' mutex_lock(&s->lock);\n',
+        ' if(!drm_dev_enter(s->dev,&entry_index))return result;\n'
+        ' mutex_lock(&s->lock);\n')
+    fault = replace_once(fault, ' mutex_unlock(&s->lock);return result;\n',
+        ' mutex_unlock(&s->lock);drm_dev_exit(entry_index);return result;\n')
+    return driver, memory[:start]+fault+memory[end:]
+
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
         raise ValueError("native fill requires the separate normal copy profile")
@@ -322,6 +353,8 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
+        result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
+            result['psb_drv.c'], result['remesa_gem_memory.c'])
     return result
 
 
@@ -355,6 +388,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',
                      'remesa_private_source_mmio.h', 'remesa_private_source_mmio.inc',
+                     'remesa_private_entry_guard.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()

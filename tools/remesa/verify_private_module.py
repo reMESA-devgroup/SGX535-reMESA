@@ -7,7 +7,8 @@ from pathlib import Path
 import struct
 
 
-def verify(path, kernel_release, require_serialized_source_mmio=False):
+def verify(path, kernel_release, require_serialized_source_mmio=False,
+           require_cpu_entry_guards=False):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     if raw[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", raw, 18)[0] != 3:
@@ -53,6 +54,11 @@ def verify(path, kernel_release, require_serialized_source_mmio=False):
                 "remesa_twod_fill_ioctl")
     if require_serialized_source_mmio:
         required += ("remesa_private_source_write",)
+    if require_cpu_entry_guards:
+        required += ("remesa_private_unlocked_ioctl", "remesa_private_mmap",
+                     "remesa_private_gem_fault")
+        if any(name not in symbols for name in ("drm_dev_enter", "drm_dev_exit", "drm_dev_unplug")):
+            raise ValueError("missing DRM CPU entry/unplug lifecycle imports")
     for name in required:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
@@ -87,10 +93,13 @@ if __name__ == "__main__":
     p.add_argument("--report", type=Path)
     p.add_argument("--require-serialized-source-mmio", action="store_true",
                    help="Require the new private source/MMIO function (symbol check, not runtime proof)")
+    p.add_argument("--require-cpu-entry-guards", action="store_true",
+                   help="Require private CPU entry wrappers and DRM unplug imports, not GPU teardown proof")
     a = p.parse_args()
     if a.report and a.report.resolve() == a.module.resolve():
         p.error("report must not overwrite the module")
-    report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio), indent=2) + "\n"
+    report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio,
+                               a.require_cpu_entry_guards), indent=2) + "\n"
     if a.report:
         a.report.write_text(report)
     print(report, end="")
