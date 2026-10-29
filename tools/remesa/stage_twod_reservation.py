@@ -258,7 +258,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n'
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
     return result
 
@@ -283,6 +283,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
+                     'remesa_gem_private_execute.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:

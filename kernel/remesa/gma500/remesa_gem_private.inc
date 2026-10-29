@@ -85,10 +85,13 @@ int remesa_gem_private_release(struct remesa_gem_private *loan)
  struct remesa_gem_memory *s;struct retained_job *j;int error=-ENOENT;
  if(!loan||!loan->live||!loan->memory)return -EINVAL;
  s=loan->memory;mutex_lock(&s->lock);j=ticket_job(s,loan->ticket);
+ if(loan->execution_attempted&&!loan->execution_retired){error=-EBUSY;goto done;}
  if(!j||!j->attached||s->executor!=&private_reserved_executor||s->executor_context!=loan)
   goto done;
- /* No issue/retirement transition is defined for this preparation-only API. */
- if(j->state!=REMESA_JOB_PREPARED&&j->state!=REMESA_JOB_QUARANTINED){error=-EBUSY;goto done;}
+ /* Executed jobs need the same-call executor's complete restore/source-close
+  * receipt. Preparation-only loans retain their original cancellation path. */
+ if(j->state!=REMESA_JOB_PREPARED&&j->state!=REMESA_JOB_QUARANTINED&&
+    !(j->state==REMESA_JOB_ACKNOWLEDGED&&loan->execution_retired)){error=-EBUSY;goto done;}
  error=remesa_mmu_private_release(&loan->owner);if(error)goto done;
  if(!loan->guard){error=-EIO;goto done;}
  error=remesa_twod_mmu_guard_release(s->dev->dev_private,loan->guard,loan);
@@ -144,7 +147,10 @@ int remesa_gem_private_publish_locked(struct remesa_gem_private *loan,
  /* Authenticate the entire closure before the first cache side effect. */
  error=remesa_gem_private_validate_locked(loan,views,count);if(error)return error;
  s=loan->memory;j=ticket_job(s,loan->ticket);
- if(j->state!=REMESA_JOB_PREPARED||j->cookie)return -EBUSY;
+ if(j->state!=REMESA_JOB_PREPARED||j->cookie){
+  if(!loan->execution_started||!loan->execution_attempted||
+     j->state!=REMESA_JOB_ISSUED||j->cookie!=loan->ticket.operation)return -EBUSY;
+ }
  if(loan->host_published)return -EALREADY;
  for(i=0;i<count;i++)if(loan->rules[i].access){
   struct backing *b=&s->bo[j->ids[i]&31];

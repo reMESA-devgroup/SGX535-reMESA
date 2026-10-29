@@ -75,6 +75,13 @@ int main(void)
   check_retained(&s);
  }
  CHECK(!active&&!maps&&downs==ups);
+ fixture(&s);down_write(&s->driver->sem);
+ CHECK(!remesa_mmu_private_bind_locked(s));before=writes;
+ CHECK(!remesa_mmu_private_quarantine_locked(s));
+ CHECK(s->root_uncertain&&s->root_active&&s->driver->remesa_private_owner==s);
+ CHECK(writes==before&&active==&s->driver->sem);
+ CHECK(remesa_mmu_private_restore_locked(s)==-EIO&&writes==before);
+ up_write(&s->driver->sem);check_retained(&s);
  printf("PASS %u shared MMU checks including locked interval; UNISSUED CPU model, no GPU\n",checks);
  return 0;
 }

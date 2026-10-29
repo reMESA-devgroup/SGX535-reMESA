@@ -5,8 +5,9 @@
 #undef main
 #include "../remesa_gem_private.h"
 #include "../remesa_twod_reservation.h"
-struct psb_mmu_driver {unsigned identity;};
-struct remesa_mmu_private {unsigned count,blocked;struct remesa_mmu_allowed_binding bindings[16];};
+struct private_test_sem {unsigned held;};
+struct psb_mmu_driver {unsigned identity;struct private_test_sem sem;};
+struct remesa_mmu_private {unsigned count,blocked,root_active;struct remesa_mmu_allowed_binding bindings[16];};
 static struct psb_mmu_driver driver;
 static struct remesa_gem_memory *expected_memory;
 static unsigned prepares,releases,mode;
@@ -224,7 +225,10 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!gems&&!pins&&!ptes&&!claimed&&!power);
  expected_memory=NULL;expected_guard=NULL;
 }
-int main(void)
+#ifndef REMESA_GEM_PRIVATE_TEST_MAIN
+#define REMESA_GEM_PRIVATE_TEST_MAIN main
+#endif
+int REMESA_GEM_PRIVATE_TEST_MAIN(void)
 {
  one_case(1280,800,0);one_case(640,640,0);one_case(641,479,0);one_case(32,32,1);one_case(32,32,7);
  for(unsigned fault=2;fault<=6;fault++){

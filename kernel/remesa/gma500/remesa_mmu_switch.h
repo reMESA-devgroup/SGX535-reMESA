@@ -31,6 +31,9 @@ int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *);
  * retirement, or establish a complete device recovery protocol. */
 int remesa_mmu_private_bind_locked(struct remesa_mmu_private *);
 int remesa_mmu_private_restore_locked(struct remesa_mmu_private *);
+/* On an executor error, retain an active root as uncertain. Already-held
+ * writer semaphore required. No MMIO, recovery or release is performed. */
+int remesa_mmu_private_quarantine_locked(struct remesa_mmu_private *);
 /* Private integration profile only. Caller ALREADY holds driver->sem for
  * writing plus the retained device/producer/IRQ/power contract. For the
  * pre-issue DEVICE_MAINTAIN stage, corroborates the exact bound private root,

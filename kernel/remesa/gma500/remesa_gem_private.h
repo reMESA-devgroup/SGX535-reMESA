@@ -22,7 +22,7 @@ struct remesa_gem_private {
  struct remesa_mmu_private *owner;
  struct remesa_twod_reservation *guard;
  struct remesa_gem_private_rule rules[16];
- bool live,host_published;
+ bool live,host_published,execution_attempted,execution_started,execution_retired;
 };
 /* Exact job IDs/order required; rules narrow private PTE access/cache policy.
  * CPU-only sidecars stay retained outside the private GPU allowlist. At least
@@ -39,8 +39,10 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *,
  struct remesa_memory_ticket,const struct remesa_gem_private_rule *,unsigned,
  struct remesa_twod_reservation *,struct remesa_gem_private *);
 /* Release the unbound private tree, unclaim its guard, then detach the loan. The original
- * job stays prepared with all original holds, ready for explicit cancellation
- * or a qualified executor. Failure retains attachment and every GEM hold. */
+ * job retains its original holds: PREPARED for cancellation, or ACKNOWLEDGED
+ * after successful execution/restore/source close for explicit job retirement.
+ * A consumed execution attempt without that final receipt refuses release.
+ * Failure retains attachment and every GEM hold. */
 int remesa_gem_private_release(struct remesa_gem_private *);
 /* Pre-issue resource/translation check for the exact retained loan and job
  * views. Caller already holds endpoint mutex THEN MMU write semaphore.
@@ -56,9 +58,27 @@ int remesa_gem_private_validate_locked(struct remesa_gem_private *,
  * Flushes GPU-visible backing only, including destinations whose old CPU cache
  * lines must not survive GPU writes; CPU_ONLY sidecars are untouched. One
  * publication per loan: repetition returns EALREADY rather than flushing again.
+ * The same-call executor's authenticated possible-issue bookkeeping may already
+ * be ISSUED with its exact cookie; arbitrary ISSUED jobs are still refused.
  * This is a cold-upload path, not a cache-epoch/reuse protocol. No prior MEM_SYNC
  * receipt is inferred; streaming reuse still needs its own ownership protocol.
  * Does NOT publish commands, issue work or authorize visibility/retirement. */
 int remesa_gem_private_publish_locked(struct remesa_gem_private *,
  const struct remesa_memory_view *,unsigned count);
+struct sgx535_gma500_owner;
+struct sgx535_gma500_fixed_backend;
+struct remesa_stream_observation;
+/* Trusted kernel-only cold job. Caller already owns the existing stream source
+ * lease (source_owner), has independently validated final images/commands and
+ * initialized a borrowed scene, and retains all arguments at stable addresses.
+ * Acquires endpoint mutex THEN one MMU writer interval for the complete job.
+ * Uses existing fixed service/source attribution, no hashes or pixel readback.
+ * A successful source bind consumes this attempt. Failure thereafter retains
+ * the loan, source observation, backend and all resources; no retry/reset/free.
+ * Caller must retain them even if this call fails. No live ioctl/admission is
+ * added; LAB qualification cannot be inferred from this nohash path. */
+int remesa_gem_private_execute(struct remesa_gem_private *,
+ struct sgx535_gma500_owner *,struct sgx535_gma500_fixed_backend *,
+ struct remesa_stream_observation *,const void *source_owner,
+ const struct remesa_memory_view *,unsigned count,unsigned ticks,unsigned samples);
 #endif

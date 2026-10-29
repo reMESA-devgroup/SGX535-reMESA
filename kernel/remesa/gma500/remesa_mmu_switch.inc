@@ -174,6 +174,15 @@ int remesa_mmu_private_bind_exclusive(struct remesa_mmu_private *s)
  down_write(&s->driver->sem);ret=remesa_mmu_private_bind_locked(s);
  up_write(&s->driver->sem);return ret;
 }
+int remesa_mmu_private_quarantine_locked(struct remesa_mmu_private *s)
+{
+ if(!s||!s->driver||!s->pd)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
+ if(s->root_active)s->root_uncertain=1;
+ return 0;
+}
 int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *s)
 {
  int ret;
