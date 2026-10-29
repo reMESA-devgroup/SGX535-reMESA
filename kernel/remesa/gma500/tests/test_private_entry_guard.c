@@ -25,7 +25,7 @@ struct remesa_gem_memory {struct drm_device *dev;struct mutex lock;};
 struct backing {struct remesa_gem_memory *memory;struct page **pages;};
 static pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t change=PTHREAD_COND_INITIALIZER;
-static unsigned readers,calls,teardowns,dev_puts,unregisters,inserts;
+static unsigned readers,calls,teardowns,dev_puts,unregisters,inserts,orphans;
 static bool block_call,call_started,release_call,remove_done;
 static _Thread_local unsigned entries;
 static bool drm_dev_enter(struct drm_device *dev,int *index)
@@ -57,6 +57,12 @@ static int remesa_gem_color_mmap(struct file *file,struct vm_area_struct *vma)
 {assert(file&&vma);return (int)backend_call();}
 static vm_fault_t psb_gem_fault(struct vm_fault *fault)
 {assert(fault&&fault->vma);return (vm_fault_t)backend_call();}
+static void remesa_stream_postclose(struct drm_device *dev,struct drm_file *file)
+{assert(dev&&file);(void)backend_call();}
+static void drm_fb_helper_lastclose(struct drm_device *dev)
+{assert(dev);(void)backend_call();}
+void remesa_private_stream_file_lost(struct drm_device *dev,struct drm_file *file)
+{assert(dev&&file&&dev->unplugged&&!entries);orphans++;}
 static void *pci_get_drvdata(struct pci_dev *pci){return pci->data;}
 static void drm_dev_unregister(struct drm_device *dev){(void)dev;unregisters++;}
 static void drm_dev_unplug(struct drm_device *dev)
@@ -86,7 +92,7 @@ static struct pci_dev pci={&device};
 static void fixture(void)
 {
  assert(!entries&&!readers);device.unplugged=false;
- calls=teardowns=dev_puts=unregisters=inserts=0;
+ calls=teardowns=dev_puts=unregisters=inserts=orphans=0;
  block_call=call_started=release_call=remove_done=false;
 }
 static void *ioctl_worker(void *unused)
@@ -122,6 +128,9 @@ static void scenario(bool old)
   struct remesa_gem_memory memory={&device,{false}};struct backing backing={&memory,pages};
   vma.vm_private_data=&backing;vmf.pgoff=REMESA_COLOR_VIEW_PGOFF;vmf.address=0x123000;
   assert(color_fault(&vmf)==VM_FAULT_SIGBUS&&!inserts);
+  remesa_private_postclose(&device,&drm_file);
+  remesa_private_lastclose(&device);
+  assert(orphans==1);
  }
  assert(!pthread_mutex_lock(&lock));assert(calls==1);release_call=true;
  assert(!pthread_cond_broadcast(&change));assert(!pthread_mutex_unlock(&lock));
@@ -131,6 +140,8 @@ static void scenario(bool old)
 int main(void)
 {
  scenario(true);scenario(false);fixture();
+ remesa_private_postclose(&device,&drm_file);
+ remesa_private_lastclose(&device);assert(calls==2&&!orphans&&!readers);
  struct drm_gem_object object={&device};struct vm_area_struct vma={&object};struct vm_fault vmf={&vma,0,0,0};
  assert(remesa_private_mmap(&file,&vma)==1234);
  assert(remesa_private_gem_fault(&vmf)==1234);

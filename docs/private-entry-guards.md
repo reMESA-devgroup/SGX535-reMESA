@@ -32,6 +32,11 @@ its own device-loss cleanup semantics. Moving all unload work to final DRM
 release still does not solve late MMIO/PM on a new binding. No such workaround,
 synthetic retirement, diagnostic wait or speculative reset was introduced.
 
+Subsequent [postclose integration](private-postclose.md) now guards the driver's
+postclose/lastclose callbacks and uses software-only orphaning after unplug. It
+does not cover standard GEM destruction earlier in `drm_release`, nor supply the
+missing GPU-resource unload/stop/rebind protocol described here.
+
 The wrappers apply only to new private stages. Existing non-private generated
 profiles, checkpoint sources, installed modules and historical physical results
 are not modified by this change. No new flags enable execution.

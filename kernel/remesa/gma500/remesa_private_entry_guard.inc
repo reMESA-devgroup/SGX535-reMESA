@@ -1,8 +1,25 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Included in private psb_drv.c after the original unlocked ioctl.
  * drm_dev_unplug joins these CPU entries before unload starts. GPU quarantine,
- * late GEM destruction, postclose, KMS and PM need their own lifetime protocol.
+ * late GEM destruction, other KMS and PM need their own lifetime protocol.
  * No endpoint/MMU mutex may be held by remove across the SRCU join. */
+#include "remesa_private_file_lost.h"
+static void remesa_private_postclose(struct drm_device *dev,struct drm_file *file)
+{
+ int index;
+ if(!drm_dev_enter(dev,&index)){
+  remesa_private_stream_file_lost(dev,file);return;
+ }
+ remesa_stream_postclose(dev,file);
+ drm_dev_exit(index);
+}
+static void remesa_private_lastclose(struct drm_device *dev)
+{
+ int index;
+ if(!drm_dev_enter(dev,&index))return;
+ drm_fb_helper_lastclose(dev);
+ drm_dev_exit(index);
+}
 static bool remesa_private_file_enter(struct file *filp,int *index)
 {
  struct drm_file *file=filp?filp->private_data:NULL;

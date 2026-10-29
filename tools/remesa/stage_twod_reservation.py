@@ -225,7 +225,11 @@ def private_entry_sources(driver, memory):
                      ('\t.mmap = remesa_gem_color_mmap,',
                       '\t.mmap = remesa_private_mmap,'),
                      ('\t.fault = psb_gem_fault,',
-                      '\t.fault = remesa_private_gem_fault,')]:
+                      '\t.fault = remesa_private_gem_fault,'),
+                     ('\t.postclose = remesa_stream_postclose,',
+                      '\t.postclose = remesa_private_postclose,'),
+                     ('\t.lastclose = drm_fb_helper_lastclose,',
+                      '\t.lastclose = remesa_private_lastclose,')]:
         driver = replace_once(driver, old, new)
     start = memory.index('static vm_fault_t color_fault(struct vm_fault *vmf)\n')
     end = memory.index('static const struct vm_operations_struct color_vm_ops=', start)
@@ -238,6 +242,18 @@ def private_entry_sources(driver, memory):
     fault = replace_once(fault, ' mutex_unlock(&s->lock);return result;\n',
         ' mutex_unlock(&s->lock);drm_dev_exit(entry_index);return result;\n')
     return driver, memory[:start]+fault+memory[end:]
+
+
+def private_file_lost_sources(memory):
+    memory = replace_once(memory,
+        ' int (*pds_write_guard)(u64,const void *,unsigned);\n',
+        ' int (*pds_write_guard)(u64,const void *,unsigned);\n'
+        ' bool private_device_lost; /* monotonic; do not reclaim after unplug */\n')
+    memory = replace_once(memory,
+        ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n',
+        ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n'
+        ' if(s->private_device_lost){mutex_unlock(&s->lock);return -ENODEV;}\n')
+    return memory + '\n#include "remesa_private_memory_file_lost.inc"\n'
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
@@ -355,6 +371,16 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
         result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
             result['psb_drv.c'], result['remesa_gem_memory.c'])
+        result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
+        for name, digest, fragment in [
+            ('remesa_stream_bridge.c', '4d0a1accdfc65caa28892facc2a2149cfc35c42360ebb7333027aa9d07ad8f4d',
+             'remesa_private_stream_file_lost.inc'),
+            ('remesa_stream_trusted.c', '66ee297420a35c44a130f9af6925ffa17d32bf0c85371635d5cb38c10f68d53a',
+             'remesa_private_trusted_file_lost.inc')]:
+            contents = (native / name).read_bytes()
+            if hashlib.sha256(contents).hexdigest() != digest:
+                raise ValueError('unreviewed private file-lost input: ' + name)
+            result[name] = contents.decode() + '\n#include "' + fragment + '"\n'
     return result
 
 
@@ -389,6 +415,8 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_prefire_irq.h',
                      'remesa_private_source_mmio.h', 'remesa_private_source_mmio.inc',
                      'remesa_private_entry_guard.inc',
+                     'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
+                     'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()

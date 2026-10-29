@@ -8,7 +8,7 @@ import struct
 
 
 def verify(path, kernel_release, require_serialized_source_mmio=False,
-           require_cpu_entry_guards=False):
+           require_cpu_entry_guards=False, require_file_lost_guards=False):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     if raw[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", raw, 18)[0] != 3:
@@ -59,6 +59,10 @@ def verify(path, kernel_release, require_serialized_source_mmio=False,
                      "remesa_private_gem_fault")
         if any(name not in symbols for name in ("drm_dev_enter", "drm_dev_exit", "drm_dev_unplug")):
             raise ValueError("missing DRM CPU entry/unplug lifecycle imports")
+    if require_file_lost_guards:
+        required += ("remesa_private_postclose", "remesa_private_lastclose",
+                     "remesa_private_stream_file_lost", "remesa_private_trusted_file_lost",
+                     "remesa_private_memory_file_lost")
     for name in required:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
@@ -95,11 +99,13 @@ if __name__ == "__main__":
                    help="Require the new private source/MMIO function (symbol check, not runtime proof)")
     p.add_argument("--require-cpu-entry-guards", action="store_true",
                    help="Require private CPU entry wrappers and DRM unplug imports, not GPU teardown proof")
+    p.add_argument("--require-file-lost-guards", action="store_true",
+                   help="Require guarded postclose/lastclose and software file-orphaning functions")
     a = p.parse_args()
     if a.report and a.report.resolve() == a.module.resolve():
         p.error("report must not overwrite the module")
     report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio,
-                               a.require_cpu_entry_guards), indent=2) + "\n"
+                               a.require_cpu_entry_guards, a.require_file_lost_guards), indent=2) + "\n"
     if a.report:
         a.report.write_text(report)
     print(report, end="")
