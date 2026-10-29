@@ -29,7 +29,7 @@ static unsigned poll_stops,vblank_stops,irq_stops,backlight_stops,mode_stops;
 static unsigned chip_stops,opregion_stops,power_stops,lifecycle_losses;
 static unsigned pd_frees,mmu_frees,gtt_frees,page_frees,reg_unmaps,pci_puts,bios_frees,private_frees;
 static unsigned pci_enables,pci_disables,device_allocs,loads,registrations,dev_puts;
-static bool retained,blocked;
+static bool retained,blocked,gem_retained,gem_blocked;
 static int driver;
 #define drm_for_each_crtc(crtc,dev) for((crtc)=(dev)->crtcs;(crtc)<(dev)->crtcs+2;(crtc)++)
 static void remesa_route_source_lifecycle(struct drm_device *d){assert(d==&device);lifecycle_losses++;}
@@ -42,6 +42,8 @@ static void chip_teardown(struct drm_device *d){assert(d==&device);chip_stops++;
 static void psb_intel_opregion_fini(struct drm_device *d){assert(d==&device);opregion_stops++;}
 static bool remesa_private_memory_device_retained(struct drm_device *d){assert(d==&device);return retained;}
 static bool remesa_private_memory_rebind_blocked(void){return blocked;}
+static bool remesa_private_gem_device_retained(struct drm_device *d){assert(d==&device);return gem_retained;}
+static bool remesa_private_gem_rebind_blocked(void){return gem_blocked;}
 static void gma_power_uninit(struct drm_device *d){assert(d==&device);power_stops++;}
 static void psb_mmu_free_pagedir(void *p){assert(p==private.pf_pd);pd_frees++;}
 static void down_read(int *s){assert(s==&private.gtt.sem);}
@@ -76,7 +78,7 @@ static void fixture(void)
  chip_stops=opregion_stops=power_stops=lifecycle_losses=0;
  pd_frees=mmu_frees=gtt_frees=page_frees=reg_unmaps=pci_puts=bios_frees=private_frees=0;
  pci_enables=pci_disables=device_allocs=loads=registrations=dev_puts=0;
- retained=blocked=false;
+ retained=blocked=gem_retained=gem_blocked=false;
  private=(struct drm_psb_private){.modeset=true,.backlight_device=&private,.ops=&ops,
   .pf_pd=(void*)0x1000,.mmu=(void*)0x2000,.scratch_page=(void*)0x3000,
   .vdc_reg=(void*)0x4000,.sgx_reg=(void*)0x5000,.aux_reg=(void*)0x6000,
@@ -91,12 +93,18 @@ int main(void)
  assert(!pd_frees&&!mmu_frees&&!gtt_frees&&!page_frees&&!reg_unmaps&&!pci_puts&&!bios_frees&&!private_frees);
  assert(poll_stops==1&&vblank_stops==2&&irq_stops==1&&backlight_stops==1&&mode_stops==1);
  assert(chip_stops==1&&opregion_stops==1&&power_stops==1&&lifecycle_losses==1);
+ fixture();gem_retained=true;before=private;psb_driver_unload(&device);
+ assert(device.dev_private==&private&&!memcmp(&private,&before,sizeof private));
+ assert(!pd_frees&&!mmu_frees&&!gtt_frees&&!page_frees&&!reg_unmaps&&!private_frees);
+ assert(chip_stops==1&&opregion_stops==1&&power_stops==1&&irq_stops==1);
  fixture();psb_driver_unload(&device);
  assert(!device.dev_private&&pd_frees==1&&mmu_frees==1&&gtt_frees==1&&page_frees==1);
  assert(reg_unmaps==3&&pci_puts==2&&bios_frees==1&&private_frees==1&&power_stops==1);
  fixture();blocked=true;struct pci_device_id id={7};
  assert(psb_pci_probe(&pci,&id)==-EBUSY);
  assert(!pci_enables&&!pci_disables&&!device_allocs&&!loads&&!registrations&&!dev_puts);
+ fixture();gem_blocked=true;assert(psb_pci_probe(&pci,&id)==-EBUSY);
+ assert(!pci_enables&&!device_allocs&&!loads&&!registrations);
  fixture();assert(!psb_pci_probe(&pci,&id));
  assert(pci_enables==1&&device_allocs==1&&loads==1&&registrations==1&&!pci_disables&&!dev_puts);
  puts("PASS actual unload retains SGX/MMU/GTT dependency fields, joins modeled CPU cleanup; blocked probe performs no PCI enable/allocation/load; normal paths preserved. CPU model, not GPU stop or late GEM safety.");

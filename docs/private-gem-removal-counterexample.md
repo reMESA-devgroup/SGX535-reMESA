@@ -60,3 +60,10 @@ insufficient. That work must fit the device-wide MMU/GTT retention, hardware
 stop/isolation, callback teardown and rebind policy described in
 [the postclose follow-up](private-postclose.md). The private hardware candidate
 remains unqualified; previously validated hardware results remain unchanged.
+
+The subsequent [standard GEM lifetime implementation](private-gem-lifetime.md)
+now supplies the joined live destructor, postloss ownership retention and
+device-retention/rebind integration. Its CPU tests cover the two schedules
+recorded here. The original counterexample remains evidence of the old source;
+it is not a test of the new included wrapper. Physical qualification is still
+incomplete.

@@ -87,3 +87,8 @@ Uninstalled/unqualified module SHA-256:
 `a756ed0a99d90f36e60d8af6168e508a9c3b8468319782919023d1e2f1e7ccaf`.
 
 The pinned native checkpoint and earlier hardware evidence remain unchanged.
+
+The subsequent [standard GEM lifetime component](private-gem-lifetime.md)
+extends graph retention/rebind refusal to tracked standard GEM objects, joins
+preloss destruction and quarantines postloss destruction without late MMIO.
+Physical qualification and a recoverable collection protocol remain incomplete.

@@ -210,14 +210,15 @@ def trap_gem_unmap_source(source):
 
 
 def private_entry_sources(driver, memory):
-    driver = '#include "remesa_private_file_lost.h"\n' + driver
+    driver = '#include "remesa_private_file_lost.h"\n#include "remesa_private_gem_lifetime.h"\n' + driver
     driver = replace_once(driver,
         '\t\tpsb_intel_opregion_fini(dev);\n\n\t\tif (dev_priv->pf_pd) {',
         '\t\tpsb_intel_opregion_fini(dev);\n\n'
-        '\t\t/* Lost private endpoints retain their original module/device/PM\n'
-        '\t\t * references. Keep the entire SGX/MMU/GTT dependency graph;\n'
+        '\t\t/* Lost endpoints/GEM owners retain module/device references.\n'
+        '\t\t * Keep the remaining SGX/MMU/GTT dependency graph;\n'
         '\t\t * IRQ/work/client teardown above is not a GPU stop receipt. */\n'
-        '\t\tif (remesa_private_memory_device_retained(dev)) {\n'
+        '\t\tif (remesa_private_memory_device_retained(dev)||\n'
+        '\t\t    remesa_private_gem_device_retained(dev)) {\n'
         '\t\t\tgma_power_uninit(dev);\n'
         '\t\t\treturn;\n'
         '\t\t}\n\n\t\tif (dev_priv->pf_pd) {')
@@ -225,7 +226,7 @@ def private_entry_sources(driver, memory):
         '\tret = pci_enable_device(pdev);\n',
         '\t/* A retained global endpoint forbids rebinding before any PCI\n'
         '\t * enable, register write, reset or new MMU construction. */\n'
-        '\tif (remesa_private_memory_rebind_blocked())\n'
+        '\tif (remesa_private_memory_rebind_blocked()||remesa_private_gem_rebind_blocked())\n'
         '\t\treturn -EBUSY;\n\n\tret = pci_enable_device(pdev);\n')
     driver = replace_once(driver, 'static void psb_pci_remove(struct pci_dev *pdev)\n',
         '#include "remesa_private_entry_guard.inc"\n\n'
@@ -275,6 +276,41 @@ def private_file_lost_sources(memory):
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n'
         ' if(s->private_device_lost){mutex_unlock(&s->lock);return -ENODEV;}\n')
     return memory + '\n#include "remesa_private_memory_file_lost.inc"\n'
+
+
+def private_gem_lifetime_sources(native):
+    anchors = {'gem.c': '2e47b9c3df078c49693dbee1f82e6660cb76a876db0ad3156ee4091c999eca43',
+               'framebuffer.c': 'ec0a8e81d02e6246600e14ed112bd3224ec07db7ee440e78bcae53b4b01541b6',
+               'gtt.h': '2407ff8bdbdba056e0583982e94b77da8c665bdd797d3fb3444918566abdc72f'}
+    sources = {}
+    for name, digest in anchors.items():
+        raw = (native/name).read_bytes()
+        if hashlib.sha256(raw).hexdigest() != digest:
+            raise ValueError('unreviewed standard GEM lifetime input: '+name)
+        sources[name] = raw.decode()
+    gem = '#include <linux/module.h>\n#include <drm/drm_drv.h>\n'+sources['gem.c']
+    gem = replace_once(gem, 'void psb_gem_free_object(struct drm_gem_object *obj)\n',
+        'static void remesa_private_gem_free_object_live(struct drm_gem_object *obj)\n')
+    gem = replace_once(gem, '\nint psb_gem_get_aperture(',
+        '\n#include "remesa_private_gem_lifetime.inc"\n\nint psb_gem_get_aperture(')
+    gem = replace_once(gem, '\t/* Limit the object to 32bit mappings */\n',
+        '\tremesa_private_gem_track(&r->gem);\n\t/* Limit the object to 32bit mappings */\n')
+    gem = replace_once(gem, '\t\tdrm_gem_object_release(&r->gem);\n\t\tpsb_gtt_free_range(dev, r);\n',
+        '\t\tdrm_gem_object_put(&r->gem);\n')
+    fb = '#include "remesa_private_gem_lifetime.h"\n'+sources['framebuffer.c']
+    fb = replace_once(fb, '\t\tdrm_gem_private_object_init(dev, &backing->gem, aligned_size);\n',
+        '\t\tdrm_gem_private_object_init(dev, &backing->gem, aligned_size);\n'
+        '\t\tremesa_private_gem_track(&backing->gem);\n')
+    fb = replace_once(fb, '\tpsb_gtt_free_range(dev, backing);\n',
+        '\tdrm_gem_object_put(&backing->gem);\n')
+    header = replace_once(sources['gtt.h'], '#include <drm/drm_gem.h>\n',
+        '#include <drm/drm_gem.h>\n#include <linux/list.h>\n')
+    header = replace_once(header, '\tint roll;\t\t\t/* Roll applied to the GTT entries */\n',
+        '\tint roll;\t\t\t/* Roll applied to the GTT entries */\n'
+        '\t/* Private profile only; preserve existing field offsets. */\n'
+        '\tstruct list_head private_lifetime_link;\n'
+        '\tbool private_tracked, private_orphaned;\n')
+    return {'gem.c': gem, 'framebuffer.c': fb, 'gtt.h': header}
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
@@ -393,6 +429,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
             result['psb_drv.c'], result['remesa_gem_memory.c'])
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
+        result.update(private_gem_lifetime_sources(native))
         for name, digest, fragment in [
             ('remesa_stream_bridge.c', '4d0a1accdfc65caa28892facc2a2149cfc35c42360ebb7333027aa9d07ad8f4d',
              'remesa_private_stream_file_lost.inc'),
@@ -436,6 +473,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_prefire_irq.h',
                      'remesa_private_source_mmio.h', 'remesa_private_source_mmio.inc',
                      'remesa_private_entry_guard.inc',
+                     'remesa_private_gem_lifetime.h', 'remesa_private_gem_lifetime.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
