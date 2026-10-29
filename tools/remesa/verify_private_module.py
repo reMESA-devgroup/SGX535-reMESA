@@ -10,7 +10,7 @@ import struct
 def verify(path, kernel_release, require_serialized_source_mmio=False,
            require_cpu_entry_guards=False, require_file_lost_guards=False,
            require_device_lost_guards=False, require_device_retention=False,
-           require_gem_lifetime=False):
+           require_gem_lifetime=False, require_fbdev_lifetime=False):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     if raw[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", raw, 18)[0] != 3:
@@ -73,6 +73,11 @@ def verify(path, kernel_release, require_serialized_source_mmio=False,
     if require_gem_lifetime:
         required += ("psb_gem_free_object", "remesa_private_gem_track",
                      "remesa_private_gem_device_retained", "remesa_private_gem_rebind_blocked")
+    if require_fbdev_lifetime:
+        required += ("remesa_private_fbdev_detach", "remesa_private_fb_mmap",
+                     "remesa_private_fb_fault", "remesa_private_fb_vm_open",
+                     "remesa_private_fb_vm_close", "remesa_private_fb_destroy_info",
+                     "gma_crtc_set_config", "gma_crtc_cursor_set", "gma_crtc_cursor_move")
     for name in required:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
@@ -117,13 +122,15 @@ if __name__ == "__main__":
                    help="Require retained endpoint/unload and rebind query symbols, not hardware safety proof")
     p.add_argument("--require-gem-lifetime", action="store_true",
                    help="Require standard GEM tracking/destructor/retention functions, not physical safety proof")
+    p.add_argument("--require-fbdev-lifetime", action="store_true",
+                   help="Require private bounded mapping/final-file fbdev callbacks, not physical safety proof")
     a = p.parse_args()
     if a.report and a.report.resolve() == a.module.resolve():
         p.error("report must not overwrite the module")
     report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio,
                                a.require_cpu_entry_guards, a.require_file_lost_guards,
                                a.require_device_lost_guards, a.require_device_retention,
-                               a.require_gem_lifetime), indent=2) + "\n"
+                               a.require_gem_lifetime, a.require_fbdev_lifetime), indent=2) + "\n"
     if a.report:
         a.report.write_text(report)
     print(report, end="")

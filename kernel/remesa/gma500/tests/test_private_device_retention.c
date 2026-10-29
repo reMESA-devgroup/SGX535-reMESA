@@ -21,7 +21,7 @@ struct drm_psb_private {
  struct psb_gtt gtt;unsigned long vram_stolen_size;
 };
 struct drm_device {struct drm_psb_private *dev_private;struct pci_dev *pdev;
- bool irq_enabled;struct drm_crtc crtcs[2];};
+ bool irq_enabled,unplugged;struct drm_crtc crtcs[2];};
 static struct drm_device device;
 static struct drm_psb_private private;
 static struct pci_dev pci,aux,lpc;
@@ -29,6 +29,7 @@ static unsigned poll_stops,vblank_stops,irq_stops,backlight_stops,mode_stops;
 static unsigned chip_stops,opregion_stops,power_stops,lifecycle_losses;
 static unsigned pd_frees,mmu_frees,gtt_frees,page_frees,reg_unmaps,pci_puts,bios_frees,private_frees;
 static unsigned pci_enables,pci_disables,device_allocs,loads,registrations,dev_puts;
+static unsigned unplugs,revocations,fb_detaches;
 static bool retained,blocked,gem_retained,gem_blocked;
 static int driver;
 #define drm_for_each_crtc(crtc,dev) for((crtc)=(dev)->crtcs;(crtc)<(dev)->crtcs+2;(crtc)++)
@@ -44,6 +45,10 @@ static bool remesa_private_memory_device_retained(struct drm_device *d){assert(d
 static bool remesa_private_memory_rebind_blocked(void){return blocked;}
 static bool remesa_private_gem_device_retained(struct drm_device *d){assert(d==&device);return gem_retained;}
 static bool remesa_private_gem_rebind_blocked(void){return gem_blocked;}
+static bool drm_dev_is_unplugged(struct drm_device *d){return d->unplugged;}
+static void drm_dev_unplug(struct drm_device *d){assert(!d->unplugged);d->unplugged=true;unplugs++;}
+static void remesa_private_stream_device_lost(struct drm_device *d){assert(d->unplugged);revocations++;}
+static void remesa_private_fbdev_detach(struct drm_device *d){assert(d==&device);fb_detaches++;}
 static void gma_power_uninit(struct drm_device *d){assert(d==&device);power_stops++;}
 static void psb_mmu_free_pagedir(void *p){assert(p==private.pf_pd);pd_frees++;}
 static void down_read(int *s){assert(s==&private.gtt.sem);}
@@ -78,6 +83,7 @@ static void fixture(void)
  chip_stops=opregion_stops=power_stops=lifecycle_losses=0;
  pd_frees=mmu_frees=gtt_frees=page_frees=reg_unmaps=pci_puts=bios_frees=private_frees=0;
  pci_enables=pci_disables=device_allocs=loads=registrations=dev_puts=0;
+ unplugs=revocations=fb_detaches=0;
  retained=blocked=gem_retained=gem_blocked=false;
  private=(struct drm_psb_private){.modeset=true,.backlight_device=&private,.ops=&ops,
   .pf_pd=(void*)0x1000,.mmu=(void*)0x2000,.scratch_page=(void*)0x3000,
@@ -91,7 +97,8 @@ int main(void)
  psb_driver_unload(&device);
  assert(device.dev_private==&private&&!memcmp(&private,&before,sizeof private));
  assert(!pd_frees&&!mmu_frees&&!gtt_frees&&!page_frees&&!reg_unmaps&&!pci_puts&&!bios_frees&&!private_frees);
- assert(poll_stops==1&&vblank_stops==2&&irq_stops==1&&backlight_stops==1&&mode_stops==1);
+ assert(poll_stops==1&&vblank_stops==2&&irq_stops==1&&backlight_stops==1&&!mode_stops&&fb_detaches==1);
+ assert(unplugs==1&&revocations==1);
  assert(chip_stops==1&&opregion_stops==1&&power_stops==1&&lifecycle_losses==1);
  fixture();gem_retained=true;before=private;psb_driver_unload(&device);
  assert(device.dev_private==&private&&!memcmp(&private,&before,sizeof private));
@@ -100,6 +107,9 @@ int main(void)
  fixture();psb_driver_unload(&device);
  assert(!device.dev_private&&pd_frees==1&&mmu_frees==1&&gtt_frees==1&&page_frees==1);
  assert(reg_unmaps==3&&pci_puts==2&&bios_frees==1&&private_frees==1&&power_stops==1);
+ assert(mode_stops==1&&!fb_detaches&&unplugs==1&&revocations==1);
+ fixture();private.modeset=false;psb_driver_unload(&device);
+ assert(!unplugs&&!revocations&&private_frees==1);
  fixture();blocked=true;struct pci_device_id id={7};
  assert(psb_pci_probe(&pci,&id)==-EBUSY);
  assert(!pci_enables&&!pci_disables&&!device_allocs&&!loads&&!registrations&&!dev_puts);

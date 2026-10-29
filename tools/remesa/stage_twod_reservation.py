@@ -210,15 +210,27 @@ def trap_gem_unmap_source(source):
 
 
 def private_entry_sources(driver, memory):
-    driver = '#include "remesa_private_file_lost.h"\n#include "remesa_private_gem_lifetime.h"\n' + driver
+    driver = '#include "remesa_private_file_lost.h"\n#include "remesa_private_gem_lifetime.h"\n#include "remesa_private_fbdev.h"\n' + driver
+    driver = replace_once(driver,
+        '\tstruct drm_psb_private *dev_priv = dev->dev_private;\n\n\tif (dev_priv) {',
+        '\tstruct drm_psb_private *dev_priv = dev->dev_private;\n\tbool retained = false;\n\n'
+        '\t/* FB registration can precede DRM registration. Once modeset\n'
+        '\t * lists exist, error-unload must also join published CPU entries. */\n'
+        '\tif (dev_priv && dev_priv->modeset && !drm_dev_is_unplugged(dev)) {\n'
+        '\t\tdrm_dev_unplug(dev);\n\t\tremesa_private_stream_device_lost(dev);\n\t}\n'
+        '\tif (dev_priv) {\n'
+        '\t\tretained = remesa_private_memory_device_retained(dev)||\n'
+        '\t\t           remesa_private_gem_device_retained(dev);')
+    driver = replace_once(driver, '\t\tpsb_modeset_cleanup(dev);\n',
+        '\t\tif (retained)\n\t\t\tremesa_private_fbdev_detach(dev);\n'
+        '\t\telse\n\t\t\tpsb_modeset_cleanup(dev);\n')
     driver = replace_once(driver,
         '\t\tpsb_intel_opregion_fini(dev);\n\n\t\tif (dev_priv->pf_pd) {',
         '\t\tpsb_intel_opregion_fini(dev);\n\n'
         '\t\t/* Lost endpoints/GEM owners retain module/device references.\n'
         '\t\t * Keep the remaining SGX/MMU/GTT dependency graph;\n'
         '\t\t * IRQ/work/client teardown above is not a GPU stop receipt. */\n'
-        '\t\tif (remesa_private_memory_device_retained(dev)||\n'
-        '\t\t    remesa_private_gem_device_retained(dev)) {\n'
+        '\t\tif (retained) {\n'
         '\t\t\tgma_power_uninit(dev);\n'
         '\t\t\treturn;\n'
         '\t\t}\n\n\t\tif (dev_priv->pf_pd) {')
@@ -322,6 +334,64 @@ def private_gem_lifetime_sources(native):
         gtt = replace_once(gtt, old, new)
     gtt += '\n#include "remesa_private_gtt_guard.inc"\n'
     return {'gem.c': gem, 'framebuffer.c': fb, 'gtt.h': header, 'gtt.c': gtt}
+
+
+def private_fbdev_sources(driver_header, fb, display):
+    driver_header = replace_once(driver_header,
+        '\tstruct remesa_twod_reservation *remesa_twod_owner;\n',
+        '\tstruct remesa_twod_reservation *remesa_twod_owner;\n'
+        '\tbool remesa_private_fbdev_unregistered;\n')
+    fb = '#include <drm/drm_drv.h>\n#include <drm/drm_framebuffer.h>\n#include "remesa_private_fbdev.h"\n'+fb
+    start = fb.index('static vm_fault_t psbfb_vm_fault(struct vm_fault *vmf)\n')
+    end = fb.index('static const struct fb_ops psbfb_ops = {', start)
+    fb = fb[:start]+'#include "remesa_private_fbdev_map.inc"\n#include "remesa_private_fbdev_ops.inc"\n\n'+fb[end:]
+    if fb.count('DRM_FB_HELPER_DEFAULT_OPS,')!=3:
+        raise ValueError('unexpected fbdev operation tables')
+    fb = fb.replace('DRM_FB_HELPER_DEFAULT_OPS,','REMESA_PRIVATE_FB_DEFAULT_OPS,\n\t.fb_destroy = remesa_private_fb_destroy_info,')
+    for old, new in [('psbfb_setcolreg','remesa_fb_color'),('drm_fb_helper_cfb_fillrect','remesa_fb_fill'),
+                     ('drm_fb_helper_cfb_copyarea','remesa_fb_copy'),('psbfb_copyarea','remesa_fb_native_copy'),
+                     ('drm_fb_helper_cfb_imageblit','remesa_fb_image'),('psbfb_mmap','remesa_private_fb_mmap'),
+                     ('psbfb_sync','remesa_fb_sync'),('psbfb_pan','remesa_fb_roll')]:
+        # Only table bindings: original functions and the new macro wrappers
+        # retain their names for source review and independent test extraction.
+        import re
+        fb = re.sub(r'(\.fb_\w+\s*=\s*)'+re.escape(old)+r'\b',r'\g<1>'+new,fb)
+    fb = replace_once(fb, '\tdrm_fb_helper_unregister_fbi(fb_helper);\n\n\tdrm_fb_helper_fini(fb_helper);\n',
+        '\t/* Called by core fb_destroy after the final put_fb_info. */\n'
+        '\tdrm_fb_helper_fini(fb_helper);\n')
+    fb = replace_once(fb,
+        '\tdrm_framebuffer_unregister_private(fb);\n\tdrm_framebuffer_cleanup(fb);\n\n'
+        '\tif (fb->obj[0])\n\t\tdrm_gem_object_put(fb->obj[0]);\n\tkfree(fb);\n',
+        '\t/* Planes/clients may still own framebuffer references. */\n'
+        '\tif (fb)\n\t\tdrm_framebuffer_put(fb);\n')
+    start=fb.index('static void psb_fbdev_fini(struct drm_device *dev)\n')
+    end=fb.index('\nstatic const struct drm_mode_config_funcs',start)
+    fb=fb[:start]+'#include "remesa_private_fbdev_detach.inc"\n'+fb[end:]
+    fb=replace_once(fb, 'free:\n\tkfree(fb_helper);\n\treturn ret;\n',
+        'free:\n\tkfree(fb_helper);\n\tdev_priv->fb_helper = NULL;\n\treturn ret;\n')
+    fb=replace_once(fb, 'fini:\n\tdrm_fb_helper_fini(fb_helper);\n',
+        'fini:\n\tif (fb_helper->fb) {\n'
+        '\t\tstruct drm_framebuffer *fb = fb_helper->fb;\n'
+        '\t\tfb_helper->fb = NULL;\n\t\tdrm_framebuffer_put(fb);\n\t}\n'
+        '\tdrm_fb_helper_fini(fb_helper);\n')
+    fb=replace_once(fb, '\tret = drm_fb_helper_initial_config(fb_helper, 32);\n\tif (ret)\n\t\tgoto fini;\n',
+        '\tret = drm_fb_helper_initial_config(fb_helper, 32);\n'
+        '\tif (ret) {\n'
+        '\t\t/* On this target register_framebuffer can return a fbcon\n'
+        '\t\t * error after publishing the slot and initializing count. */\n'
+        '\t\tif (fb_helper->fbdev && atomic_read(&fb_helper->fbdev->count)) {\n'
+        '\t\t\tdrm_dev_unplug(dev);\n\t\t\tremesa_private_fbdev_detach(dev);\n'
+        '\t\t\treturn ret; /* helper may have been destroyed */\n'
+        '\t\t}\n\t\tgoto fini;\n\t}\n')
+    display=replace_once(display,
+        'int gma_crtc_set_config(struct drm_mode_set *set,\n',
+        'static int remesa_private_fb_config_live(struct drm_mode_set *set,\n')
+    display=replace_once(display, 'int gma_crtc_cursor_set(struct drm_crtc *crtc,\n',
+        'static int remesa_private_fb_cursor_set_live(struct drm_crtc *crtc,\n')
+    display=replace_once(display, 'int gma_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)\n',
+        'static int remesa_private_fb_cursor_move_live(struct drm_crtc *crtc, int x, int y)\n')
+    display='#include <drm/drm_drv.h>\n'+display+'\n#include "remesa_private_fbdev_config.inc"\n'
+    return driver_header,fb,display
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
@@ -441,6 +511,11 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             result['psb_drv.c'], result['remesa_gem_memory.c'])
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
         result.update(private_gem_lifetime_sources(native))
+        display=(native/'gma_display.c').read_bytes()
+        if hashlib.sha256(display).hexdigest()!='877140046fcea01a5e8f0face75384a3dfe2d34983539de76bcfa94ef9f5f2c4':
+            raise ValueError('unreviewed fbdev legacy modeset input')
+        result['psb_drv.h'],result['framebuffer.c'],result['gma_display.c']=private_fbdev_sources(
+            result['psb_drv.h'],result['framebuffer.c'],display.decode())
         for name, digest, fragment in [
             ('remesa_stream_bridge.c', '4d0a1accdfc65caa28892facc2a2149cfc35c42360ebb7333027aa9d07ad8f4d',
              'remesa_private_stream_file_lost.inc'),
@@ -486,6 +561,9 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_entry_guard.inc',
                      'remesa_private_gem_lifetime.h', 'remesa_private_gem_lifetime.inc',
                      'remesa_private_gtt_guard.inc',
+                     'remesa_private_fbdev.h', 'remesa_private_fbdev_map.inc',
+                     'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
+                     'remesa_private_fbdev_config.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:

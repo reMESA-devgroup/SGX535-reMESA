@@ -87,3 +87,7 @@ The next framebuffer change needs bounded mapping, stable VMA backing ownership
 and a teardown protocol for open fb files and mappings. Other outer KMS/console
 callbacks also remain to be joined/reviewed. This module is not yet physically
 qualified; no installation, reset, boot change or new FPS result is implied.
+
+The subsequent [fbdev lifetime correction](private-fbdev-lifetime.md) implements
+bounded GEM-owned VMAs and final-open-file cleanup, respecting framebuffer KMS
+references. The original witness above remains evidence of the earlier source.
