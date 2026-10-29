@@ -21,3 +21,22 @@ void remesa_private_memory_file_lost(struct drm_device *dev,struct drm_file *fil
 {remesa_private_memory_lost(dev,file,false);}
 void remesa_private_memory_device_lost(struct drm_device *dev)
 {remesa_private_memory_lost(dev,NULL,true);}
+bool remesa_private_memory_device_retained(struct drm_device *dev)
+{
+ struct remesa_gem_memory *s;bool retained=false;
+ if(!dev)return false;
+ mutex_lock(&endpoint_lock);s=endpoint;
+ if(s&&s->dev==dev){
+  mutex_lock(&s->lock);retained=s->private_device_lost;mutex_unlock(&s->lock);
+ }
+ mutex_unlock(&endpoint_lock);return retained;
+}
+bool remesa_private_memory_rebind_blocked(void)
+{
+ struct remesa_gem_memory *s;bool retained=false;
+ /* The retained backend has one global endpoint, not independent per-PCI
+  * contexts. Refuse every new binding before it can write device registers. */
+ mutex_lock(&endpoint_lock);s=endpoint;
+ if(s){mutex_lock(&s->lock);retained=s->private_device_lost;mutex_unlock(&s->lock);}
+ mutex_unlock(&endpoint_lock);return retained;
+}

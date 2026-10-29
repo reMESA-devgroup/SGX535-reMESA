@@ -65,3 +65,7 @@ Uninstalled module SHA-256:
 
 There was no device access, installation, reset or boot change. Existing
 physical evidence and the previously validated glxgears path are unchanged.
+
+The subsequent [lost-endpoint retention component](private-device-retention.md)
+now skips destructive SGX/MMU/GTT teardown for a matching retained endpoint and
+blocks a new probe. It does not resolve the remaining standard GEM protocol.

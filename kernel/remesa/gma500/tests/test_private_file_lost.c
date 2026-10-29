@@ -110,6 +110,8 @@ int main(void)
  fixture(false);assert(!remesa_gem_memory_close(&memory)&&cleanup_calls&&!rank);
  /* Device loss must revoke open files without waiting for postclose. */
  fixture(true);before=memory;trusted_before=stream;bridge_before=bridge;
+ assert(!remesa_private_memory_device_retained(&dev));
+ assert(!remesa_private_memory_rebind_blocked());
  remesa_private_stream_device_lost(NULL);
  remesa_private_stream_device_lost(&otherdev);
  assert(!memcmp(&memory,&before,sizeof memory)&&!memcmp(&stream,&trusted_before,sizeof stream));
@@ -117,6 +119,10 @@ int main(void)
  remesa_private_stream_device_lost(&dev);
  assert(!owner&&!owner_device&&!memory.file&&!stream.file);
  assert(memory.private_device_lost&&stream.quarantined&&permanently_quarantined);
+ assert(remesa_private_memory_device_retained(&dev));
+ assert(!remesa_private_memory_device_retained(&otherdev));
+ assert(!remesa_private_memory_device_retained(NULL));
+ assert(remesa_private_memory_rebind_blocked());
  assert(memory.jobs[0].quarantined&&memory.bo[0].quarantine&&source_poison_calls==1);
  before.file=NULL;before.private_device_lost=true;before.jobs[0].quarantined=true;
  before.jobs[0].state=REMESA_JOB_QUARANTINED;before.bo[0].quarantine=true;

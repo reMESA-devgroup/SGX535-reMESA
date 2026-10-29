@@ -210,6 +210,23 @@ def trap_gem_unmap_source(source):
 
 
 def private_entry_sources(driver, memory):
+    driver = '#include "remesa_private_file_lost.h"\n' + driver
+    driver = replace_once(driver,
+        '\t\tpsb_intel_opregion_fini(dev);\n\n\t\tif (dev_priv->pf_pd) {',
+        '\t\tpsb_intel_opregion_fini(dev);\n\n'
+        '\t\t/* Lost private endpoints retain their original module/device/PM\n'
+        '\t\t * references. Keep the entire SGX/MMU/GTT dependency graph;\n'
+        '\t\t * IRQ/work/client teardown above is not a GPU stop receipt. */\n'
+        '\t\tif (remesa_private_memory_device_retained(dev)) {\n'
+        '\t\t\tgma_power_uninit(dev);\n'
+        '\t\t\treturn;\n'
+        '\t\t}\n\n\t\tif (dev_priv->pf_pd) {')
+    driver = replace_once(driver,
+        '\tret = pci_enable_device(pdev);\n',
+        '\t/* A retained global endpoint forbids rebinding before any PCI\n'
+        '\t * enable, register write, reset or new MMU construction. */\n'
+        '\tif (remesa_private_memory_rebind_blocked())\n'
+        '\t\treturn -EBUSY;\n\n\tret = pci_enable_device(pdev);\n')
     driver = replace_once(driver, 'static void psb_pci_remove(struct pci_dev *pdev)\n',
         '#include "remesa_private_entry_guard.inc"\n\n'
         'static void psb_pci_remove(struct pci_dev *pdev)\n')

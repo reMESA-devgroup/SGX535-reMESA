@@ -9,7 +9,7 @@ import struct
 
 def verify(path, kernel_release, require_serialized_source_mmio=False,
            require_cpu_entry_guards=False, require_file_lost_guards=False,
-           require_device_lost_guards=False):
+           require_device_lost_guards=False, require_device_retention=False):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     if raw[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", raw, 18)[0] != 3:
@@ -67,6 +67,8 @@ def verify(path, kernel_release, require_serialized_source_mmio=False,
     if require_device_lost_guards:
         required += ("remesa_private_stream_device_lost", "remesa_private_trusted_device_lost",
                      "remesa_private_memory_device_lost")
+    if require_device_retention:
+        required += ("remesa_private_memory_device_retained", "remesa_private_memory_rebind_blocked")
     for name in required:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
@@ -107,12 +109,14 @@ if __name__ == "__main__":
                    help="Require guarded postclose/lastclose and software file-orphaning functions")
     p.add_argument("--require-device-lost-guards", action="store_true",
                    help="Require device-wide software revocation symbols, not GPU stop proof")
+    p.add_argument("--require-device-retention", action="store_true",
+                   help="Require retained endpoint/unload and rebind query symbols, not hardware safety proof")
     a = p.parse_args()
     if a.report and a.report.resolve() == a.module.resolve():
         p.error("report must not overwrite the module")
     report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio,
                                a.require_cpu_entry_guards, a.require_file_lost_guards,
-                               a.require_device_lost_guards), indent=2) + "\n"
+                               a.require_device_lost_guards, a.require_device_retention), indent=2) + "\n"
     if a.report:
         a.report.write_text(report)
     print(report, end="")
