@@ -11,6 +11,9 @@ struct remesa_mmu_private {
  struct remesa_mmu_allowed_binding bindings[REMESA_MMU_AUDIT_BINDINGS];
  struct page **pages;
  u32 count,held;
+ /* Root transaction retains BOTH directories on any uncertain MMIO result. */
+ struct psb_mmu_pd *restore_pd;
+ u32 root_active,root_uncertain,restore_root,private_root,restore_ctrl;
 };
 #if defined(CONFIG_X86)
 static void remesa_mmu_private_sync_page(struct page *page,u32 stride)
@@ -58,6 +61,7 @@ int remesa_mmu_private_release(struct remesa_mmu_private **owner)
  struct remesa_mmu_private *s;u32 i;int bound;
  if(!owner)return -EINVAL;
  s=*owner;if(!s)return 0;
+ if(s->root_active||s->root_uncertain)return -EBUSY;
  if(s->pd){
   down_write(&s->driver->sem);
   bound=s->pd->hw_context!=-1;

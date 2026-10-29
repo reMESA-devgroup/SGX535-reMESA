@@ -81,7 +81,10 @@ static void released(void)
  for(unsigned i=0;i<16;i++)CHECK(references[i]==1);
  CHECK(f.driver.needs_tlbflush==71);
 }
-int main(void)
+#ifndef REMESA_PRIVATE_TEST_MAIN
+#define REMESA_PRIVATE_TEST_MAIN main
+#endif
+int REMESA_PRIVATE_TEST_MAIN(void)
 {
  struct remesa_mmu_private *owner=NULL;u32 scratch[REMESA_MMU_AUDIT_OVERHEAD_WORDS+4];
  setup_owner();CHECK(!remesa_mmu_private_prepare(&f.driver,f.bindings,3,&owner));
@@ -167,4 +170,5 @@ int main(void)
  }
  CHECK(!remesa_mmu_private_release(&owner));released();
  printf("PASS %u owner/auditor checks; no publication, binding or GPU operations\n",checks);
+ return 0;
 }
