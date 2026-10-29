@@ -108,6 +108,20 @@ int main(void)
   CHECK(remesa_twod_reserve(&p,&r)==-EBUSY);
   CHECK(remesa_twod_reserve(&other,&r)==-EBUSY);
   CHECK(remesa_twod_reserve(&p,&r2)==-EBUSY&&!memcmp(&r2,&zero,sizeof r2));
+  /* MMU preparation borrows the real producer/IRQ reservation. No FIFO or
+   * root publication is performed by this guard. */
+  unsigned token=iteration,foreign_token=0;
+  CHECK(!remesa_twod_mmu_guard_acquire(&p,&r,&token)&&r.mmu_owner==&token);
+  CHECK(remesa_twod_mmu_guard_acquire(&p,&r,&foreign_token)==-EBUSY);
+  CHECK(remesa_twod_release(&p,&r)==-EBUSY&&r.held&&r.mmu_owner==&token);
+  unsigned long guard_flags=sgx535_gma500_fixed_irq_lock();
+  CHECK(remesa_twod_irq_issue_locked(&r,9)==-EBUSY&&!r.irq_issued&&!r.irq_cookie);
+  CHECK(remesa_twod_irq_drop_locked(&r)==-EBUSY);
+  sgx535_gma500_fixed_irq_unlock(guard_flags);
+  CHECK(remesa_twod_mmu_guard_release(&other,&r,&token)==-ENOENT);
+  CHECK(remesa_twod_mmu_guard_release(&p,&r,&foreign_token)==-EACCES&&r.mmu_owner==&token);
+  CHECK(!remesa_twod_mmu_guard_release(&p,&r,&token)&&!r.mmu_owner);
+  CHECK(remesa_twod_mmu_guard_release(&p,&r,&token)==-EACCES);
   unsigned reads=p.reads,words=p.words,resets=p.resets;
   console_copy(&p,width,height);
   CHECK(p.reads==reads&&p.words==words&&p.resets==resets&&console_copies==before+1);

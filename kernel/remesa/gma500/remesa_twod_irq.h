@@ -26,4 +26,6 @@ int remesa_twod_irq_snapshot_locked(struct remesa_twod_reservation *,u64,
  * prevent drop. Caller may not free token/device before successful release.
  */
 int remesa_twod_irq_mark_retired_locked(struct remesa_twod_reservation *,u64);
+/* Shared IRQ lock held: confirm this exact unissued reservation ledger. */
+int remesa_twod_irq_guard_locked(struct remesa_twod_reservation *);
 #endif

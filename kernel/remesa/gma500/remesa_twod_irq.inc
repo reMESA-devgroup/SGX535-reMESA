@@ -18,7 +18,7 @@ int remesa_twod_irq_claim_locked(struct remesa_twod_reservation *r)
 {
  twod_irq_assert_locked();
  if(!r||!r->held||!r->device||r->device->remesa_twod_owner!=r||
-    r->irq_cookie||r->irq_issued||r->irq_retired||r->pending1||r->pending2)return -EINVAL;
+    r->irq_cookie||r->irq_issued||r->irq_retired||r->pending1||r->pending2||r->mmu_owner)return -EINVAL;
  if(!remesa_twod_irq_available_locked())return -EBUSY;
  twod_irq_owner=r;return 0;
 }
@@ -27,6 +27,7 @@ static bool twod_irq_event_complete(struct remesa_twod_reservation *r)
 int remesa_twod_irq_drop_locked(struct remesa_twod_reservation *r)
 {
  twod_irq_assert_locked();if(!r||twod_irq_owner!=r)return -ENOENT;
+ if(r->mmu_owner)return -EBUSY;
  if(r->irq_issued&&(!r->irq_retired||!twod_irq_event_complete(r)))return -EBUSY;
  twod_irq_owner=NULL;return 0;
 }
@@ -34,7 +35,7 @@ int remesa_twod_irq_issue_locked(struct remesa_twod_reservation *r,u64 cookie)
 {
  twod_irq_assert_locked();if(!r||twod_irq_owner!=r)return -ENOENT;
  if(!cookie)return -EINVAL;
- if(r->irq_issued||r->irq_cookie||r->irq_retired)return -EBUSY;
+ if(r->irq_issued||r->irq_cookie||r->irq_retired||r->mmu_owner)return -EBUSY;
  r->irq_cookie=cookie;r->irq_issued=true;return 0;
 }
 void remesa_twod_irq_capture_locked(struct drm_device *dev,u32 status1,u32 status2)
@@ -62,4 +63,13 @@ int remesa_twod_irq_mark_retired_locked(struct remesa_twod_reservation *r,u64 co
  if(!twod_irq_event_complete(r))return -EIO;
  if(r->irq_retired)return -EBUSY;
  r->irq_retired=true;return 0;
+}
+
+int remesa_twod_irq_guard_locked(struct remesa_twod_reservation *r)
+{
+ twod_irq_assert_locked();
+ if(!r||twod_irq_owner!=r)return -ENOENT;
+ if(r->irq_cookie||r->irq_issued||r->irq_retired||r->pending1||r->pending2)
+  return -EBUSY;
+ return 0;
 }

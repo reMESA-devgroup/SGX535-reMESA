@@ -2,6 +2,7 @@
 /* Include after the retained GEM memory service; no runtime ioctl added. */
 #include "remesa_gem_private.h"
 #include "remesa_mmu_verify_access.h"
+#include "remesa_twod_reservation.h"
 static int private_block_validate(void *c,const void *p,unsigned n,
  const struct remesa_memory_binding *b,unsigned count)
 {(void)c;(void)p;(void)n;(void)b;(void)count;return -EOPNOTSUPP;}
@@ -21,12 +22,12 @@ static const struct remesa_job_executor private_reserved_executor={
 };
 int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  struct remesa_memory_ticket ticket,const struct remesa_gem_private_rule *rules,
- unsigned count,struct remesa_gem_private *loan)
+ unsigned count,struct remesa_twod_reservation *guard,struct remesa_gem_private *loan)
 {
  struct remesa_mmu_allowed_binding bindings[16],swap;
  struct retained_job *j;struct backing *b;unsigned i,k;int error=-ENOENT;
- if(!s||!rules||!loan||!count||count>16)return -EINVAL;
- if(loan->memory||loan->owner||loan->live||loan->ticket.context||
+ if(!s||!rules||!guard||!loan||!count||count>16)return -EINVAL;
+ if(loan->memory||loan->owner||loan->guard||loan->live||loan->ticket.context||
     loan->ticket.operation||loan->ticket.slot||loan->ticket.generation)return -EBUSY;
  mutex_lock(&s->lock);j=ticket_job(s,ticket);if(!j)goto done;
  if(j->quarantined){error=-EIO;goto done;}
@@ -57,12 +58,21 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  }
  *loan=(struct remesa_gem_private){.memory=s,.ticket=ticket,.live=true};
  j->attached=true;s->executor=&private_reserved_executor;s->executor_context=loan;
+ error=remesa_twod_mmu_guard_acquire(s->dev->dev_private,guard,loan);
+ if(error)goto rollback;
+ loan->guard=guard;
  error=remesa_mmu_private_prepare(s->pd->driver,bindings,count,&loan->owner);
  if(!error&&!loan->owner){error=job_fault(s,j,-EPROTO);goto done;}
  if(error){
   if(loan->owner){error=job_fault(s,j,error);goto done;}
-  j->attached=false;s->executor=NULL;s->executor_context=NULL;memset(loan,0,sizeof(*loan));
+  if(remesa_twod_mmu_guard_release(s->dev->dev_private,guard,loan)){
+   error=job_fault(s,j,-EIO);goto done;
+  }
+  loan->guard=NULL;
+  goto rollback;
  }
+ goto done;
+ rollback:j->attached=false;s->executor=NULL;s->executor_context=NULL;memset(loan,0,sizeof(*loan));
  done:mutex_unlock(&s->lock);return error;
 }
 int remesa_gem_private_release(struct remesa_gem_private *loan)
@@ -75,6 +85,9 @@ int remesa_gem_private_release(struct remesa_gem_private *loan)
  /* No issue/retirement transition is defined for this preparation-only API. */
  if(j->state!=REMESA_JOB_PREPARED&&j->state!=REMESA_JOB_QUARANTINED){error=-EBUSY;goto done;}
  error=remesa_mmu_private_release(&loan->owner);if(error)goto done;
+ if(!loan->guard){error=-EIO;goto done;}
+ error=remesa_twod_mmu_guard_release(s->dev->dev_private,loan->guard,loan);
+ if(error)goto done;
  j->attached=false;s->executor=NULL;s->executor_context=NULL;memset(loan,0,sizeof(*loan));
  done:mutex_unlock(&s->lock);return error;
 }

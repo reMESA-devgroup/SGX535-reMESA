@@ -36,6 +36,7 @@ static void event_case(u32 status1,u32 status2,int complete)
  CHECK(remesa_twod_irq_drop_locked(&r)==-EBUSY);
  sgx535_gma500_fixed_irq_unlock(flags);
  CHECK(remesa_twod_release(&p,&r)==-EBUSY&&r.held);
+ CHECK(remesa_twod_mmu_guard_acquire(&p,&r,&r)==-EBUSY&&!r.mmu_owner);
  capture(&foreign,0xffffffffu,0xffffffffu);
  CHECK(!r.pending1&&!r.pending2);
  capture(&dev,status1,status2);

@@ -57,3 +57,33 @@ int remesa_twod_release(struct drm_psb_private *dev_priv,struct remesa_twod_rese
  sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);return error;
 }
+
+static int remesa_twod_mmu_guard(struct drm_psb_private *dev_priv,
+ struct remesa_twod_reservation *r,const void *owner,bool acquire)
+{
+ unsigned long flags,irq_flags;int error=0;
+ if(!dev_priv||!r||!owner||!dev_priv->dev||!dev_priv->sgx_reg)return -EINVAL;
+ if(!gma_power_is_on(dev_priv->dev))return -EIO;
+ spin_lock_irqsave(&dev_priv->lock_2d,flags);
+ irq_flags=sgx535_gma500_fixed_irq_lock();
+ if(!r->held||r->device!=dev_priv||dev_priv->remesa_twod_owner!=r){
+  error=-ENOENT;goto done;
+ }
+ error=remesa_twod_irq_guard_locked(r);if(error)goto done;
+ if(acquire){
+  if(r->mmu_owner){error=-EBUSY;goto done;}
+  if(!remesa_twod_idle_locked(dev_priv)){error=-EBUSY;goto done;}
+  r->mmu_owner=owner;
+ }else{
+  if(r->mmu_owner!=owner){error=-EACCES;goto done;}
+  r->mmu_owner=NULL;
+ }
+ done:sgx535_gma500_fixed_irq_unlock(irq_flags);
+ spin_unlock_irqrestore(&dev_priv->lock_2d,flags);return error;
+}
+int remesa_twod_mmu_guard_acquire(struct drm_psb_private *dev_priv,
+ struct remesa_twod_reservation *r,const void *owner)
+{return remesa_twod_mmu_guard(dev_priv,r,owner,true);}
+int remesa_twod_mmu_guard_release(struct drm_psb_private *dev_priv,
+ struct remesa_twod_reservation *r,const void *owner)
+{return remesa_twod_mmu_guard(dev_priv,r,owner,false);}
