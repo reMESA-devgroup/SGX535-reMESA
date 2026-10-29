@@ -2,7 +2,9 @@
 """Stage the bounded 2D producer-reservation patch; never install or overwrite.
 
 The input is the retained qualified native source, not the dirty legacy checkout.
-This integrates producer/IRQ exclusion; it does not register a GPU executor.
+Normal profiles integrate producer/IRQ exclusion. The private profile also
+registers a default-disabled, fixed-profile qualification ioctl; it is not a
+production submission interface and this tool never installs a module.
 """
 import argparse
 import hashlib
@@ -339,7 +341,7 @@ if __name__ == '__main__':
     parser.add_argument('--with-native-copy', action='store_true')
     parser.add_argument('--with-native-fill', action='store_true')
     parser.add_argument('--with-private-mmu-preparation', action='store_true',
-                        help='Compile trusted GEM-to-unbound-MMU preparation; no new ioctl/admission')
+                        help='Compile private MMU/execution and the default-disabled typed qualification ioctl')
     args = parser.parse_args()
     print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl,
                            args.with_lab_vendor_stream, args.with_native_copy, args.with_native_fill,
