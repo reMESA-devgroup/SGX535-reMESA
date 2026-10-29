@@ -7,7 +7,7 @@ from pathlib import Path
 import struct
 
 
-def verify(path, kernel_release):
+def verify(path, kernel_release, require_serialized_source_mmio=False):
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
     if raw[:6] != b"\x7fELF\x01\x01" or struct.unpack_from("<H", raw, 18)[0] != 3:
@@ -51,6 +51,8 @@ def verify(path, kernel_release):
                 "remesa_mmu_private_restore_locked", "remesa_mmu_private_quarantine_locked",
                 "sgx535_gma500_fixed_backend_begin_private", "remesa_twod_copy_ioctl",
                 "remesa_twod_fill_ioctl")
+    if require_serialized_source_mmio:
+        required += ("remesa_private_source_write",)
     for name in required:
         index, kind, size = symbols.get(name, (0, 0, 0))
         if not 0 < index < count or kind != 2 or not size or not sections[index][2] & 4:
@@ -66,7 +68,7 @@ def verify(path, kernel_release):
         if not 0 < index < count or sections[index][1] != 8 or size != 1:
             raise ValueError(f"control is not a zero-initialized BSS bool: {name}")
     for name, (index, kind, size) in symbols.items():
-        if not index and name.startswith(("remesa_gem_private_", "remesa_mmu_private_", "remesa_twod_")):
+        if not index and name.startswith(("remesa_gem_private_", "remesa_mmu_private_", "remesa_twod_", "remesa_private_source_")):
             raise ValueError(f"unresolved private driver symbol: {name}")
     if not metadata.get("vermagic", "").startswith(kernel_release + " "):
         raise ValueError("unexpected target kernel release")
@@ -83,10 +85,12 @@ if __name__ == "__main__":
     p.add_argument("module", type=Path)
     p.add_argument("--kernel-release", required=True)
     p.add_argument("--report", type=Path)
+    p.add_argument("--require-serialized-source-mmio", action="store_true",
+                   help="Require the new private source/MMIO function (symbol check, not runtime proof)")
     a = p.parse_args()
     if a.report and a.report.resolve() == a.module.resolve():
         p.error("report must not overwrite the module")
-    report = json.dumps(verify(a.module, a.kernel_release), indent=2) + "\n"
+    report = json.dumps(verify(a.module, a.kernel_release, a.require_serialized_source_mmio), indent=2) + "\n"
     if a.report:
         a.report.write_text(report)
     print(report, end="")

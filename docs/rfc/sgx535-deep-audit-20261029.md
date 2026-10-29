@@ -73,6 +73,10 @@ uninstalled build; it is not physical acceleration evidence or LAB approval.
    occur after concurrent invalidation: `fixed_write` checks source authority
    before the register write without one common IRQ critical section. Review
    callers before attempting to linearize check/write; avoid recursive locking.
+   **Subsequent correction:** the private fixed-write path now holds the existing
+   source lock across validation and CPU MMIO issue. See
+   [source/MMIO follow-up](../private-source-mmio.md) for the actual two-thread
+   counterexample/regression, lock order, build and remaining lifetime limits.
 4. Full `fixed_run` TA_LOAD execution was compiled but not exercised by the
    source/service CPU counterexample. Its flag set/clear order was source-reviewed;
    the test models that action interval. Hardware timing remains unqualified.

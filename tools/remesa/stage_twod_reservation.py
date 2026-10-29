@@ -65,6 +65,20 @@ def private_mmu_flush_source(mmu):
 
 def private_fixed_sources(fixed, header):
     """Preserve original begin/source/retirement gates, add an owned IRQ loan."""
+    fixed = '#include "remesa_private_source_mmio.h"\n' + fixed
+    fixed = replace_once(fixed,
+        'static int fixed_write(void *context, sgx535_u32 offset, sgx535_u32 value)\n'
+        '{\n'
+        '    struct sgx535_gma500_fixed_backend *backend = context;\n'
+        '    struct drm_psb_private *dev_priv = backend->owner->dev->dev_private;\n',
+        'static int fixed_write(void *context, sgx535_u32 offset, sgx535_u32 value)\n'
+        '{\n'
+        '    struct sgx535_gma500_fixed_backend *backend = context;\n'
+        '    struct drm_psb_private *dev_priv;\n'
+        '\n'
+        '    if (backend && backend->private_loan)\n'
+        '        return remesa_private_source_write(backend, offset, value);\n'
+        '    dev_priv = backend->owner->dev->dev_private;\n')
     fixed = replace_once(fixed,
         'int sgx535_gma500_fixed_backend_begin(\n'
         '    struct sgx535_gma500_fixed_backend *backend,\n'
@@ -176,13 +190,14 @@ def private_stream_source(source):
         '#endif\n#include "remesa_private_prefire_irq.h"\nstatic DEFINE_SPINLOCK(source_lock);')
     source = replace_once(source, ' else if(lease&&pending) {\n',
         ' else if(lease&&(pending||(a&(1U<<27)))) {\n')
-    return replace_once(source,
+    source = replace_once(source,
         '  if(operation->finished || operation->evidence.state>=SGX535_CAP_TERMINAL)lost();\n',
         '  if(operation->finished || operation->evidence.state>=SGX535_CAP_TERMINAL)lost();\n'
         '  /* IRQ capture owns fixed_irq_lock; preserve unexpected prefire\n'
         '   * events before the existing IRQ path acknowledges the status. */\n'
         '  if(!operation->backend->fire_possible &&\n'
         '     remesa_private_prefire_unexpected(a,d,operation->backend->prefire_load_active))lost();\n')
+    return source + '\n#include "remesa_private_source_mmio.inc"\n'
 
 
 def trap_gem_unmap_source(source):
@@ -339,6 +354,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',
+                     'remesa_private_source_mmio.h', 'remesa_private_source_mmio.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
