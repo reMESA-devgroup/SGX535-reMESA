@@ -31,7 +31,7 @@ def replace_once(source, old, new):
     return source.replace(old, new, 1)
 
 
-def patched_sources(native, lab=False, vendor=False, copy=False, fill=False):
+def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
     if fill and not copy:
         raise ValueError("native fill requires the separate normal copy profile")
     if copy and (lab or vendor):
@@ -122,13 +122,16 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False):
             '#ifdef REMESA_TWOD_FILL_STREAM\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_FILL, remesa_twod_fill_ioctl, DRM_ROOT_ONLY),\n'
             '#endif\n')
+    if private:
+        result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n'
     return result
 
 
-def stage(native, output, lab=False, vendor=False, copy=False, fill=False):
+def stage(native, output, lab=False, vendor=False, copy=False, fill=False, private=False):
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
-    patched = patched_sources(native, lab, vendor, copy, fill)
+    patched = patched_sources(native, lab, vendor, copy, fill, private)
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
@@ -140,6 +143,12 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False):
                  'remesa_gem_twod.h', 'remesa_gem_twod.inc',
                  'remesa_gem_twod_job.h', 'remesa_gem_twod_job.inc']:
         components[name] = (additions / name).read_bytes()
+    if private:
+        for name in ['remesa_mmu_confinement.h', 'remesa_mmu_confinement.inc',
+                     'remesa_mmu_private.h', 'remesa_mmu_private.inc',
+                     'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
+                     'remesa_gem_private.h', 'remesa_gem_private.inc']:
+            components[name] = (additions / name).read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:
         components[name] = (root / 'mesa/sgx535' / name).read_bytes()
     for name in ['remesa_twod_lab.h', 'remesa_twod_lab.inc', 'remesa_twod_copy.h', 'remesa_twod_copy.inc']:
@@ -167,6 +176,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False):
         'vendor_stream_lab_compiled': vendor,
         'normal_copy_compiled': copy,
         'native_fill_compiled': fill,
+        'private_mmu_preparation_compiled': private,
         'scope': 'Native 2D candidate; optional root-only gated LAB ioctl; never installed by stager',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -181,6 +191,9 @@ if __name__ == '__main__':
     parser.add_argument('--with-lab-vendor-stream', action='store_true')
     parser.add_argument('--with-native-copy', action='store_true')
     parser.add_argument('--with-native-fill', action='store_true')
+    parser.add_argument('--with-private-mmu-preparation', action='store_true',
+                        help='Compile trusted GEM-to-unbound-MMU preparation; no new ioctl/admission')
     args = parser.parse_args()
     print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl,
-                           args.with_lab_vendor_stream, args.with_native_copy, args.with_native_fill), indent=2))
+                           args.with_lab_vendor_stream, args.with_native_copy, args.with_native_fill,
+                           args.with_private_mmu_preparation), indent=2))
