@@ -106,6 +106,42 @@ def private_fixed_sources(fixed, header):
         'int sgx535_gma500_fixed_backend_begin_guarded(\n'
         ' struct sgx535_gma500_fixed_backend *, struct sgx535_gma500_owner *,\n'
         ' struct remesa_twod_reservation *, const void *);\n#endif\n')
+    header = replace_once(header, '#include "gma500_bo_owner.h"\n',
+        '#include "gma500_bo_owner.h"\n#include "remesa_gem_memory.h"\n'
+        'struct remesa_gem_private;\n')
+    header = replace_once(header, '    unsigned long deadline;\n',
+        '    unsigned long deadline;\n'
+        '    /* Private integration only; views copied, backing remains loan-owned. */\n'
+        '    struct remesa_gem_private *private_loan;\n'
+        '    struct remesa_memory_view private_views[SGX535_BO_COUNT];\n')
+    header = replace_once(header, '\n#endif\n',
+        '\n/* Caller holds endpoint mutex THEN MMU write semaphore throughout all\n'
+        ' * stages and retains whole-device exclusion through retirement/restore.\n'
+        ' * Exact borrowed scene only; no executor registration or root bind. */\n'
+        'int sgx535_gma500_fixed_backend_begin_private(\n'
+        ' struct sgx535_gma500_fixed_backend *, struct sgx535_gma500_owner *,\n'
+        ' struct remesa_gem_private *, const struct remesa_memory_view *, unsigned);\n'
+        '#endif\n')
+    fixed = replace_once(fixed, 'static int fixed_run(void *context,',
+        '#include "remesa_fixed_private.inc"\n\nstatic int fixed_run(void *context,')
+    fixed = replace_once(fixed,
+        '        ret = (remesa_stream_source_owned(backend) ? remesa_stream_owner_flush(owner) : sgx535_gma500_owner_flush_user_images(owner));',
+        '        ret = backend->private_loan ? remesa_fixed_private_run(backend, stage) :\n'
+        '            (remesa_stream_source_owned(backend) ? remesa_stream_owner_flush(owner) : sgx535_gma500_owner_flush_user_images(owner));')
+    for case in ('PUBLISH_TRANSLATIONS', 'DEVICE_MAINTAIN'):
+        marker = '    case SGX535_FIXED_' + case + ':\n'
+        fixed = replace_once(fixed, marker, marker +
+            '        if (backend->private_loan) {\n'
+            '            if (payload || count) break;\n'
+            '            ret = remesa_fixed_private_run(backend, stage);\n'
+            '            break;\n'
+            '        }\n')
+    fixed = replace_once(fixed,
+        '    backend->power_held = false;\n    backend->active = false;\n    return 0;\n}',
+        '    backend->power_held = false;\n    backend->active = false;\n'
+        '    backend->private_loan = NULL;\n'
+        '    memset(backend->private_views, 0, sizeof(backend->private_views));\n'
+        '    return 0;\n}')
     return fixed, header
 
 def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, private=False):
@@ -233,7 +269,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
-                     'remesa_easter_egg.h']:
+                     'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:
         components[name] = (root / 'mesa/sgx535' / name).read_bytes()

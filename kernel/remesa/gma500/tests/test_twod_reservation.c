@@ -34,6 +34,7 @@ struct sgx535_gma500_fixed_backend {
  bool active,fire_possible;struct model_scene_owner *owner;u32 pending_status1,pending_status2;
 #ifdef REMESA_PRIVATE_IRQ_HANDOFF
  bool power_held,use_reserved;u32 last_stage;
+ void *private_loan,*private_views[16]; /* end() clears private-only metadata */
 #endif
 };
 static struct sgx535_gma500_fixed_backend *fixed_irq_owner;
