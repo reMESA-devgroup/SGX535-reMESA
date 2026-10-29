@@ -81,3 +81,11 @@ and borrowed scene, then provide a controlled physical entry with all original
 identity, submission, completion, retirement, readback, buffer integrity and boot
 rollback gates. General GL/GLES2, desktop 2D, VA-API and an installable driver are
 still incomplete.
+
+Follow-up qualification with the actual eleven-role source/service found a
+missing final source-settling check. The executor now invokes the existing
+`remesa_stream_source_settled()` after unbind and before clearing observers or
+granting ACKNOWLEDGED/execution_retired. Its failure preserves all GEM holds
+and refuses loan release. The additional executor regression is retained at
+`/home/gama/sgx535-offline/private-gem-settled-20261029/v1/RESULT.json`; the prior
+eight-fault results above remain historical evidence for the earlier version.

@@ -106,6 +106,11 @@ static int remesa_stream_source_unbind(const void *who,struct remesa_stream_obse
  if(fault==9)return -EIO;
  o->bound=false;source_phase=8;return 0;
 }
+static int remesa_stream_source_settled(const void *who)
+{
+ CHECK(driver.sem.held&&who==expected_memory&&source_phase==8);
+ return fault==10?-EIO:0;
+}
 #include "../remesa_gem_private_execute.inc"
 static void execute_case(unsigned failure,unsigned cpu_only)
 {
@@ -174,10 +179,10 @@ static void execute_case(unsigned failure,unsigned cpu_only)
 int main(void)
 {
  execute_case(0,0);execute_case(0,1);execute_case(1,0);
- for(unsigned f=2;f<=9;f++){
+ for(unsigned f=2;f<=10;f++){
   pid_t child=fork();CHECK(child>=0);if(!child){execute_case(f,0);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child&&WIFEXITED(status)&&WEXITSTATUS(status)==0);
  }
- printf("PASS %u private execution parent checks plus8 joined fault models; THREE-resource model, no GPU\n",checks);
+ printf("PASS %u private execution parent checks plus9 joined fault models; THREE-resource model, no GPU\n",checks);
  return 0;
 }

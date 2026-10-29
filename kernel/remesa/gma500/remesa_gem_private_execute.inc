@@ -62,6 +62,7 @@ int remesa_gem_private_execute(struct remesa_gem_private *loan,
  error=sgx535_gma500_fixed_backend_end(backend);if(error)goto quarantine;
  error=remesa_mmu_private_restore_locked(loan->owner);if(error)goto quarantine;
  error=remesa_stream_source_unbind(source_owner,observation);if(error)goto quarantine;
+ error=remesa_stream_source_settled(source_owner);if(error)goto quarantine;
  if(owner->fixed_service.observer_context==backend){
   owner->fixed_service.observer_context=NULL;owner->fixed_service.observer=NULL;
  }
