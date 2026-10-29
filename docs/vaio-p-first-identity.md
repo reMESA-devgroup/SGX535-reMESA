@@ -33,3 +33,9 @@ Keep the current system and boot configuration. The private driver candidate
 is not physically qualified for this Vaio. This package contains no kernel
 module and performs no rendering test. A kernel different from the current
 antiX 5.10.240 target needs its own build and review before installation.
+
+The volunteer has reported Q4OS, but its exact release, installed kernel and
+model have not been collected yet. Q4OS is not treated as requiring the antiX
+kernel. Work on other native kernel backends and the shared userspace wire
+contract is tracked in [kernel portability](kernel-portability.md); those ports
+are not yet qualified for installation.
