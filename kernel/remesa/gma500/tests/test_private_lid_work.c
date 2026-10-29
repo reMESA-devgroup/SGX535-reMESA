@@ -23,6 +23,9 @@ typedef uint32_t u32;
 struct timer_list {bool pending;unsigned long expires;void (*fn)(struct timer_list *);};
 struct work_struct {void (*fn)(struct work_struct *);};
 struct delayed_work {struct work_struct work;};
+struct workqueue_struct {unsigned id;};
+static struct workqueue_struct freezable_queue;
+static struct workqueue_struct *system_freezable_wq=&freezable_queue;
 struct spinlock {unsigned id;};
 struct drm_psb_private;
 struct drm_device {struct drm_psb_private *dev_private;bool unplugged;};
@@ -120,8 +123,9 @@ static struct delayed_work *to_delayed_work(struct work_struct *w)
 static void init_work(struct delayed_work *w,void (*fn)(struct work_struct *))
 {assert(w==&private.remesa_private_lid_work);w->work.fn=fn;work_inits++;}
 #define INIT_DELAYED_WORK(w,fn) init_work(w,fn)
-static bool schedule_delayed_work(struct delayed_work *w,unsigned delay)
+static bool queue_delayed_work(struct workqueue_struct *queue,struct delayed_work *w,unsigned delay)
 {
+ assert(queue==system_freezable_wq);
  assert(spin_held);assert(w==&private.remesa_private_lid_work);assert(delay==PSB_LID_DELAY);
  assert(!private.remesa_private_lid_stopping);
  pthread_mutex_lock(&control);assert(!queued);queued=true;queues++;

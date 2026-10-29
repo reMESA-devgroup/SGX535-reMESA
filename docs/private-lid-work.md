@@ -84,3 +84,8 @@ been fully qualified. No Mini 12/SSH/install/boot/parameter change occurred.
 Physical private-MMU qualification, complete owner/PM lifetime review, retained
 GPU stop/collection and complete GL/GLES/desktop acceleration remain unfinished.
 Reboot-only quarantine and the existing recovery/rollback requirements remain.
+
+The subsequent [power-contract review](private-power-contract.md) moves this
+worker to `system_freezable_wq` and records independent PM admission/PCI-failure
+counterexamples. That freezable selection supersedes the module above; general
+PM and physical S3 remain unqualified.

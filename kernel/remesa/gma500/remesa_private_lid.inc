@@ -8,7 +8,7 @@ static void remesa_private_lid_queue(struct drm_psb_private *p)
  unsigned long flags;
  spin_lock_irqsave(&p->lid_lock,flags);
  if(!p->remesa_private_lid_stopping)
-  schedule_delayed_work(&p->remesa_private_lid_work,PSB_LID_DELAY);
+  queue_delayed_work(system_freezable_wq,&p->remesa_private_lid_work,PSB_LID_DELAY);
  spin_unlock_irqrestore(&p->lid_lock,flags);
 }
 static void remesa_private_lid_worker(struct work_struct *work)
