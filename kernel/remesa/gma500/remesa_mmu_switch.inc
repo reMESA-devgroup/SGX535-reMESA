@@ -177,3 +177,34 @@ int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *s)
  (void)s;return -EOPNOTSUPP;
 #endif
 }
+
+int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *s,
+ const struct remesa_mmu_allowed_binding *expected,u32 count)
+{
+#if defined(CONFIG_X86)
+ struct drm_psb_private *dev_priv;u32 i,j;int ret;
+ if(!s||!s->driver||!s->driver->dev||!s->pd||!expected)return -EINVAL;
+#ifdef __KERNEL__
+ lockdep_assert_held_write(&s->driver->sem);
+#endif
+ if(count>REMESA_MMU_AUDIT_BINDINGS)return -E2BIG;
+ if(!count||count!=s->count)return -EACCES;
+ for(i=0;i<count;i++){
+  const struct remesa_mmu_allowed_binding *a=&expected[i],*b=&s->bindings[i];
+  if(a->address!=b->address||a->page_count!=b->page_count||a->access!=b->access||
+     a->cached!=b->cached||!a->pages)return -EACCES;
+  for(j=0;j<a->page_count;j++)if(a->pages[j]!=b->pages[j])return -EACCES;
+ }
+ if(s->root_uncertain)return -EIO;
+ if(!s->root_active||!s->restore_pd)return -ENOENT;
+ if(s->driver->default_pd!=s->restore_pd||s->restore_pd->driver!=s->driver||
+    s->restore_pd->hw_context!=-1||s->pd->hw_context!=0){ret=-ESTALE;goto failed;}
+ ret=remesa_mmu_switch_quiet(s,s->private_root);if(ret)goto failed;
+ dev_priv=s->driver->dev->dev_private;
+ if(PSB_RSGX32(PSB_CR_BIF_CTRL)!=s->restore_ctrl){ret=-ESTALE;goto failed;}
+ return 0;
+ failed:s->root_uncertain=1;return ret;
+#else
+ (void)s;(void)expected;(void)count;return -EOPNOTSUPP;
+#endif
+}

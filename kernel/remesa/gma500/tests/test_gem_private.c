@@ -61,6 +61,18 @@ int remesa_mmu_private_release(struct remesa_mmu_private **out)
  if(*out&&(*out)->blocked)return -EBUSY;
  free(*out);*out=NULL;return 0;
 }
+static unsigned bound_checks;
+int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *owner,
+ const struct remesa_mmu_allowed_binding *b,u32 count)
+{
+ CHECK(expected_memory->lock.held&&owner&&count==owner->count);bound_checks++;
+ for(unsigned i=0;i<count;i++){
+  CHECK(b[i].address==owner->bindings[i].address);
+  CHECK(b[i].pages==owner->bindings[i].pages&&b[i].page_count==owner->bindings[i].page_count);
+  CHECK(b[i].access==owner->bindings[i].access&&b[i].cached==owner->bindings[i].cached);
+ }
+ return 0;
+}
 #include "../remesa_gem_private.inc"
 static void one_case(unsigned width,unsigned height,unsigned fault)
 {
@@ -124,6 +136,29 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
   CHECK(remesa_gem_job_cancel(s,ticket)==-EBUSY);
   CHECK(remesa_gem_memory_close(s)==-EBUSY);
   if(!fault){
+   struct remesa_memory_view views[3];
+   for(unsigned i=0;i<3;i++){
+    struct backing *bo=&s->bo[j->ids[i]&31];
+    views[i]=(struct remesa_memory_view){uses[i],bo->pages,bo->inserted,NULL};
+   }
+   unsigned old_bound=bound_checks;
+   rules[0].access=3; /* original caller metadata no longer authoritative */
+   mutex_lock(&s->lock);
+   CHECK(!remesa_gem_private_validate_locked(&loan,views,3));
+   CHECK(bound_checks==old_bound+1);
+   for(unsigned negative=0;negative<5;negative++){
+    struct remesa_memory_view bad[3];memcpy(bad,views,sizeof bad);
+    if(negative==0)bad[0].binding.id++;
+    if(negative==1)bad[0].binding.va+=4096;
+    if(negative==2)bad[0].page_count++;
+    if(negative==3)bad[0].pages=views[1].pages;
+    if(negative==4)bad[0].cpu=(void*)1;
+    CHECK(remesa_gem_private_validate_locked(&loan,bad,3)==-EACCES);
+    CHECK(bound_checks==old_bound+1&&loan.live&&j->attached);
+   }
+   CHECK(remesa_gem_private_validate_locked(&loan,views,2)==-EACCES);
+   CHECK(vmap_calls==oldmaps&&flushes==oldflush&&test_wmb==oldw&&test_rmb==oldr);
+   mutex_unlock(&s->lock);
    CHECK(remesa_gem_job_issue(s,ticket)==-EOPNOTSUPP);
    CHECK(j->state==REMESA_JOB_PREPARED&&!j->cookie&&!j->quarantined);
    CHECK(remesa_gem_private_prepare(s,ticket,rules,3,&guard,&loan)==-EBUSY);

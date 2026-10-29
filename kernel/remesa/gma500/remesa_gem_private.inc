@@ -2,6 +2,7 @@
 /* Include after the retained GEM memory service; no runtime ioctl added. */
 #include "remesa_gem_private.h"
 #include "remesa_mmu_verify_access.h"
+#include "remesa_mmu_switch.h"
 #include "remesa_twod_reservation.h"
 static int private_block_validate(void *c,const void *p,unsigned n,
  const struct remesa_memory_binding *b,unsigned count)
@@ -25,6 +26,7 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  unsigned count,struct remesa_twod_reservation *guard,struct remesa_gem_private *loan)
 {
  struct remesa_mmu_allowed_binding bindings[16],swap;
+ struct remesa_gem_private_rule saved_rules[16];
  struct retained_job *j;struct backing *b;unsigned i,k;int error=-ENOENT;
  if(!s||!rules||!guard||!loan||!count||count>16)return -EINVAL;
  if(loan->memory||loan->owner||loan->guard||loan->live||loan->ticket.context||
@@ -52,11 +54,13 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
   bindings[i]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,
                  b->inserted,rules[i].access,rules[i].cached};
  }
+ memcpy(saved_rules,rules,count*sizeof(*rules));
  /* Job order remains unchanged; private auditor requires increasing VA. */
  for(i=1;i<count;i++)for(k=i;k&&bindings[k].address<bindings[k-1].address;k--){
   swap=bindings[k];bindings[k]=bindings[k-1];bindings[k-1]=swap;
  }
  *loan=(struct remesa_gem_private){.memory=s,.ticket=ticket,.live=true};
+ memcpy(loan->rules,saved_rules,count*sizeof(*saved_rules));
  j->attached=true;s->executor=&private_reserved_executor;s->executor_context=loan;
  error=remesa_twod_mmu_guard_acquire(s->dev->dev_private,guard,loan);
  if(error)goto rollback;
@@ -90,4 +94,43 @@ int remesa_gem_private_release(struct remesa_gem_private *loan)
  if(error)goto done;
  j->attached=false;s->executor=NULL;s->executor_context=NULL;memset(loan,0,sizeof(*loan));
  done:mutex_unlock(&s->lock);return error;
+}
+
+int remesa_gem_private_validate_locked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count)
+{
+ struct remesa_gem_memory *s;struct retained_job *j;struct backing *b;
+ struct remesa_mmu_allowed_binding expected[16],swap;unsigned i,k;
+ if(!loan||!loan->live||!loan->memory||!loan->owner||!loan->guard||!views||
+    !count||count>16)return -EINVAL;
+ s=loan->memory;
+ if(!s->pd||!s->pd->driver||!s->dev||!s->dev->dev_private)return -ENODEV;
+#ifdef __KERNEL__
+ lockdep_assert_held(&s->lock);
+ lockdep_assert_held_write(&s->pd->driver->sem);
+#endif
+ j=ticket_job(s,loan->ticket);if(!j)return -ENOENT;
+ if(j->quarantined)return -EIO;
+ if(!j->attached||s->executor!=&private_reserved_executor||s->executor_context!=loan||
+    (j->state!=REMESA_JOB_PREPARED&&j->state!=REMESA_JOB_ISSUED))return -EBUSY;
+ if(j->count!=count)return -EACCES;
+ if(!loan->guard->held||loan->guard->device!=s->dev->dev_private||
+    loan->guard->mmu_owner!=loan)return -EACCES;
+ for(i=0;i<count;i++){
+  const struct remesa_memory_view *v=&views[i];
+  if(v->binding.id!=j->ids[i]||loan->rules[i].id!=j->ids[i])return -EACCES;
+  b=&s->bo[j->ids[i]&31];
+  if(!b->live||b->generation!=j->ids[i]>>5||!b->holds||b->quarantine||b->lease||
+     !b->pinned||!b->reserved||!b->pages||b->inserted!=b->gem.size/PAGE_SIZE)
+   return job_fault(s,j,-EIO);
+  if(v->binding.va!=b->va.start||v->binding.bytes!=b->gem.size||
+     v->pages!=b->pages||v->page_count!=b->inserted)return -EACCES;
+  if(v->cpu&&(v->cpu!=j->cpu_views[i]||v->cpu!=b->cached_job_view))return -EACCES;
+  expected[i]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,b->inserted,
+                   loan->rules[i].access,loan->rules[i].cached};
+ }
+ for(i=1;i<count;i++)for(k=i;k&&expected[k].address<expected[k-1].address;k--){
+  swap=expected[k];expected[k]=expected[k-1];expected[k-1]=swap;
+ }
+ return remesa_mmu_private_validate_bound_locked(loan->owner,expected,count);
 }

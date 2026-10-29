@@ -18,6 +18,7 @@ struct remesa_gem_private {
  struct remesa_memory_ticket ticket;
  struct remesa_mmu_private *owner;
  struct remesa_twod_reservation *guard;
+ struct remesa_gem_private_rule rules[16];
  bool live;
 };
 /* Exact job IDs/order required; rules narrow private PTE access/cache policy.
@@ -36,4 +37,11 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *,
  * job stays prepared with all original holds, ready for explicit cancellation
  * or a qualified executor. Failure retains attachment and every GEM hold. */
 int remesa_gem_private_release(struct remesa_gem_private *);
+/* Pre-issue resource/translation check for the exact retained loan and job
+ * views. Caller already holds endpoint mutex THEN MMU write semaphore.
+ * No default-PD getter/PTE walk, allocation, data hashing or lock acquisition.
+ * CPU views, when present, must be the existing job-owned cached mappings.
+ * Publication/commands and completion remain the qualified executor's job. */
+int remesa_gem_private_validate_locked(struct remesa_gem_private *,
+ const struct remesa_memory_view *,unsigned count);
 #endif

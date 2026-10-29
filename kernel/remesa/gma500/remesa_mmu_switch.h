@@ -28,4 +28,12 @@ int remesa_mmu_private_restore_exclusive(struct remesa_mmu_private *);
  * Failure retains the active owner and marks uncertainty. No GPU completion,
  * default restore, command issue, ACK, reset or permission is produced. */
 int remesa_mmu_private_maintain_locked(struct remesa_mmu_private *);
+/* Pre-issue translation publication, ALREADY holding driver->sem for writing.
+ * Expected bindings must be VA-sorted and represent the exact retained job.
+ * Matches addresses, access/cache policy and held page identities to the
+ * owner's immutable copied closure, then checks bound root/context/identity.
+ * No data readback/hash, PTE rewrite, cache maintenance, allocation or lock
+ * acquisition. This does not authenticate commands or imply GPU admission. */
+int remesa_mmu_private_validate_bound_locked(struct remesa_mmu_private *,
+ const struct remesa_mmu_allowed_binding *,u32 count);
 #endif
