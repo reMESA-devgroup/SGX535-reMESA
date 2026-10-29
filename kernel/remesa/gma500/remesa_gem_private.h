@@ -4,6 +4,9 @@
 #include "remesa_gem_memory.h"
 #include "remesa_mmu_private.h"
 struct remesa_twod_reservation;
+/* CPU_ONLY keeps the GEM/job hold but creates no GPU PTE; cached must be0.
+ * READ/WRITE/RW retain the existing MMU access bits1/2/3. */
+#define REMESA_GEM_PRIVATE_CPU_ONLY 0u
 struct remesa_gem_private_rule {u32 id,access,cached;};
 /* Trusted exclusive kernel storage; zero initialize, retain at a stable address
  * until release succeeds. No userspace pointers or registration. The caller
@@ -22,6 +25,8 @@ struct remesa_gem_private {
  bool live;
 };
 /* Exact job IDs/order required; rules narrow private PTE access/cache policy.
+ * CPU-only sidecars stay retained outside the private GPU allowlist. At least
+ * one GPU-visible binding is required; all-CPU jobs return ENODATA.
  * No PFN, VA, page pointer or extra resource is accepted from the caller.
  * Claims the supplied idle/unissued GPU reservation before MMU preparation.
  * Builds only an UNBOUND PD using actual held GEM pages. Does not flush data,

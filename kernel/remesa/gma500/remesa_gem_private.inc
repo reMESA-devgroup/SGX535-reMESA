@@ -27,7 +27,7 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
 {
  struct remesa_mmu_allowed_binding bindings[16],swap;
  struct remesa_gem_private_rule saved_rules[16];
- struct retained_job *j;struct backing *b;unsigned i,k;int error=-ENOENT;
+ struct retained_job *j;struct backing *b;unsigned i,k,gpu_count=0;int error=-ENOENT;
  if(!s||!rules||!guard||!loan||!count||count>16)return -EINVAL;
  if(loan->memory||loan->owner||loan->guard||loan->live||loan->ticket.context||
     loan->ticket.operation||loan->ticket.slot||loan->ticket.generation)return -EBUSY;
@@ -40,7 +40,7 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  if(!s->pd||!s->pd->driver){error=-ENODEV;goto done;}
  for(i=0;i<count;i++){
   if(rules[i].id!=j->ids[i]){error=-EACCES;goto done;}
-  if(!rules[i].access||rules[i].access>3||rules[i].cached>1){error=-EINVAL;goto done;}
+  if(rules[i].access>3||rules[i].cached>1||(!rules[i].access&&rules[i].cached)){error=-EINVAL;goto done;}
   b=&s->bo[j->ids[i]&31];
   if(!b->live||b->generation!=j->ids[i]>>5||b->quarantine||!b->holds||
      b->lease||!b->pinned||!b->reserved||!b->pages||
@@ -51,12 +51,13 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
    * The private auditor subsequently verifies exact narrowed permissions. */
   error=psb_mmu_verify_cached_rw_pages(s->pd,b->va.start,b->pages,b->inserted);
   if(error){error=job_fault(s,j,error);goto done;}
-  bindings[i]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,
+  if(rules[i].access)bindings[gpu_count++]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,
                  b->inserted,rules[i].access,rules[i].cached};
  }
+ if(!gpu_count){error=-ENODATA;goto done;}
  memcpy(saved_rules,rules,count*sizeof(*rules));
  /* Job order remains unchanged; private auditor requires increasing VA. */
- for(i=1;i<count;i++)for(k=i;k&&bindings[k].address<bindings[k-1].address;k--){
+ for(i=1;i<gpu_count;i++)for(k=i;k&&bindings[k].address<bindings[k-1].address;k--){
   swap=bindings[k];bindings[k]=bindings[k-1];bindings[k-1]=swap;
  }
  *loan=(struct remesa_gem_private){.memory=s,.ticket=ticket,.live=true};
@@ -65,7 +66,7 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  error=remesa_twod_mmu_guard_acquire(s->dev->dev_private,guard,loan);
  if(error)goto rollback;
  loan->guard=guard;
- error=remesa_mmu_private_prepare(s->pd->driver,bindings,count,&loan->owner);
+ error=remesa_mmu_private_prepare(s->pd->driver,bindings,gpu_count,&loan->owner);
  if(!error&&!loan->owner){error=job_fault(s,j,-EPROTO);goto done;}
  if(error){
   if(loan->owner){error=job_fault(s,j,error);goto done;}
@@ -100,7 +101,7 @@ int remesa_gem_private_validate_locked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count)
 {
  struct remesa_gem_memory *s;struct retained_job *j;struct backing *b;
- struct remesa_mmu_allowed_binding expected[16],swap;unsigned i,k;
+ struct remesa_mmu_allowed_binding expected[16],swap;unsigned i,k,gpu_count=0;
  if(!loan||!loan->live||!loan->memory||!loan->owner||!loan->guard||!views||
     !count||count>16)return -EINVAL;
  s=loan->memory;
@@ -126,11 +127,12 @@ int remesa_gem_private_validate_locked(struct remesa_gem_private *loan,
   if(v->binding.va!=b->va.start||v->binding.bytes!=b->gem.size||
      v->pages!=b->pages||v->page_count!=b->inserted)return -EACCES;
   if(v->cpu&&(v->cpu!=j->cpu_views[i]||v->cpu!=b->cached_job_view))return -EACCES;
-  expected[i]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,b->inserted,
+  if(loan->rules[i].access)expected[gpu_count++]=(struct remesa_mmu_allowed_binding){b->va.start,b->pages,b->inserted,
                    loan->rules[i].access,loan->rules[i].cached};
  }
- for(i=1;i<count;i++)for(k=i;k&&expected[k].address<expected[k-1].address;k--){
+ if(!gpu_count)return -ENODATA;
+ for(i=1;i<gpu_count;i++)for(k=i;k&&expected[k].address<expected[k-1].address;k--){
   swap=expected[k];expected[k]=expected[k-1];expected[k-1]=swap;
  }
- return remesa_mmu_private_validate_bound_locked(loan->owner,expected,count);
+ return remesa_mmu_private_validate_bound_locked(loan->owner,expected,gpu_count);
 }

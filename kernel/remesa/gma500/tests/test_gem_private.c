@@ -30,7 +30,7 @@ int remesa_twod_mmu_guard_release(struct drm_psb_private *p,
 int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
  const struct remesa_mmu_allowed_binding *b,u32 n,struct remesa_mmu_private **out)
 {
- CHECK(d==&driver&&n==3&&!*out&&expected_memory->lock.held);prepares++;
+ CHECK(d==&driver&&n==(mode==7?2u:3u)&&!*out&&expected_memory->lock.held);prepares++;
  struct retained_job *j=&expected_memory->jobs[0];
  CHECK(j->attached&&j->state==REMESA_JOB_PREPARED&&expected_memory->executor_context);
  CHECK(expected_guard->mmu_owner==expected_memory->executor_context);
@@ -92,7 +92,8 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
  }
  CHECK(!remesa_gem_job_prepare(s,uses,3,&command,sizeof(command),&ticket));
  struct retained_job *j=ticket_job(s,ticket);CHECK(j&&j->count==3);
- for(unsigned test=0;test<8;test++){
+ if(fault==7)rules[0].access=REMESA_GEM_PRIVATE_CPU_ONLY;
+ for(unsigned test=0;test<9;test++){
   struct remesa_gem_private_rule bad[3];memcpy(bad,rules,sizeof(bad));
   struct remesa_memory_ticket t=ticket;unsigned n=3;int expected=0;
   switch(test){
@@ -103,11 +104,12 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
    case 4:bad[2].cached=2;expected=-EINVAL;break;
    case 5:n=2;expected=-EACCES;break;
    case 6:s->stream_bound=true;expected=-EBUSY;break;
-   case 7:s->bo[rules[0].id&31].initialized=false;expected=-ENODATA;break;
+   case 7:s->bo[rules[2].id&31].initialized=false;expected=-ENODATA;break;
+   case 8:for(unsigned i=0;i<3;i++){bad[i].access=0;bad[i].cached=0;}expected=-ENODATA;break;
   }
   CHECK(remesa_gem_private_prepare(s,t,bad,n,&guard,&loan)==expected);
   CHECK(!memcmp(&loan,&zero,sizeof(loan))&&!j->attached&&!s->executor);
-  CHECK(prepares==start_prepares);s->stream_bound=false;s->bo[rules[0].id&31].initialized=true;
+  CHECK(prepares==start_prepares);s->stream_bound=false;s->bo[rules[2].id&31].initialized=true;
  }
  unsigned oldmaps=vmap_calls,oldflush=flushes,oldw=test_wmb,oldr=test_rmb;
  if(fault==4)access_bad=1;
@@ -135,7 +137,7 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
   CHECK(loan.live&&loan.memory==s&&j->attached&&s->executor_context==&loan);
   CHECK(remesa_gem_job_cancel(s,ticket)==-EBUSY);
   CHECK(remesa_gem_memory_close(s)==-EBUSY);
-  if(!fault){
+  if(!fault||fault==7){
    struct remesa_memory_view views[3];
    for(unsigned i=0;i<3;i++){
     struct backing *bo=&s->bo[j->ids[i]&31];
@@ -184,7 +186,7 @@ static void one_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(void)
 {
- one_case(1280,800,0);one_case(640,640,0);one_case(641,479,0);one_case(32,32,1);
+ one_case(1280,800,0);one_case(640,640,0);one_case(641,479,0);one_case(32,32,1);one_case(32,32,7);
  for(unsigned fault=2;fault<=6;fault++){
   pid_t child=fork();CHECK(child>=0);
   if(!child){one_case(32,32,fault);_exit(0);}
