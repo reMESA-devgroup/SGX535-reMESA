@@ -7,6 +7,10 @@
 #include <stdio.h>
 #include <errno.h>
 #define PAGE_SHIFT 12
+#define CONFIG_ACPI 1
+struct work_struct {unsigned id;};
+struct opregion_asle;
+struct psb_intel_opregion {void *header;struct work_struct asle_work;struct opregion_asle *asle;};
 struct device {unsigned id;};
 struct pci_dev {struct device dev;void *data;};
 struct pci_device_id {unsigned long driver_data;};
@@ -19,6 +23,7 @@ struct drm_psb_private {
  void *pf_pd,*mmu,*scratch_page,*vdc_reg,*sgx_reg,*aux_reg;
  struct pci_dev *aux_pdev,*lpc_pdev;
  struct psb_gtt gtt;unsigned long vram_stolen_size;
+ struct psb_intel_opregion opregion;struct drm_device *dev;
 };
 struct drm_device {struct drm_psb_private *dev_private;struct pci_dev *pdev;
  bool irq_enabled,unplugged;struct drm_crtc crtcs[2];};
@@ -30,6 +35,8 @@ static unsigned chip_stops,opregion_stops,power_stops,lifecycle_losses;
 static unsigned pd_frees,mmu_frees,gtt_frees,page_frees,reg_unmaps,pci_puts,bios_frees,private_frees;
 static unsigned pci_enables,pci_disables,device_allocs,loads,registrations,dev_puts;
 static unsigned unplugs,revocations,fb_detaches;
+static unsigned asle_joins;
+static void (*asle_join_hook)(void),(*backlight_stop_hook)(void);
 static bool retained,blocked,gem_retained,gem_blocked;
 static int driver;
 #define drm_for_each_crtc(crtc,dev) for((crtc)=(dev)->crtcs;(crtc)<(dev)->crtcs+2;(crtc)++)
@@ -37,7 +44,13 @@ static void remesa_route_source_lifecycle(struct drm_device *d){assert(d==&devic
 static void drm_kms_helper_poll_disable(struct drm_device *d){assert(d==&device);poll_stops++;}
 static void drm_crtc_vblank_off(struct drm_crtc *c){assert(c>=device.crtcs&&c<device.crtcs+2);vblank_stops++;}
 static void drm_irq_uninstall(struct drm_device *d){assert(d==&device&&d->irq_enabled);d->irq_enabled=false;irq_stops++;}
-static void gma_backlight_exit(struct drm_device *d){assert(d==&device);backlight_stops++;}
+static void cancel_work_sync(struct work_struct *w)
+{assert(w==&private.opregion.asle_work&&!device.irq_enabled&&!backlight_stops);
+ asle_joins++;if(asle_join_hook)asle_join_hook();}
+static void gma_backlight_exit(struct drm_device *d)
+{assert(d==&device);if(backlight_stop_hook)backlight_stop_hook();
+ else {assert(asle_joins==(private.opregion.header?1U:0U));}
+ backlight_stops++;}
 static void psb_modeset_cleanup(struct drm_device *d){assert(d==&device);mode_stops++;}
 static void chip_teardown(struct drm_device *d){assert(d==&device);chip_stops++;}
 static void psb_intel_opregion_fini(struct drm_device *d){assert(d==&device);opregion_stops++;}
@@ -84,11 +97,14 @@ static void fixture(void)
  pd_frees=mmu_frees=gtt_frees=page_frees=reg_unmaps=pci_puts=bios_frees=private_frees=0;
  pci_enables=pci_disables=device_allocs=loads=registrations=dev_puts=0;
  unplugs=revocations=fb_detaches=0;
+ asle_joins=0;
+ asle_join_hook=backlight_stop_hook=NULL;
  retained=blocked=gem_retained=gem_blocked=false;
  private=(struct drm_psb_private){.modeset=true,.backlight_device=&private,.ops=&ops,
   .pf_pd=(void*)0x1000,.mmu=(void*)0x2000,.scratch_page=(void*)0x3000,
   .vdc_reg=(void*)0x4000,.sgx_reg=(void*)0x5000,.aux_reg=(void*)0x6000,
-  .aux_pdev=&aux,.lpc_pdev=&lpc,.gtt={0,0x40000000},.vram_stolen_size=16*4096};
+  .aux_pdev=&aux,.lpc_pdev=&lpc,.gtt={0,0x40000000},.vram_stolen_size=16*4096,
+  .opregion={.header=(void*)0x7000},.dev=&device};
  device=(struct drm_device){.dev_private=&private,.irq_enabled=true};
 }
 int main(void)
@@ -110,6 +126,14 @@ int main(void)
  assert(mode_stops==1&&!fb_detaches&&unplugs==1&&revocations==1);
  fixture();private.modeset=false;psb_driver_unload(&device);
  assert(!unplugs&&!revocations&&private_frees==1);
+ fixture();private.opregion.header=NULL;psb_driver_unload(&device);
+ assert(!asle_joins&&backlight_stops==1&&private_frees==1);
+ fixture();private.opregion.header=NULL;private.backlight_device=NULL;psb_driver_unload(&device);
+ assert(!asle_joins&&!backlight_stops&&private_frees==1);
+ fixture();device.irq_enabled=false;psb_driver_unload(&device);
+ assert(asle_joins==1&&!irq_stops&&backlight_stops==1);
+ fixture();private.backlight_device=NULL;psb_driver_unload(&device);
+ assert(asle_joins==1&&!backlight_stops&&private_frees==1);
  fixture();blocked=true;struct pci_device_id id={7};
  assert(psb_pci_probe(&pci,&id)==-EBUSY);
  assert(!pci_enables&&!pci_disables&&!device_allocs&&!loads&&!registrations&&!dev_puts);
@@ -118,4 +142,5 @@ int main(void)
  fixture();assert(!psb_pci_probe(&pci,&id));
  assert(pci_enables==1&&device_allocs==1&&loads==1&&registrations==1&&!pci_disables&&!dev_puts);
  puts("PASS actual unload retains SGX/MMU/GTT dependency fields, joins modeled CPU cleanup; blocked probe performs no PCI enable/allocation/load; normal paths preserved. CPU model, not GPU stop or late GEM safety.");
+ return 0;
 }

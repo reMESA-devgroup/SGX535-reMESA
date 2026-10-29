@@ -224,6 +224,16 @@ def private_entry_sources(driver, memory):
     driver = replace_once(driver, '\t\tpsb_modeset_cleanup(dev);\n',
         '\t\tif (retained)\n\t\t\tremesa_private_fbdev_detach(dev);\n'
         '\t\telse\n\t\t\tpsb_modeset_cleanup(dev);\n')
+    driver = replace_once(driver, '\t\tif (dev_priv->backlight_device)\n\t\t\tgma_backlight_exit(dev);',
+        '\t\t/* IRQ uninstall has joined the only ASLE work producer. Join\n'
+        '\t\t * queued/running brightness work before releasing its backlight.\n'
+        '\t\t * A published header implies asle_work was initialized. Keep\n'
+        '\t\t * the mapping until chip teardown has stopped the lid timer. */\n'
+        '#ifdef CONFIG_ACPI\n'
+        '\t\tif (dev_priv->opregion.header)\n'
+        '\t\t\tcancel_work_sync(&dev_priv->opregion.asle_work);\n'
+        '#endif\n'
+        '\t\tif (dev_priv->backlight_device)\n\t\t\tgma_backlight_exit(dev);')
     driver = replace_once(driver,
         '\t\tpsb_intel_opregion_fini(dev);\n\n\t\tif (dev_priv->pf_pd) {',
         '\t\tpsb_intel_opregion_fini(dev);\n\n'
@@ -485,6 +495,14 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_FILL, remesa_twod_fill_ioctl, DRM_ROOT_ONLY),\n'
             '#endif\n')
     if private:
+        # The early ASLE join relies on setup publishing header only after
+        # work initialization and on unregister not clearing the owner's bd.
+        for name,digest in {
+            'opregion.c':'a6fd11464b3972d456dea55919cf97c3ccb26f9d5a1a690139cdf1c4c09d35d0',
+            'backlight.c':'995720191e06a74df2cdb80a1bf8d77fe49aa9dd38e60139dcd15f516be63e1d',
+        }.items():
+            if hashlib.sha256((native/name).read_bytes()).hexdigest()!=digest:
+                raise ValueError('unreviewed private ASLE lifetime input: '+name)
         private_header = native / 'gma500_fixed_backend.h'
         if hashlib.sha256((native / 'stream_profile_asset.h').read_bytes()).hexdigest() != 'e21ceda020131e56c93271b995af0df590c8eecbe87e18d97579fa25bf8edf6e':
             raise ValueError('unreviewed private qualification profile')
