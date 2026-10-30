@@ -6,6 +6,11 @@
 #include <errno.h>
 #include <stdio.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#define NSEC_PER_SEC 1000000000ULL
+typedef uint64_t u64;
 #define HZ 4
 #define PSB_CR_2D_SOCIF 1
 #define PSB_CR_2D_BLIT_STATUS 2
@@ -26,8 +31,10 @@ static struct fb_info info={&helper};
 static pthread_mutex_t admission=PTHREAD_MUTEX_INITIALIZER;
 static pthread_mutex_t control=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed=PTHREAD_COND_INITIALIZER;
-static bool active,pause_first,paused,released,queued;
+static bool active,pause_first,paused,released,queued,frozen_ticks,clock_backwards;
 static unsigned refs,reads,writes,bad_mmio,producers,source_losses;
+static unsigned resets,clock_calls;
+static u64 fast_time;
 static unsigned long jiffies;
 static int worker_result;
 enum mode {IDLE,FIFO_BUSY,BLIT_BUSY,FINISHING};
@@ -42,21 +49,24 @@ static void seam(void)
 {if(!pause_first||reads!=1)return;pthread_mutex_lock(&control);paused=true;pthread_cond_broadcast(&changed);while(!released)pthread_cond_wait(&changed,&control);pthread_mutex_unlock(&control);}
 static uint32_t reg_read(unsigned reg)
 {
- reads++;if(!active)bad_mmio++;seam();
+ reads++;if(!frozen_ticks)jiffies++;if(!active)bad_mmio++;seam();
  if(reg==PSB_CR_2D_SOCIF)return poll_mode==FIFO_BUSY?0:poll_mode==FINISHING&&jiffies<2?0:_PSB_C2_SOCIF_EMPTY;
  if(reg==PSB_CR_2D_BLIT_STATUS)return poll_mode==BLIT_BUSY?_PSB_C2B_STATUS_BUSY:0;
  assert(reg>=PSB_SGX_2D_SLAVE_PORT);return 0;
 }
 static void reg_write(uint32_t v,unsigned reg)
 {(void)v;assert(reg>=PSB_SGX_2D_SLAVE_PORT);if(!active)bad_mmio++;writes++;queued=true;}
-#define PSB_RSGX32(r) reg_read(r)
-#define PSB_WSGX32(v,r) reg_write(v,r)
+#define PSB_RSGX32(r) (assert(dev_priv==&private),reg_read(r))
+#define PSB_WSGX32(v,r) do{assert(dev_priv==&private);reg_write(v,r);}while(0)
 #define spin_lock_irqsave(m,f) do{(f)=0;assert(!pthread_mutex_lock(m));}while(0)
 #define spin_unlock_irqrestore(m,f) do{(void)(f);assert(!pthread_mutex_unlock(m));}while(0)
 #define time_after_eq(a,b) ((long)((a)-(b))>=0)
-#define cpu_relax() ((void)jiffies++)
-static int psb_2d_wait_available(struct drm_psb_private *p,unsigned size)
-{assert(p==&private&&size<=96);return 0;}
+#define time_after(a,b) ((long)((a)-(b))>0)
+#define cpu_relax() do{if(!frozen_ticks)jiffies++;}while(0)
+static u64 ktime_get_mono_fast_ns(void)
+{clock_calls++;fast_time+=100000000ULL;return clock_backwards&&clock_calls>1?0:fast_time;}
+static void psb_spank(struct drm_psb_private *p)
+{assert(p==&private);resets++;queued=false;}
 static void remesa_route_source_producer(int begin)
 {source_losses++;if(begin)producers++;else{assert(producers);producers--;}}
 #include "console_actual.inc"
@@ -64,12 +74,26 @@ static void fixture(void)
 {
  assert(!refs&&!producers);active=true;pause_first=paused=released=queued=false;
  reads=writes=bad_mmio=source_losses=0;jiffies=0;poll_mode=IDLE;
+ resets=clock_calls=0;fast_time=0;frozen_ticks=clock_backwards=false;
  private.remesa_twod_owner=NULL;helper.fb=&fb;info.par=&helper;
 }
 static void *worker(void *unused){(void)unused;worker_result=psbfb_sync(&info);return NULL;}
+static void frozen_child(bool sync)
+{
+ pid_t pid=fork();assert(pid>=0);
+ if(!pid){
+  alarm(1);frozen_ticks=true;queued=true;poll_mode=FIFO_BUSY;
+  int ret=sync?psbfb_sync(&info):psb_2d_wait_available(&private,2);
+  assert(CHECKED_CONSOLE&&ret==(sync?-EBUSY:-EIO)&&!resets&&queued&&!refs);
+  _exit(0);
+ }
+ int status;assert(waitpid(pid,&status,0)==pid);
+ if(CHECKED_CONSOLE)assert(WIFEXITED(status)&&WEXITSTATUS(status)==0);
+ else assert(WIFSIGNALED(status)&&WTERMSIG(status)==SIGALRM);
+}
 int main(void)
 {
- (void)gma_power_begin;(void)gma_power_end;
+ (void)gma_power_begin;(void)gma_power_end;(void)ktime_get_mono_fast_ns;(void)psb_spank;
  assert(!pthread_mutex_init(&private.lock_2d,NULL));
  fixture();active=false;
  assert(psbfb_sync(&info)==(CHECKED_CONSOLE?-EAGAIN:0));
@@ -88,6 +112,16 @@ int main(void)
  fixture();helper.fb=NULL;assert(psbfb_sync(&info)==-ENODEV&&!reads&&!refs);
  fixture();info.par=NULL;assert(psbfb_sync(&info)==-ENODEV&&!reads&&!refs);
  assert(psbfb_sync(NULL)==-ENODEV);
+#endif
+ fixture();queued=true;poll_mode=FIFO_BUSY;
+ assert(psb_2d_wait_available(&private,2)==-EIO);
+ assert(resets==(CHECKED_CONSOLE?0U:1U));assert(queued==(bool)CHECKED_CONSOLE);
+ fixture();frozen_child(false);fixture();frozen_child(true);
+#if CHECKED_CONSOLE
+ fixture();frozen_ticks=clock_backwards=queued=true;poll_mode=FIFO_BUSY;
+ assert(psb_2d_wait_available(&private,2)==-EIO&&!resets&&queued);
+ fixture();frozen_ticks=clock_backwards=true;poll_mode=BLIT_BUSY;
+ assert(psbfb_sync(&info)==-EBUSY&&!refs&&!resets);
 #endif
  /* Separate unresolved counterexample: actual console submit returns after
   * FIFO writes. Its caller's reference interval is modeled as in copyarea.

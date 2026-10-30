@@ -344,6 +344,19 @@ def private_async_power_sources(irq, device, opregion):
 
 
 def private_console_power_source(source):
+    # FIFO room is not retirement of any earlier console/3D transaction.
+    # Preserve the timeout/error; never reset shared engines as a recovery guess.
+    start=source.index('static int psb_2d_wait_available(')
+    end=source.index('\n/**',start)
+    body=replace_once(source[start:end], '\t\t\tpsb_spank(dev_priv);\n',
+        '\t\t\t/* Retain outstanding hardware state; no unproved reset. */\n')
+    body=replace_once(body, '\tunsigned long t = jiffies + HZ;\n',
+        '\tu64 start = ktime_get_mono_fast_ns();\n')
+    body=replace_once(body, '\t\tif (time_after(jiffies, t)) {\n',
+        '\t\tif (ktime_get_mono_fast_ns() - start >= NSEC_PER_SEC) {\n')
+    body=replace_once(body, '\t\t\treturn -EIO;\n\t\t}\n',
+        '\t\t\treturn -EIO;\n\t\t}\n\t\tcpu_relax();\n')
+    source=source[:start]+body+source[end:]
     start=source.index('int psbfb_sync(struct fb_info *info)\n')
     body=source[start:]
     body=replace_once(body, '\tstruct drm_fb_helper *fb_helper = info->par;\n',
@@ -354,6 +367,12 @@ def private_console_power_source(source):
         '\tstruct drm_device *dev = fb ? fb->dev : NULL;\n')
     body=replace_once(body, '\tstruct drm_psb_private *dev_priv = dev->dev_private;\n',
         '\tstruct drm_psb_private *dev_priv = dev ? dev->dev_private : NULL;\n')
+    body=replace_once(body, '\tunsigned long _end = jiffies + HZ;\n',
+        '\tu64 start = ktime_get_mono_fast_ns();\n')
+    if body.count('!time_after_eq(jiffies, _end)') != 2:
+        raise ValueError('unreviewed console sync timeout loops')
+    body=body.replace('!time_after_eq(jiffies, _end)',
+        'ktime_get_mono_fast_ns() - start < NSEC_PER_SEC')
     body=replace_once(body, '\tspin_lock_irqsave(&dev_priv->lock_2d, flags);\n',
         '\t/* DRM lifetime is covered by the private fbops entry wrapper.\n'
         '\t * An offline device is not evidence that pending 2D work retired. */\n'
@@ -363,7 +382,7 @@ def private_console_power_source(source):
     body=replace_once(body, '\tspin_unlock_irqrestore(&dev_priv->lock_2d, flags);\n',
         '\tspin_unlock_irqrestore(&dev_priv->lock_2d, flags);\n'
         '\tgma_power_end(dev);\n')
-    return source[:start]+body
+    return '#include <linux/ktime.h>\n'+source[:start]+body
 
 
 def private_power_sources(header, source):

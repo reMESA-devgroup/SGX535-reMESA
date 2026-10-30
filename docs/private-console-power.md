@@ -87,3 +87,7 @@ does not establish runtime ordering or physical safety.
 
 Uninstalled, physically unqualified module SHA-256:
 `4b9dc69ed87f3a8b5103c930251920bf5cdc53f93aeb3493a4ba0d9fc81a7967`. GPU operations: zero.
+
+Follow-up: `private-console-timeouts.md` records removal of tick-dependent waits
+and automatic FIFO-timeout reset in the private candidate. The asynchronous
+power/ownership counterexample remains open.
