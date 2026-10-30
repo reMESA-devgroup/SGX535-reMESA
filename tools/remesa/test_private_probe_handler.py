@@ -52,6 +52,7 @@ struct remesa_gem_memory {
  struct mutex lock;void *executor;const void *private_session;bool stream_bound,ta_cache_domains;
  bool private_device_lost,private_source_held,private_source_poisoned;
  u32 private_input_ids[5];
+ u32 private_work_ids[6];bool private_work_owned;
  struct retained_job jobs[8];struct backing bo[32];struct page page;
 };
 """
@@ -76,7 +77,7 @@ flags=['-fsanitize=undefined','-fno-sanitize-recover=all'] if a.ubsan else []
 run('build',[a.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',
      '-DREMESA_LAB_DEPTH1280_PROFILE=1','-I'+str(r),'-I'+str(m),'-I'+str(w/'include'),
      str(source),*flags,'-o',str(exe)],768*1024**2)
-case_count=24 if a.lab_controller else 37
+case_count=25 if a.lab_controller else 37
 for case in range(case_count):
     result=run('case-'+str(case),[*a.runner,str(exe),str(case)],
                6*1024**3 if a.runner else 768*1024**2)

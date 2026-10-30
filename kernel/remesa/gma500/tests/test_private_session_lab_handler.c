@@ -8,7 +8,8 @@
 #undef main
 #include "remesa_private_session.h"
 #define DEFINE_MUTEX(name) struct mutex name={0}
-static unsigned quarantines,seal_calls,source_poisons;
+static unsigned quarantines,seal_calls,source_poisons,work_seals;
+static bool work_seal_failure;
 void remesa_stream_source_poison(const void *p)
 {CHECK(source_held&&source_token==p);source_poisons++;}
 int remesa_gem_job_quarantine(struct remesa_gem_memory *m,struct remesa_memory_ticket t)
@@ -24,7 +25,8 @@ int remesa_private_session_release(struct remesa_gem_memory *m,const void *who)
 {
  CHECK(m==endpoint&&m->private_session==who);
  if(m->jobs[0].live||m->private_source_held||m->private_source_poisoned)return -EBUSY;
- m->private_session=NULL;memset(m->private_input_ids,0,sizeof(m->private_input_ids));return 0;
+ m->private_session=NULL;memset(m->private_input_ids,0,sizeof(m->private_input_ids));
+ memset(m->private_work_ids,0,sizeof(m->private_work_ids));m->private_work_owned=false;return 0;
 }
 int remesa_private_session_seal_inputs(struct remesa_gem_memory *m,const void *who,
  struct remesa_memory_ticket t,int (*guard)(u64,const void*,unsigned))
@@ -34,10 +36,18 @@ int remesa_private_session_seal_inputs(struct remesa_gem_memory *m,const void *w
  return 0;
 }
 int remesa_private_session_inputs_locked(struct remesa_gem_memory *m,struct remesa_memory_ticket t)
-{CHECK(m->lock.held&&ticket_job(m,t));for(unsigned i=0;i<5;i++)CHECK(m->private_input_ids[i]==32+i);return 0;}
+{CHECK(m->lock.held&&ticket_job(m,t));for(unsigned i=0;i<5;i++)CHECK(m->private_input_ids[i]==32+i);
+ CHECK(m->private_work_owned);for(unsigned i=0;i<6;i++)CHECK(m->private_work_ids[i]==37+i);return 0;}
+int remesa_private_session_seal_work(struct remesa_gem_memory *m,const void *who,struct remesa_memory_ticket t)
+{
+ CHECK(m->private_session==who&&ticket_job(m,t)&&seal_calls==1);work_seals++;
+ if(work_seal_failure)return -EBUSY;
+ for(unsigned i=0;i<6;i++)m->private_work_ids[i]=37+i;
+ m->private_work_owned=true;return 0;
+}
 int remesa_private_session_source_begin(struct remesa_gem_memory *m,const void *p)
 {
- CHECK(!m->jobs[0].live&&m->private_session==p);
+ CHECK(!m->jobs[0].live&&m->private_session==p&&m->private_work_owned&&work_seals==1);
  int e=remesa_stream_source_claim(m->dev,p);if(!e)m->private_source_held=true;return e;
 }
 int remesa_private_session_source_end(struct remesa_gem_memory *m,const void *p)
@@ -61,7 +71,7 @@ static struct remesa_private_session_lab_request packet(unsigned action,u64 sequ
 {return (struct remesa_private_session_lab_request){.version=1,.action=action,.context=77,.session=1,.sequence=sequence,.budget_ms=action==2?1000:0};}
 int main(int argc,char **argv)
 {
- unsigned scenario=argc>1?strtoul(argv[1],NULL,0):0;CHECK(scenario<24);
+ unsigned scenario=argc>1?strtoul(argv[1],NULL,0):0;CHECK(scenario<25);
  struct drm_file file={0},other={0};struct drm_psb_private priv={.sgx_reg=(void*)1};struct drm_device dev={&priv};
  struct remesa_gem_memory memory={.dev=&dev,.file=&file,.context=77,.root={.end=0xdfffffffULL}};endpoint=&memory;
  struct remesa_private_session_lab_request r={.version=1,.action=1,.context=77,.max_jobs=2};
@@ -76,16 +86,17 @@ int main(int argc,char **argv)
   case 7:fault=SNAPSHOT;break;case 8:fault=HASH;break;case 9:fault=MASK;break;
   case 10:fault=GEOMETRY;break;case 11:fault=CLAIM;break;
   case 12:memory.private_session=&other;break;case 13:r.ids[1]=r.ids[0];break;
+  case 24:work_seal_failure=true;break;
  }
  int e=remesa_private_session_lab_ioctl(&dev,&r,&file);
  CHECK(!endpoint_lock.held&&!memory.lock.held&&!private_lab_lock.held);
- if(scenario>=1&&scenario<=13){
+ if((scenario>=1&&scenario<=13)||scenario==24){
   CHECK(e<0||r.error<0);CHECK(!executions&&!retirements&&!source_held&&!private_lab_active);
   CHECK(!private_probe_consumed&&allocations==frees);
   printf("PASS LAB open-denial scenario%u; modeled dependencies GPU0\n",scenario);return 0;
  }
  CHECK(!e&&!r.error&&r.state==1&&r.stages==16&&r.session==1);
- CHECK(private_probe_consumed&&source_held&&claims==1&&cancels==1&&seal_calls==1&&hashes==0&&masks==1&&geometries==1);
+ CHECK(private_probe_consumed&&source_held&&claims==1&&cancels==1&&seal_calls==1&&work_seals==1&&hashes==0&&masks==1&&geometries==1);
  if(scenario==21||scenario==22){
   fault=scenario==21?SETTLE:SOURCE_CLOSE;r=packet(3,0);
   CHECK(!remesa_private_session_lab_ioctl(&dev,&r,&file)&&r.error<0&&r.state==2);

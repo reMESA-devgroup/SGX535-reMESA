@@ -38,6 +38,14 @@ int remesa_private_session_seal_inputs(struct remesa_gem_memory *,const void *,
  struct remesa_memory_ticket,int (*)(u64,const void *,unsigned));
 int remesa_private_session_inputs_locked(struct remesa_gem_memory *,
  struct remesa_memory_ticket);
+/* Seal GPU-written roles5..10 under the SAME authenticated admission job,
+ * after seal_inputs and before source_begin. User WRITE/write-LEASE/SYNC are
+ * denied until idle acknowledged source close and backing release; READ and
+ * INFO keep their existing job/CPU lease guards. This is exclusive ownership,
+ * not initialization, visibility or permission to omit cold clears/flushes.
+ * Subsequent prepared jobs validate these six IDs/generations too. */
+int remesa_private_session_seal_work(struct remesa_gem_memory *,const void *,
+ struct remesa_memory_ticket);
 /* Trusted kernel-only execution. Caller authenticates complete final inputs,
  * commands and permissions, prepares the loan/borrowed scene, and supplies a
  * fresh observation. Arguments survive any failure. This wraps the qualified

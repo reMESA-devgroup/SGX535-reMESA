@@ -422,6 +422,8 @@ def private_file_lost_sources(memory):
         ' const void *private_session; /* backing lease, not source authority */\n'
         ' bool private_source_held, private_source_poisoned;\n'
         ' u32 private_input_ids[5];\n'
+        ' u32 private_work_ids[6]; /* kernel-owned COLOR/TA/DPM/Z roles */\n'
+        ' bool private_work_owned;\n'
         ' bool private_device_lost; /* monotonic; do not reclaim after unplug */\n')
     memory = replace_once(memory,
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n',
@@ -438,6 +440,14 @@ def private_file_lost_sources(memory):
     memory = replace_once(memory,
         ' if(!b || !color_readable(s,b)){e=-EBUSY;goto unlock;}\n',
         ' if(s->private_session || !b || !color_readable(s,b)){e=-EBUSY;goto unlock;}\n')
+    memory = replace_once(memory,
+        ' if(b->input_seal==2 && (r->action==REMESA_MEM_WRITE ||\n',
+        ' /* A private source lease owns its six GPU-written work roles.\n'
+        '  * READ leases remain guarded by ordinary job/CPU exclusion. */\n'
+        ' if(r->action==REMESA_MEM_WRITE || r->action==REMESA_MEM_SYNC ||\n'
+        '    (r->action==REMESA_MEM_LEASE && r->flags))\n'
+        '  for(page=0;page<6;page++)if(s->private_work_ids[page]==r->id)return -EPERM;\n'
+        ' if(b->input_seal==2 && (r->action==REMESA_MEM_WRITE ||\n')
     return memory + '\n#include "remesa_private_memory_file_lost.inc"\n#include "remesa_private_session.inc"\n#include "remesa_private_session_source.inc"\n#include "remesa_private_inputs.inc"\n'
 
 

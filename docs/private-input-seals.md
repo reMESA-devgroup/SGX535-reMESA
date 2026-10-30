@@ -78,3 +78,8 @@ clears or cache maintenance. Then validate multiple physical jobs and correct
 COLOR/Z/guards under one source lease, without rearming the LAB probe. General
 GL/GLES, desktop 2D, installability, physical 1600x768, and performance remain
 separate unfinished requirements.
+
+The subsequent [private work-buffer ownership](private-work-ownership.md)
+separately retains roles5..10 and denies their user writes/publication during a
+session. It preserves the five-input typed PDS contract and existing cold
+execution, and does not itself authorize clear/cache omission.

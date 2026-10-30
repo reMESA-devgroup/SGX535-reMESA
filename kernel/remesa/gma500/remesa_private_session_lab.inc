@@ -98,6 +98,8 @@ static int private_lab_open(struct drm_device *dev,struct drm_file *file,
  error=private_lab_authenticate(&s->p);if(error)goto failed;
  error=remesa_private_session_seal_inputs(s->p.memory,&s->p,s->p.snapshot.ticket,private_lab_guard);
  if(error)goto failed;
+ error=remesa_private_session_seal_work(s->p.memory,&s->p,s->p.snapshot.ticket);
+ if(error)goto failed;
  error=remesa_gem_job_cancel(s->p.memory,s->p.snapshot.ticket);if(error)goto failed;
  private_lab_reset_job(s);
  error=remesa_private_session_source_begin(s->p.memory,&s->p);if(error)goto failed;

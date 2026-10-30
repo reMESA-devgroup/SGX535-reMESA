@@ -68,6 +68,8 @@ static void finish(void)
  CHECK(!remesa_private_session_release(memory,&token));
  CHECK(!memory->private_session&&!memory->pds_write_guard);
  for(unsigned i=0;i<5;i++)CHECK(!memory->private_input_ids[i]&&!memory->bo[ids[i]&31].input_seal);
+ CHECK(!memory->private_work_owned);
+ for(unsigned i=0;i<6;i++)CHECK(!memory->private_work_ids[i]);
  CHECK(!remesa_gem_memory_close(memory));endpoint=memory=NULL;
  CHECK(!gems&&!pins&&!ptes&&!device_refs&&!module_refs&&!power&&!claimed);
 }
@@ -83,9 +85,35 @@ int main(void)
  memory->bo[ids[2]&31].input_seal=0;
  CHECK(!remesa_private_session_seal_inputs(memory,&token,t,guarded));
  CHECK(remesa_private_session_seal_inputs(memory,&token,t,guarded)==-EBUSY);
+ CHECK(remesa_private_session_seal_work(memory,&other,t)==-EACCES);
+ CHECK(remesa_private_session_seal_work(memory,&token,bad)==-EBUSY);
+ atomic_set(&memory->bo[ids[10]&31].color_vmas,1);
+ CHECK(remesa_private_session_seal_work(memory,&token,t)==-EBUSY);
+ CHECK(!memory->private_work_owned);
+ for(unsigned i=0;i<6;i++)CHECK(!memory->private_work_ids[i]);
+ atomic_set(&memory->bo[ids[10]&31].color_vmas,0);
+ struct retained_job *prepared=ticket_job(memory,t);u32 last=prepared->ids[10];prepared->ids[10]=prepared->ids[9];
+ CHECK(remesa_private_session_seal_work(memory,&token,t)==-EACCES&&!memory->private_work_owned);
+ prepared->ids[10]=last;
+ CHECK(!remesa_private_session_seal_work(memory,&token,t));
+ CHECK(remesa_private_session_seal_work(memory,&token,t)==-EBUSY);
+ CHECK(memory->private_work_owned);
+ for(unsigned i=0;i<6;i++)CHECK(memory->private_work_ids[i]==ids[i+5]);
  CHECK(!check_inputs(t));
  CHECK(request(REMESA_MEM_LEASE,ids[0],1,0,NULL,0)==-EBUSY);
  CHECK(!remesa_gem_job_cancel(memory,t));
+ for(unsigned i=5;i<11;i++){
+  CHECK(request(REMESA_MEM_LEASE,ids[i],1,0,NULL,0)==-EPERM);
+  CHECK(request(REMESA_MEM_WRITE,ids[i],0,0,canonical,4096)==-EPERM);
+  CHECK(request(REMESA_MEM_SYNC,ids[i],0,0,NULL,0)==-EPERM);
+  CHECK(!request(REMESA_MEM_LEASE,ids[i],0,0,NULL,0));
+  CHECK(!request(REMESA_MEM_READ,ids[i],0,0,NULL,4096));
+  CHECK(!request(REMESA_MEM_UNLEASE,ids[i],0,0,NULL,0));
+ }
+ CHECK(!request(REMESA_MEM_LEASE,ids[11],1,0,NULL,0));
+ CHECK(!request(REMESA_MEM_WRITE,ids[11],0,0,canonical,4096));
+ CHECK(!request(REMESA_MEM_UNLEASE,ids[11],0,0,NULL,0));
+ CHECK(!request(REMESA_MEM_SYNC,ids[11],0,0,NULL,0));
  for(unsigned i=1;i<5;i++)CHECK(request(REMESA_MEM_LEASE,ids[i],1,0,NULL,0)==-EPERM);
  CHECK(!request(REMESA_MEM_LEASE,ids[1],0,0,NULL,0));
  CHECK(!request(REMESA_MEM_READ,ids[1],0,0,NULL,4096));
@@ -121,16 +149,31 @@ int main(void)
  memory->bo[ids[4]&31].input_seal=0;
  CHECK(remesa_private_session_release(memory,&token)==-EIO);
  CHECK(memory->bo[ids[0]&31].input_seal==1&&memory->pds_write_guard&&memory->private_session);
- memory->bo[ids[4]&31].input_seal=2;finish();
+ memory->bo[ids[4]&31].input_seal=2;
+ original=uses[9];uses[9]=(struct remesa_memory_binding){ids[11],0x40b01000,4096};
+ t=job();CHECK(check_inputs(t)==-EACCES);memory->private_source_held=true;loan=(struct remesa_gem_private){memory,t};
+ CHECK(remesa_private_session_execute(memory,&token,&loan,(void*)1,(void*)1,(void*)1,(void*)1,11,10,20)==-EACCES);
+ CHECK(!memory->private_source_poisoned);memory->private_source_held=false;
+ CHECK(!remesa_gem_job_cancel(memory,t));uses[9]=original;
+ memory->bo[ids[10]&31].pinned=false;
+ CHECK(remesa_private_session_release(memory,&token)==-EIO);
+ CHECK(memory->private_work_owned&&memory->private_input_ids[0]==ids[0]&&memory->pds_write_guard);
+ memory->bo[ids[10]&31].pinned=true;
+ memory->private_work_ids[5]=memory->private_work_ids[4];
+ CHECK(remesa_private_session_release(memory,&token)==-EIO);
+ CHECK(memory->bo[ids[0]&31].input_seal==1&&memory->private_work_owned);
+ memory->private_work_ids[5]=ids[10];finish();
  pid_t pid=fork();CHECK(pid>=0);
  if(!pid){
   setup();t=job();CHECK(!remesa_private_session_seal_inputs(memory,&token,t,guarded));
+  CHECK(!remesa_private_session_seal_work(memory,&token,t));
   CHECK(!remesa_gem_job_cancel(memory,t));remesa_private_memory_file_lost(&dev,&file);
   CHECK(remesa_private_session_release(memory,&token)==-ENODEV);
   CHECK(memory->private_input_ids[0]==ids[0]&&memory->bo[ids[0]&31].input_seal==1);
+  CHECK(memory->private_work_owned&&memory->private_work_ids[5]==ids[10]);
   CHECK(remesa_gem_memory_close(memory)==-ENODEV);_exit(0); /* retained CPU model, not freed as retired */
  }
  int status;CHECK(waitpid(pid,&status,0)==pid&&WIFEXITED(status)&&WEXITSTATUS(status)==0);
- printf("PASS %u full memory-service/private input-seal checks; GEM/MMU/PM and authentication modeled; GPU0\n",checks);
+ printf("PASS %u full memory-service/private input and kernel-work ownership checks; GEM/MMU/PM and authentication modeled; GPU0\n",checks);
  return 0;
 }
