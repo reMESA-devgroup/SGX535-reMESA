@@ -358,10 +358,8 @@ def private_power_sources(header, source):
         '\tdev_priv->remesa_private_power_owner_usable = false;\n'
         '\tdev_priv->remesa_private_power_owner = NULL;\n')
     start=source.index('static void gma_suspend_display(')
-    pci_start=source.index('static void gma_suspend_pci(')
-    pci_end=source.index('\n/**',pci_start)
     end=source.index('int psb_runtime_suspend(')
-    return header, source[:start]+source[pci_start:pci_end]+'\n#include "remesa_private_power.inc"\n\n'+source[end:]
+    return header, source[:start]+'#include "remesa_private_pci_suspend.inc"\n#include "remesa_private_power.inc"\n\n'+source[end:]
 
 
 def private_lid_sources(header, source):
@@ -681,6 +679,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
                      'remesa_private_fbdev_config.inc',
                      'remesa_private_lid.inc', 'remesa_private_power.inc',
+                     'remesa_private_pci_suspend.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:

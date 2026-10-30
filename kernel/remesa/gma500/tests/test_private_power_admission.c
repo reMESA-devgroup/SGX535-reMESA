@@ -45,6 +45,7 @@ static bool spin_held,pci_active,restore_complete,pause_started,release_pause;
 static unsigned runtime_refs,bad_mmio,powerdowns_with_refs,source_losses,irq_pre,irq_post;
 static unsigned enable_under_spin,enable_calls,warnings;
 static int enable_error,state_error,save_error,restore_error,up_error,down_error,gtt_error,worker_result;
+static int pci_suspend_error,config_error;
 static bool owner_nested;
 static void owner_check(void);
 enum pause_mode {NONE,SUSPEND_GAP,RESUME_GAP};
@@ -79,7 +80,8 @@ static int pci_set_power_state(struct pci_dev *p,int state)
 {assert(p==&pci&&(state==PCI_D0||state==PCI_D3hot));return state_error;}
 static void pci_restore_state(struct pci_dev *p){assert(p==&pci);}
 static int pci_write_config_dword(struct pci_dev *p,unsigned reg,unsigned value)
-{assert(p==&pci);(void)reg;(void)value;return 0;}
+{assert(p==&pci);(void)reg;(void)value;return config_error;}
+static int pcibios_err_to_errno(int err){return err>0?-EIO:err;}
 static int pci_write_config_word(struct pci_dev *p,unsigned reg,unsigned value)
 {assert(p==&pci);(void)reg;(void)value;return 0;}
 static int pci_enable_device(struct pci_dev *p)
@@ -89,8 +91,8 @@ static int psb_gtt_restore(struct drm_device *d)
 #define PSB_WVDC32(v,r) do{(void)(v);(void)(r);mmio();}while(0)
 static int pm_runtime_get_noresume(struct device *d){assert(d==&pci.dev);runtime_refs++;return 0;}
 static int pm_runtime_put_noidle(struct device *d){assert(d==&pci.dev&&runtime_refs);runtime_refs--;return 0;}
-static void gma_suspend_pci(struct pci_dev *p)
-{assert(p==&pci);pci_active=false;private.suspended=true;}
+static int gma_suspend_pci(struct pci_dev *p)
+{assert(p==&pci);pci_active=false;private.suspended=true;return pci_suspend_error;}
 #include "power_actual.inc"
 static void owner_check(void)
 {
@@ -108,6 +110,7 @@ static void fixture(bool active)
  pci_active=active;restore_complete=active;pause_started=release_pause=false;
  bad_mmio=powerdowns_with_refs=source_losses=irq_pre=irq_post=enable_under_spin=enable_calls=warnings=0;
  enable_error=state_error=save_error=restore_error=up_error=down_error=gtt_error=worker_result=0;owner_nested=false;mode=NONE;
+ pci_suspend_error=config_error=0;
 }
 static void *suspend_worker(void *unused)
 {(void)unused;worker_result=gma_power_suspend(&pci.dev);return NULL;}
@@ -141,6 +144,10 @@ int main(void)
  enable_error=0;assert(!gma_power_resume(&pci.dev));assert(private.display_power);
  fixture(false);state_error=-EIO;assert(gma_power_resume(&pci.dev)==-EIO);
  assert(!enable_calls&&!bad_mmio&&!private.display_power&&private.suspended);
+ fixture(false);config_error=0x88;assert(gma_power_resume(&pci.dev)==-EIO);
+ assert(!enable_calls&&!bad_mmio&&!private.display_power&&private.suspended);
+ fixture(true);pci_suspend_error=-EIO;assert(gma_power_suspend(&pci.dev)==-EIO);
+ assert(!private.display_power&&private.suspended&&!gma_power_begin(&device,false));
  /* Actual save/restore callbacks can nest; borrowed current in IRQ cannot. */
  fixture(true);owner_nested=true;assert(!gma_power_suspend(&pci.dev));
  assert(!private.display_count&&!runtime_refs&&!powerdowns_with_refs);

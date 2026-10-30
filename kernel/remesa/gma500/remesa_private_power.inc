@@ -41,10 +41,14 @@ static int gma_resume_pci(struct pci_dev *pdev)
  ret=pci_set_power_state(pdev,PCI_D0);
  if(ret)return ret;
  pci_restore_state(pdev);
- pci_write_config_dword(pdev,0x5c,dev_priv->regs.saveBSM);
- pci_write_config_dword(pdev,0xFC,dev_priv->regs.saveVBT);
- pci_write_config_dword(pdev,PSB_PCIx_MSI_ADDR_LOC,dev_priv->msi_addr);
- pci_write_config_dword(pdev,PSB_PCIx_MSI_DATA_LOC,dev_priv->msi_data);
+ ret=pcibios_err_to_errno(pci_write_config_dword(pdev,0x5c,dev_priv->regs.saveBSM));
+ if(ret)return ret;
+ ret=pcibios_err_to_errno(pci_write_config_dword(pdev,0xFC,dev_priv->regs.saveVBT));
+ if(ret)return ret;
+ ret=pcibios_err_to_errno(pci_write_config_dword(pdev,PSB_PCIx_MSI_ADDR_LOC,dev_priv->msi_addr));
+ if(ret)return ret;
+ ret=pcibios_err_to_errno(pci_write_config_dword(pdev,PSB_PCIx_MSI_DATA_LOC,dev_priv->msi_data));
+ if(ret)return ret;
  ret=pci_enable_device(pdev);
  if(ret){dev_err(&pdev->dev,"pci_enable failed: %d\n",ret);return ret;}
  dev_priv->suspended=false;
@@ -74,7 +78,7 @@ int gma_power_suspend(struct device *_dev)
  if(ret){remesa_private_power_finish(dev_priv,false);goto done;}
  remesa_private_power_usable(dev_priv,false);
  ret=dev_priv->ops->power_down(dev);
- if(!ret)gma_suspend_pci(pdev);
+ if(!ret)ret=gma_suspend_pci(pdev);
  remesa_private_power_finish(dev_priv,false);
  goto done;
 unlock:

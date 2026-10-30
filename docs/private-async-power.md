@@ -68,3 +68,6 @@ PCI-suspend and GTT-restore errors still require propagation and bounded failure
 tests. Partial-failure recovery and a physically verified S3 cycle remain open.
 Next experiments must preserve the existing memory quarantine, boot recovery
 and N/N controls; no physical sleep or module installation was performed here.
+
+Follow-up: `private-pci-errors.md` records the subsequent PCI helper error
+propagation. GTT failure handling and hardware qualification remain separate.
