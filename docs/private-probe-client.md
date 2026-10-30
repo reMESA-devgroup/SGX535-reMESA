@@ -2,9 +2,13 @@
 
 This is a separate one-shot LAB tool, not the production rendering loop. It does
 not install a module, enable parameters, reset the device, or present an image.
-**Physical use is blocked by the unresolved PCI removal/private-MMU lifetime
-defect** described in [the kernel audit](rfc/sgx535-kernel-audit-20261029.md).
-Neither the collector nor the model tests qualify that integration.
+The historical PCI removal/private-MMU lifetime blocker is described in
+[the kernel audit](rfc/sgx535-kernel-audit-20261029.md). Subsequent CPU-entry,
+retention/rebind, GEM/VMA and asynchronous callback changes permitted a separate
+controlled normal-path trial on the Mini 12. Its [first physical result](private-first-physical.md)
+proves one fixed-profile private-PD execution/retirement/readback case; pixel
+approval, complete removal/S3 safety and a production driver remain unqualified.
+The collector/model tests alone do not qualify those contracts.
 
 The safe default only reads assets and writes an offline plan:
 
@@ -68,4 +72,5 @@ The next driver change must define active detach separately from late software
 destruction: block and join hardware entry, quiesce callbacks, and establish a
 documented GPU stop/isolation policy before freeing translation/backing resources.
 Moving unload wholesale to final DRM release or merely clearing PCI bus mastering
-does not establish that policy. No new physical qualification is claimed here.
+does not establish that policy. The linked controlled trial is deliberately
+narrower than a complete lifetime or installability qualification.
