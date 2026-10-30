@@ -31,13 +31,14 @@ static void unlock(struct mutex *m)
 {mutex_unlock(m);if(m->rank==1)endpoint_held=false;else if(endpoint_held)rank=1;}
 #define mutex_lock lock
 #define mutex_unlock unlock
-struct backing {bool live,lease,quarantine;unsigned holds,color_vmas;};
+struct backing {bool live,lease,quarantine;unsigned holds,color_vmas,generation,input_seal;};
 struct retained_job {bool live,attached,quarantined;unsigned state,count,ids[16];void *commands;};
 struct resource {unsigned unused;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct mutex lock;
  const void *private_session;bool stream_bound,private_device_lost,excluded;
  bool private_source_held,private_source_poisoned;
+ unsigned private_input_ids[5];int (*pds_write_guard)(u64,const void *,unsigned);
  void *executor;struct backing bo[OBJECTS];struct retained_job jobs[8];struct resource exclude;
 };
 struct remesa_memory_request {unsigned action;};

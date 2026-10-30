@@ -12,13 +12,13 @@ int remesa_private_session_acquire(struct drm_device *dev,struct drm_file *file,
  if(!s||s->dev!=dev||s->file!=file||s->context!=context)goto done;
  mutex_lock(&s->lock);
  if(s->private_device_lost){error=-ENODEV;goto unlock;}
- if(s->private_session||s->stream_bound||s->executor){error=-EBUSY;goto unlock;}
+ if(s->private_session||s->stream_bound||s->executor||s->pds_write_guard){error=-EBUSY;goto unlock;}
 #if !defined(REMESA_MEMORY_TEST) || defined(REMESA_RETAINED_IOCTL_TEST)
  if(retained_entry.initialized||retained_entry.attempted){error=-EBUSY;goto unlock;}
 #endif
  for(i=0;i<8;i++)if(s->jobs[i].live){error=-EBUSY;goto unlock;}
  for(i=0;i<OBJECTS;i++)if(s->bo[i].lease||s->bo[i].holds||s->bo[i].quarantine||
-                         atomic_read(&s->bo[i].color_vmas)){
+                         s->bo[i].input_seal||atomic_read(&s->bo[i].color_vmas)){
   error=-EBUSY;goto unlock;
  }
  s->private_session=owner;*out=s;error=0;
@@ -41,6 +41,19 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
                          atomic_read(&s->bo[i].color_vmas)){
   error=-EBUSY;goto unlock;
  }
+ /* Validate the complete seal before clearing any part of it. Source close,
+  * job retirement and all CPU aliases were checked above; no cache/GPU work. */
+ if(s->private_input_ids[0]){
+  if(!s->pds_write_guard){error=-EIO;goto unlock;}
+  for(i=0;i<5;i++){
+   unsigned id=s->private_input_ids[i];struct backing *b=&s->bo[id&31];
+   if(!id||!b->live||b->generation!=id>>5||b->input_seal!=(i?2u:1u)){
+    error=-EIO;goto unlock;
+   }
+  }
+  for(i=0;i<5;i++)s->bo[s->private_input_ids[i]&31].input_seal=0;
+  memset(s->private_input_ids,0,sizeof(s->private_input_ids));s->pds_write_guard=NULL;
+ }else if(s->pds_write_guard){error=-EIO;goto unlock;}
  s->private_session=NULL;error=0;
  unlock:mutex_unlock(&s->lock);
  done:mutex_unlock(&endpoint_lock);return error;

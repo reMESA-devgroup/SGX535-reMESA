@@ -64,6 +64,7 @@ int remesa_private_session_execute(struct remesa_gem_memory *s,const void *token
  mutex_lock(&s->lock);
  error=private_session_owner(s,token);
  if(!error&&(!s->private_source_held||loan->memory!=s))error=-EACCES;
+ if(!error&&s->private_input_ids[0])error=remesa_private_session_inputs_locked(s,loan->ticket);
  mutex_unlock(&s->lock);if(error)goto done;
  /* The original executor retains the complete bind, permission, publication,
   * lifecycle, root-restore, source-close and settled checks. Its source unbind

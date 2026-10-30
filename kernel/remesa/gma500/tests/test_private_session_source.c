@@ -6,6 +6,10 @@
 #undef main
 #define REMESA_PRIVATE_SESSION_SOURCE_TEST
 struct remesa_memory_ticket {u64 operation;};
+/* This fixture has no sealed inputs; actual seal/transfer checks run in the
+ * full memory-service harness. No metadata-authentication success is modeled. */
+int remesa_private_session_inputs_locked(struct remesa_gem_memory *m,struct remesa_memory_ticket t)
+{(void)m;(void)t;assert(0);return -EACCES;}
 struct remesa_gem_private {
  struct remesa_gem_memory *memory;struct remesa_memory_ticket ticket;
  bool execution_attempted,execution_retired;

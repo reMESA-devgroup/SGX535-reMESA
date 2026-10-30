@@ -70,3 +70,7 @@ The subsequent [admission correction](private-session-admission.md) rejects
 legacy retained/probe calls while this backing lease is held, before those
 interfaces can initialize or mutate the endpoint. This is separate from the
 still-pending authenticated userspace session interface.
+
+The subsequent [private input sealing](private-input-seals.md) records exact
+input identities and protects typed PDS updates between jobs. Its metadata check
+does not replace initial content authentication or qualified GPU permissions.

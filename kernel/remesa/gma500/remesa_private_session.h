@@ -27,6 +27,17 @@ struct sgx535_gma500_owner;
 struct sgx535_gma500_fixed_backend;
 struct remesa_stream_observation;
 struct remesa_memory_view;
+struct remesa_memory_ticket;
+/* Authenticate all five final input images/geometry under this PREPARED job's
+ * holds before calling seal_inputs. The trusted pure callback permits only
+ * typed PDS updates; CODE/geometry/other inputs become immutable to userspace.
+ * No hashing is done here. Seal before source_begin, once per backing lease.
+ * inputs_locked is a metadata reuse check with s->lock already held; it is
+ * not image authentication and never admits a different input ID/generation. */
+int remesa_private_session_seal_inputs(struct remesa_gem_memory *,const void *,
+ struct remesa_memory_ticket,int (*)(u64,const void *,unsigned));
+int remesa_private_session_inputs_locked(struct remesa_gem_memory *,
+ struct remesa_memory_ticket);
 /* Trusted kernel-only execution. Caller authenticates complete final inputs,
  * commands and permissions, prepares the loan/borrowed scene, and supplies a
  * fresh observation. Arguments survive any failure. This wraps the qualified
