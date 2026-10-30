@@ -124,3 +124,11 @@ interpolation, channel rounding or exact boundary coverage. Full pixel-oracle
 approval and general GL conformance remain false. The next integration task is
 reusable private render/resource ownership, keeping the one-shot probe gate
 intact; the consumed boot must not be rearmed to simulate a continuous path.
+
+## Subsequent exact native-pose regression
+
+A separate fresh boot of the same module completed the [native/private full-output
+regression](private-native-regression.md): all COLOR bytes and defined Z24 values
+match the archived native pose1 capture exactly. Its different raw PDS inputs are
+bound before execution. This does not alter the first pose's analytical failures,
+approve general GL conformance or rearm either consumed boot.
