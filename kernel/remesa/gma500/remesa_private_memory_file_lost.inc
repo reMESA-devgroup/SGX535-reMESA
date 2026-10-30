@@ -27,7 +27,7 @@ bool remesa_private_memory_device_retained(struct drm_device *dev)
  if(!dev)return false;
  mutex_lock(&endpoint_lock);s=endpoint;
  if(s&&s->dev==dev){
-  mutex_lock(&s->lock);retained=s->private_device_lost;mutex_unlock(&s->lock);
+  mutex_lock(&s->lock);retained=s->private_device_lost||s->private_session;mutex_unlock(&s->lock);
  }
  mutex_unlock(&endpoint_lock);return retained;
 }
@@ -37,6 +37,6 @@ bool remesa_private_memory_rebind_blocked(void)
  /* The retained backend has one global endpoint, not independent per-PCI
   * contexts. Refuse every new binding before it can write device registers. */
  mutex_lock(&endpoint_lock);s=endpoint;
- if(s){mutex_lock(&s->lock);retained=s->private_device_lost;mutex_unlock(&s->lock);}
+ if(s){mutex_lock(&s->lock);retained=s->private_device_lost||s->private_session;mutex_unlock(&s->lock);}
  mutex_unlock(&endpoint_lock);return retained;
 }

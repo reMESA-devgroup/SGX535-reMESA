@@ -30,6 +30,7 @@ struct backing {bool live,quarantine,lease;unsigned color_vmas,holds;void *pages
 struct resource {unsigned token;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;struct mutex lock;
+ const void *private_session;
  struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded;
  struct resource exclude;unsigned device_refs,module_refs,power_refs;
 };
