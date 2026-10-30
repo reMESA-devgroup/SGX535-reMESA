@@ -108,7 +108,19 @@ int remesa_gem_twod_publish(struct remesa_twod_job *r)
  error=r->ops->visible(r->context,&r->launch,r->cookie);
  if(error){error=job_fault(s,j,error);goto done;}
  b=&s->bo[j->ids[j->count-1]&31];
+#ifdef REMESA_TWOD_DEFER_CPU_INVALIDATE
+ /* Device visibility has completed above. CPU access is still excluded by
+  * job holds. Invalidate before the next CPU lease/view or page release,
+  * rather than after every GPU-only operation. Prefire flush stays mandatory. */
+ if(READ_ONCE(twod_defer_cpu_invalidation))b->twod_cpu_invalidate_pending=true;
+ else{
+  drm_clflush_pages(b->pages,b->inserted);
+  b->twod_cpu_invalidate_pending=false;
+ }
+ dma_rmb();
+#else
  drm_clflush_pages(b->pages,b->inserted);dma_rmb();
+#endif
  j->state=REMESA_JOB_VISIBLE;
  done:mutex_unlock(&s->lock);return error;
 }

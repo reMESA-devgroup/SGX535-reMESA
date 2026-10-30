@@ -60,6 +60,12 @@ int remesa_gem_twod_validate_locked(struct remesa_gem_memory *s,
   if(!b->live||b->generation!=j->ids[i]>>5||b->quarantine||!b->holds||
      b->lease||!b->pinned||!b->reserved||b->inserted!=b->gem.size/PAGE_SIZE)
    return job_fault(s,j,-EIO);
+#ifdef REMESA_TWOD_DEFER_CPU_INVALIDATE
+  /* Internal views outlive their job's cancellation. No CPU pointer may
+   * survive into this candidate's GPU-only interval, even if the runtime
+   * policy changes after preflight. Unpin revokes the cached mapping. */
+  if(b->cached_job_view)return -EBUSY;
+#endif
   error=psb_mmu_verify_cached_rw_pages(s->pd,b->va.start,b->pages,b->inserted);
   if(error)return job_fault(s,j,-EIO);
   uses[i]=(struct remesa_memory_binding){j->ids[i],b->va.start,b->gem.size};

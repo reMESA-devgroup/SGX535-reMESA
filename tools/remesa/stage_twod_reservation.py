@@ -718,7 +718,50 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
     return result
 
 
-def stage(native, output, lab=False, vendor=False, copy=False, fill=False, private=False):
+def deferred_twod_cpu_source(source):
+    """Defer destination CPU invalidation, never device visibility/retirement.
+
+    The 2D issue path still flushes every source/destination before DMA. CPU
+    leases, internal views and page release consume pending invalidation under
+    the existing memory lock, before exposing or returning a single page.
+    """
+    source = replace_once(source, ' bool ta_cpu_cached,ta_cpu_dirty,ta_gpu_dirty;\n',
+        ' bool ta_cpu_cached,ta_cpu_dirty,ta_gpu_dirty;\n'
+        ' bool twod_cpu_invalidate_pending;\n')
+    source = replace_once(source, 'static int unmap(struct remesa_gem_memory *s,struct backing *b)\n',
+        'static bool twod_defer_cpu_invalidation;\n'
+        'module_param_named(remesa_twod_defer_cpu_invalidation,twod_defer_cpu_invalidation,bool,0600);\n'
+        'static void twod_for_cpu(struct backing *b)\n'
+        '{\n'
+        ' if(!b->twod_cpu_invalidate_pending)return;\n'
+        ' drm_clflush_pages(b->pages,b->gem.size/PAGE_SIZE);dma_rmb();\n'
+        ' b->twod_cpu_invalidate_pending=false;\n'
+        '}\n'
+        'static int unmap(struct remesa_gem_memory *s,struct backing *b)\n')
+    source = replace_once(source, ' if(b->pages) drm_gem_put_pages(&b->gem,b->pages,true,false);\n',
+        ' if(b->pages) {twod_for_cpu(b);drm_gem_put_pages(&b->gem,b->pages,true,false);}\n')
+    source = replace_once(source,
+        '  drm_gem_put_pages(&b->gem,b->pages,true,false);b->pages=NULL;b->pinned=false;b->lease_borrowed=false;\n',
+        '  twod_for_cpu(b);\n'
+        '  drm_gem_put_pages(&b->gem,b->pages,true,false);b->pages=NULL;b->pinned=false;b->lease_borrowed=false;\n')
+    source = replace_once(source, '  if(!b->pinned || b->lease) return -EBUSY;\n  /* A retired OPEN8',
+        '  if(!b->pinned || b->lease) return -EBUSY;\n'
+        '  twod_for_cpu(b); /* before any CPU mapping or color-view fault */\n  /* A retired OPEN8')
+    source = replace_once(source,
+        '  drm_clflush_pages(b->pages,b->gem.size/PAGE_SIZE);dma_wmb();\n',
+        '  drm_clflush_pages(b->pages,b->gem.size/PAGE_SIZE);dma_wmb();\n'
+        '  dma_rmb();b->twod_cpu_invalidate_pending=false;\n')
+    source = replace_once(source,
+        '  out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};\n',
+        '  twod_for_cpu(b); /* includes already cached internal views */\n'
+        '  out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};\n')
+    return source
+
+
+def stage(native, output, lab=False, vendor=False, copy=False, fill=False, private=False,
+          defer_twod_cpu=False):
+    if defer_twod_cpu and (not copy or lab or vendor or private):
+        raise ValueError('deferred CPU invalidation requires isolated normal native-copy/fill profile')
     if output.exists():
         raise FileExistsError('refusing to overwrite ' + str(output))
     # Inventory all copied sources, including files outside the patch anchors.
@@ -727,6 +770,9 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                     if source.is_file() and (source.suffix in ['.c', '.h', '.inc'] or
                                              source.name in ['Makefile', 'Kconfig'])}
     patched = patched_sources(native, lab, vendor, copy, fill, private)
+    if defer_twod_cpu:
+        patched['remesa_gem_memory.c'] = deferred_twod_cpu_source(patched['remesa_gem_memory.c'])
+        patched['Makefile'] += 'ccflags-y += -DREMESA_TWOD_DEFER_CPU_INVALIDATE=1\n'
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
@@ -801,6 +847,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
         'normal_copy_compiled': copy,
         'native_fill_compiled': fill,
         'private_mmu_preparation_compiled': private,
+        'twod_deferred_cpu_invalidation_compiled': defer_twod_cpu,
         'scope': 'Native 2D candidate; optional root-only gated LAB ioctl; never installed by stager',
     }
     (output / 'TWOD_RESERVATION_STAGE.json').write_text(json.dumps(manifest, indent=2) + '\n')
@@ -815,9 +862,12 @@ if __name__ == '__main__':
     parser.add_argument('--with-lab-vendor-stream', action='store_true')
     parser.add_argument('--with-native-copy', action='store_true')
     parser.add_argument('--with-native-fill', action='store_true')
+    parser.add_argument('--with-twod-deferred-cpu-invalidation', action='store_true',
+                        help='Candidate normal 2D cache policy; requires separate physical qualification')
     parser.add_argument('--with-private-mmu-preparation', action='store_true',
                         help='Compile private MMU/execution and the default-disabled typed qualification ioctl')
     args = parser.parse_args()
     print(json.dumps(stage(args.native_source, args.output, args.with_lab_ioctl,
                            args.with_lab_vendor_stream, args.with_native_copy, args.with_native_fill,
-                           args.with_private_mmu_preparation), indent=2))
+                           args.with_private_mmu_preparation,
+                           args.with_twod_deferred_cpu_invalidation), indent=2))

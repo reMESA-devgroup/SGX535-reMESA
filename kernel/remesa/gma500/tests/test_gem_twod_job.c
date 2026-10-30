@@ -127,7 +127,14 @@ static void lifecycle_case(unsigned width,unsigned height,int same,unsigned mode
   unsigned before=flushes;
   e=remesa_gem_twod_publish(&run);
   if(mode==12||mode==17){CHECK(e==-EIO&&flushes==before);quarantined(&run);return;}
-  CHECK(!e&&flushes==before+1);CHECK(remesa_gem_twod_publish(&run)==-EBUSY);
+  CHECK(!e);
+#ifdef REMESA_TWOD_DEFER_CPU_INVALIDATE
+  if(twod_defer_cpu_invalidation)CHECK(flushes==before&&b->twod_cpu_invalidate_pending);
+  else CHECK(flushes==before+1&&!b->twod_cpu_invalidate_pending);
+#else
+  CHECK(flushes==before+1);
+#endif
+  CHECK(remesa_gem_twod_publish(&run)==-EBUSY);
   if(mode==16){CHECK(remesa_gem_job_acknowledge(s,ticket)==-EOPNOTSUPP);quarantined(&run);return;}
   if(mode==18)access_bad=1;
   e=remesa_gem_twod_retire(&run);
@@ -141,7 +148,10 @@ static void lifecycle_case(unsigned width,unsigned height,int same,unsigned mode
  CHECK(!remesa_gem_memory_close(s));
  CHECK(!gems&&!pins&&!ptes&&!claimed&&!power&&!device_refs&&!module_refs);
 }
-int main(void)
+#ifndef REMESA_TWOD_JOB_TEST_MAIN
+#define REMESA_TWOD_JOB_TEST_MAIN main
+#endif
+int REMESA_TWOD_JOB_TEST_MAIN(void)
 {
  lifecycle_case(1280,800,0,0);lifecycle_case(640,640,0,0);
  lifecycle_case(641,479,0,0);lifecycle_case(32,32,1,0);
