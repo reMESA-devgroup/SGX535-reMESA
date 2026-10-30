@@ -58,6 +58,11 @@ completion, retirement, guards, source bytes and all normal receipts. Restore
 all controls to N and the stock boot default with no pending next entry.
 No test may rearm the consumed private-session boot.
 
+Measure native-call time, the following CPU access/readback and total sequence
+time separately. A workload reading the result after every operation still
+pays the invalidation cost at that CPU boundary; moving it outside the ioctl
+is not by itself an end-to-end speedup. No glxgears or X11 FPS gain is implied.
+
 ## Offline evidence
 
 Root: `/home/gama/sgx535-offline/twod-deferred-cpu-20261030/v1`.
