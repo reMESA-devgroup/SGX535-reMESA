@@ -428,6 +428,11 @@ def private_gem_lifetime_sources(native):
          'static void remesa_private_gtt_roll_live(struct drm_device *dev, struct gtt_range *r, int roll)\n')]:
         gtt = replace_once(gtt, old, new)
     gtt += '\n#include "remesa_private_gtt_guard.inc"\n'
+    gtt = replace_once(gtt, 'int psb_gtt_init(struct drm_device *dev, int resume)\n',
+        'static int remesa_private_gtt_init_live(struct drm_device *dev, int resume)\n')
+    start=gtt.index('int psb_gtt_restore(struct drm_device *dev)\n')
+    end=gtt.index('\n#include "remesa_private_gtt_guard.inc"',start)
+    gtt=gtt[:start]+'#include "remesa_private_gtt_resume.inc"\n'+gtt[end:]
     return {'gem.c': gem, 'framebuffer.c': fb, 'gtt.h': header, 'gtt.c': gtt}
 
 
@@ -675,6 +680,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_entry_guard.inc',
                      'remesa_private_gem_lifetime.h', 'remesa_private_gem_lifetime.inc',
                      'remesa_private_gtt_guard.inc',
+                     'remesa_private_gtt_resume.inc',
                      'remesa_private_fbdev.h', 'remesa_private_fbdev_map.inc',
                      'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
                      'remesa_private_fbdev_config.inc',

@@ -45,7 +45,7 @@ static bool spin_held,pci_active,restore_complete,pause_started,release_pause;
 static unsigned runtime_refs,bad_mmio,powerdowns_with_refs,source_losses,irq_pre,irq_post;
 static unsigned enable_under_spin,enable_calls,warnings;
 static int enable_error,state_error,save_error,restore_error,up_error,down_error,gtt_error,worker_result;
-static int pci_suspend_error,config_error;
+static int pci_suspend_error,config_error,word_error;
 static bool owner_nested;
 static void owner_check(void);
 enum pause_mode {NONE,SUSPEND_GAP,RESUME_GAP};
@@ -83,7 +83,7 @@ static int pci_write_config_dword(struct pci_dev *p,unsigned reg,unsigned value)
 {assert(p==&pci);(void)reg;(void)value;return config_error;}
 static int pcibios_err_to_errno(int err){return err>0?-EIO:err;}
 static int pci_write_config_word(struct pci_dev *p,unsigned reg,unsigned value)
-{assert(p==&pci);(void)reg;(void)value;return 0;}
+{assert(p==&pci);(void)reg;(void)value;return word_error;}
 static int pci_enable_device(struct pci_dev *p)
 {assert(p==&pci);enable_calls++;if(spin_held)enable_under_spin++;if(!enable_error)pci_active=true;return enable_error;}
 static int psb_gtt_restore(struct drm_device *d)
@@ -110,7 +110,7 @@ static void fixture(bool active)
  pci_active=active;restore_complete=active;pause_started=release_pause=false;
  bad_mmio=powerdowns_with_refs=source_losses=irq_pre=irq_post=enable_under_spin=enable_calls=warnings=0;
  enable_error=state_error=save_error=restore_error=up_error=down_error=gtt_error=worker_result=0;owner_nested=false;mode=NONE;
- pci_suspend_error=config_error=0;
+ pci_suspend_error=config_error=word_error=0;
 }
 static void *suspend_worker(void *unused)
 {(void)unused;worker_result=gma_power_suspend(&pci.dev);return NULL;}
@@ -163,6 +163,8 @@ int main(void)
  fixture(false);up_error=-EIO;assert(gma_power_resume(&pci.dev)==-EIO);
  assert(!private.display_power&&!irq_pre&&!irq_post);
  fixture(false);gtt_error=-EIO;assert(gma_power_resume(&pci.dev)==-EIO);
+ assert(!private.display_power&&!restore_complete&&!irq_pre&&!irq_post);
+ fixture(false);word_error=0x88;assert(gma_power_resume(&pci.dev)==-EIO);
  assert(!private.display_power&&!restore_complete&&!irq_pre&&!irq_post);
  fixture(false);restore_error=-EIO;assert(gma_power_resume(&pci.dev)==-EIO);
  assert(!private.display_power&&!irq_pre&&!irq_post);

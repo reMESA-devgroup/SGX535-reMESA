@@ -59,3 +59,7 @@ SOURCE_IDENTITY.json binds 214 staged/build inputs and all six fixture results;
 
 Uninstalled, physically unqualified module SHA-256:
 `f4af4a9a5ffa796cf0baedec2ed6330c76ba5fe929039028dadd11bb08d0b09c`. GPU operations: zero.
+
+Follow-up: `private-gtt-resume.md` records the subsequent checked GTT reuse
+path and GMCH configuration-word error propagation. These offline corrections
+do not qualify physical S3, source quiescence or complete failure recovery.
