@@ -2,12 +2,15 @@
 #include "remesa_linux_memory.h"
 #include "remesa/memory_uapi.h"
 #include <errno.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 _Static_assert(sizeof(struct remesa_memory_request)==4152,"fixed native/i386 memory ABI");
 struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poison;};
-struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];};
+struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];
+ uint64_t private_session,private_sequence,private_operation;
+ uint32_t private_maximum;bool private_attempted,private_active,private_poison;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -114,7 +117,8 @@ int remesa_linux_memory_begin_recorded(int fd,struct remesa_linux_memory **out,c
  d->context=r.context;d->owned_session=true;*out=d;return 0;
 }
 int remesa_linux_memory_detach(struct remesa_linux_memory *d)
-{if(!d)return EINVAL;for(unsigned i=0;i<32;i++)if(d->objects[i].id || d->objects[i].poison)return EBUSY;
+{if(!d)return EINVAL;if(d->private_poison)return EOWNERDEAD;if(d->private_active)return EBUSY;
+ for(unsigned i=0;i<32;i++)if(d->objects[i].id || d->objects[i].poison)return EBUSY;
  if(d->owned_session){struct remesa_memory_request r={0};r.action=REMESA_MEM_CLOSE;int e=call(d,&r);if(e)return e;}
  free(d);return 0;}
 
@@ -125,6 +129,8 @@ int remesa_linux_memory_submit_retained(struct remesa_linux_memory *d,
  struct remesa_retained_request *r,bool *attempted,remesa_retained_recorder record,void *priv)
 {
  if(!d||!r||!attempted||!record||r->context!=d->context)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active)return EBUSY;
  if(*attempted)return EALREADY;
  int validation=remesa_retained_request_validate(r);if(validation)return validation;
  for(unsigned i=0;i<REMESA_RETAINED_ROLES;i++) {
@@ -176,12 +182,115 @@ int remesa_linux_memory_begin(int fd,struct remesa_linux_memory **out)
 void remesa_linux_memory_forget(struct remesa_linux_memory *d)
 {if(d){for(unsigned i=0;i<32;i++)free(d->objects[i].cpu);free(d);}}
 
+_Static_assert(sizeof(struct remesa_private_session_lab_request)==136,"fixed private session ABI");
+_Static_assert(offsetof(struct remesa_private_session_lab_request,operation)==88,"private request prefix");
+static int private_lab_uncertain(struct remesa_linux_memory *d)
+{
+ d->private_poison=true;
+ /* Even unused slots are poisoned: no new allocation after uncertain OPEN,
+  * SUBMIT or CLOSE. Only explicit INFO and host-only forget remain useful. */
+ for(unsigned i=0;i<32;i++)d->objects[i].poison=true;
+ return EOWNERDEAD;
+}
+static int private_lab_output_valid(const struct remesa_private_session_lab_request *out)
+{
+ return out && !((uintptr_t)out%_Alignof(struct remesa_private_session_lab_request)) &&
+        sizeof(*out)<=UINTPTR_MAX-(uintptr_t)out;
+}
+static int private_lab_exchange(struct remesa_linux_memory *d,
+ struct remesa_private_session_lab_request *r,struct remesa_private_session_lab_request *out)
+{
+ struct remesa_private_session_lab_request before=*r,check;
+ /* An errno cannot establish whether ownership was acquired or work issued.
+  * Never retry, including EINTR and supposedly pre-admission errors. */
+ int rc=ioctl(d->fd,DRM_IOCTL_REMESA_PRIVATE_SESSION_LAB,r);
+ *out=*r;check=*r;
+ if(before.action==REMESA_PRIVATE_SESSION_LAB_OPEN)check.session=before.session;
+ if(rc || memcmp(&check,&before,offsetof(struct remesa_private_session_lab_request,operation)) ||
+    r->reserved || r->error)return private_lab_uncertain(d);
+ if(r->action==REMESA_PRIVATE_SESSION_LAB_CLOSE){
+  if(r->state!=REMESA_PRIVATE_SESSION_LAB_CLOSED || r->stages!=REMESA_PRIVATE_SESSION_LAB_CLOSED_STAGE ||
+     r->operation || r->cookie || r->core || r->revision || r->phase || r->ledger)
+   return private_lab_uncertain(d);
+  d->private_active=false;return 0;
+ }
+ if(r->state!=REMESA_PRIVATE_SESSION_LAB_ACTIVE || r->core!=0x01130000u || r->revision!=0x00010201u)
+  return private_lab_uncertain(d);
+ if(r->action==REMESA_PRIVATE_SESSION_LAB_OPEN){
+  if(!r->session || r->stages!=REMESA_PRIVATE_SESSION_LAB_OPENED ||
+     r->operation || r->cookie || r->phase || r->ledger)return private_lab_uncertain(d);
+  d->private_session=r->session;d->private_maximum=r->max_jobs;d->private_active=true;
+ }else{
+  if(r->stages!=15 || r->phase!=9 || r->ledger!=7 || !r->operation ||
+     r->operation!=r->cookie || r->operation<=d->private_operation)return private_lab_uncertain(d);
+  d->private_sequence=r->sequence;d->private_operation=r->operation;
+ }
+ return 0;
+}
+int remesa_linux_memory_private_lab_open(struct remesa_linux_memory *d,
+ const uint32_t ids[11],uint32_t maximum,struct remesa_private_session_lab_request *out)
+{
+ struct remesa_private_session_lab_request r={0};int e;
+ if(!d || !ids || !private_lab_output_valid(out) || !maximum || maximum>64)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_attempted)return EALREADY;
+ if(d->recorder.record)return EOPNOTSUPP;
+ for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
+ r.version=REMESA_PRIVATE_SESSION_LAB_VERSION;r.action=REMESA_PRIVATE_SESSION_LAB_OPEN;
+ r.context=d->context;r.max_jobs=maximum;memcpy(r.ids,ids,sizeof(r.ids));
+ /* Validate the full local set before the first provider query. Canonical
+  * contents, exact profile bindings, permissions and sealing belong to kernel
+  * admission; local INFO checks cannot authorize execution. */
+ for(unsigned i=0;i<11;i++){
+  struct held *b=find(d,r.ids[i]);
+  if(!b || !b->gpu_va)return EINVAL;
+  if(b->poison)return EOWNERDEAD;
+  if(b->cpu)return EBUSY;
+  for(unsigned j=0;j<i;j++)if(r.ids[i]==r.ids[j])return EINVAL;
+ }
+ for(unsigned i=0;i<11;i++){
+  struct held *b=find(d,r.ids[i]);
+  e=remesa_linux_memory_validate_backing(d,b->id,b->gpu_va,b->bytes);if(e)return e;
+ }
+ d->private_attempted=true;
+ return private_lab_exchange(d,&r,out);
+}
+int remesa_linux_memory_private_lab_submit(struct remesa_linux_memory *d,
+ uint32_t budget_ms,struct remesa_private_session_lab_request *out)
+{
+ struct remesa_private_session_lab_request r={0};
+ if(!d || !private_lab_output_valid(out) || !budget_ms || budget_ms>10000)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(!d->private_active)return ENOENT;
+ if(d->private_sequence>=d->private_maximum)return ENOSPC;
+ /* Outstanding host leases must be released before execution. No per-frame
+  * provider queries or full input comparisons are needed for sealed backing. */
+ for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
+ r.version=REMESA_PRIVATE_SESSION_LAB_VERSION;r.action=REMESA_PRIVATE_SESSION_LAB_SUBMIT;
+ r.context=d->context;r.session=d->private_session;r.sequence=d->private_sequence+1;r.budget_ms=budget_ms;
+ return private_lab_exchange(d,&r,out);
+}
+int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *d,
+ struct remesa_private_session_lab_request *out)
+{
+ struct remesa_private_session_lab_request r={0};
+ if(!d || !private_lab_output_valid(out))return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(!d->private_active)return ENOENT;
+ for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
+ r.version=REMESA_PRIVATE_SESSION_LAB_VERSION;r.action=REMESA_PRIVATE_SESSION_LAB_CLOSE;
+ r.context=d->context;r.session=d->private_session;r.sequence=d->private_sequence;
+ return private_lab_exchange(d,&r,out);
+}
+
 _Static_assert(sizeof(struct remesa_twod_copy_request)==120,"fixed native copy ABI");
 int remesa_linux_memory_copy_2d(struct remesa_linux_memory *d,struct remesa_twod_copy_request *out)
 {
  struct remesa_twod_copy_request r,before;struct held *a,*b;int e;
  if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_twod_copy_request)||
     sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active)return EBUSY;
  r=*out;
  if(r.version||r.context||r.flags||r.reserved||r.response_reserved||r.operation||r.cookie||
     r.stages||r.retained||r.core||r.revision||r.error||!r.width||!r.height||
@@ -224,6 +333,8 @@ int remesa_linux_memory_fill_2d(struct remesa_linux_memory *d,struct remesa_twod
  struct remesa_twod_fill_request r,before;struct held *b;int e;
  if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_twod_fill_request)||
     sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active)return EBUSY;
  r=*out;
  if(r.version||r.context||r.flags||r.reserved[0]||r.reserved[1]||r.response_reserved||r.operation||r.cookie||
     r.stages||r.retained||r.core||r.revision||r.error||!r.width||!r.height||

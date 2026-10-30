@@ -126,3 +126,7 @@ Important files are `PHYSICAL_EQUALITY_CONTRACT.json`, `VERIFY_PHYSICAL.py`,
 `PHYSICAL_COMPARISON.json`, `physical/capture/`, `physical-evidence.tar`,
 `FINAL_REMOTE_STATE.json`, `boot/BOOT_SMOKE_RESULT.json`, `PROTECTED_CHECK.json`
 and `CURRENT_STATE.json`. All 31 protected files remain unchanged.
+
+The subsequent [native C transport](private-session-transport.md) exposes this
+same bounded ABI through the existing memory provider. Its offline tests and
+captured-wire replay are recorded separately from the physical run above.
