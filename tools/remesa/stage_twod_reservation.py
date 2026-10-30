@@ -343,6 +343,29 @@ def private_async_power_sources(irq, device, opregion):
     return irq, device, opregion
 
 
+def private_console_power_source(source):
+    start=source.index('int psbfb_sync(struct fb_info *info)\n')
+    body=source[start:]
+    body=replace_once(body, '\tstruct drm_fb_helper *fb_helper = info->par;\n',
+        '\tstruct drm_fb_helper *fb_helper = info ? info->par : NULL;\n')
+    body=replace_once(body, '\tstruct drm_framebuffer *fb = fb_helper->fb;\n',
+        '\tstruct drm_framebuffer *fb = fb_helper ? fb_helper->fb : NULL;\n')
+    body=replace_once(body, '\tstruct drm_device *dev = fb->dev;\n',
+        '\tstruct drm_device *dev = fb ? fb->dev : NULL;\n')
+    body=replace_once(body, '\tstruct drm_psb_private *dev_priv = dev->dev_private;\n',
+        '\tstruct drm_psb_private *dev_priv = dev ? dev->dev_private : NULL;\n')
+    body=replace_once(body, '\tspin_lock_irqsave(&dev_priv->lock_2d, flags);\n',
+        '\t/* DRM lifetime is covered by the private fbops entry wrapper.\n'
+        '\t * An offline device is not evidence that pending 2D work retired. */\n'
+        '\tif (!dev_priv)\n\t\treturn -ENODEV;\n'
+        '\tif (!gma_power_begin(dev, false))\n\t\treturn -EAGAIN;\n'
+        '\tspin_lock_irqsave(&dev_priv->lock_2d, flags);\n')
+    body=replace_once(body, '\tspin_unlock_irqrestore(&dev_priv->lock_2d, flags);\n',
+        '\tspin_unlock_irqrestore(&dev_priv->lock_2d, flags);\n'
+        '\tgma_power_end(dev);\n')
+    return source[:start]+body
+
+
 def private_power_sources(header, source):
     # The retained native runtime-PM enable is disabled. Offline forced claims
     # cannot safely restore KMS state while callers may hold modeset locks.
@@ -633,6 +656,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             result['psb_drv.h'],result['framebuffer.c'],display.decode())
         result['psb_drv.h'],result['power.c']=private_power_sources(
             result['psb_drv.h'],(native/'power.c').read_text())
+        result['accel_2d.c']=private_console_power_source(result['accel_2d.c'])
         result['psb_drv.h'],result['psb_lid.c']=private_lid_sources(
             result['psb_drv.h'],(native/'psb_lid.c').read_text())
         for name, digest, fragment in [
