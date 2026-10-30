@@ -87,3 +87,42 @@ never installs a module, toggles controls, reboots or presents software pixels.
 Physical multi-job approval, sustained FPS, general GL/GLES, desktop 2D,
 installation, 1600x768 and other kernel backends remain unfinished. Qualification
 must retain the real native COLOR/defined-Z24 baseline and recoverable stock boot.
+
+## Physical two-job qualification (2026-10-30)
+
+Source `71e2dda`, module SHA-256
+`9c7a3a683af43cd2936086f0d1eb3152f6b132dea0a7f9bc6d590ab68d3be85a`,
+boot `d9f98d2f-c63a-4e9a-910a-a3785c7da95a`: one OPEN, two SUBMITs and one
+CLOSE passed on the Mini 12. Both submissions reported SGX core `01130000`,
+revision `00010201`, phase9, ledger7, stages15 and distinct operation/cookie
+pairs **2/2** and **3/3**. Admission-only operation1 was canceled before OPEN;
+OPEN/CLOSE do not count as GPU jobs. Both frames reused all eleven allocations,
+the source lease and unchanged inputs, with zero extra PDS pages uploaded.
+
+`PHYSICAL_COMPARISON.json` independently reparses all raw request/response
+bytes. Each frame exactly matches all 4,096,000 native COLOR bytes and all
+1,024,000 defined Z24 values from the previously qualified pose1 capture. The
+existing undefined X8 differs at 200,000 pixels; raw Z is preserved, not claimed
+to match byte for byte. All five input images and both guards are unchanged.
+The equality contract and single-byte/defined-depth negative controls were
+pinned before executing. Historical general rendering/conformance limitations
+remain; this is a fixed-profile native/private regression.
+
+LAB wall times were 290.410/342.389 ms for SUBMIT and 509.206/521.682 ms for
+readback, hashing and artifact writes. Preparation/upload took 406.050 ms;
+OPEN took 14.243 ms. These are not GPU-only timings, a production benchmark or
+sustained FPS. The LAB cold initialization remains in these measurements.
+
+CLOSE acknowledged state3/stages32, all objects were unmapped/unpinned/destroyed,
+and the memory context closed. Final independent observation found no matching
+collector process, module live, all six controls N, stock saved default and empty
+`next_entry`, with the original GRUB custom file restored. The exact-case kernel
+fault marker scan was empty; complete dmesg and first-load logs are preserved.
+No suspend, forced unload, reset or source rearm was attempted. This boot's
+one-shot source/session allowance is consumed and must not be retried.
+
+Evidence root: `/home/gama/sgx535-offline/private-session-lab-20261030/v1/`.
+Important files are `PHYSICAL_EQUALITY_CONTRACT.json`, `VERIFY_PHYSICAL.py`,
+`PHYSICAL_COMPARISON.json`, `physical/capture/`, `physical-evidence.tar`,
+`FINAL_REMOTE_STATE.json`, `boot/BOOT_SMOKE_RESULT.json`, `PROTECTED_CHECK.json`
+and `CURRENT_STATE.json`. All 31 protected files remain unchanged.
