@@ -653,6 +653,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
+        result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
         result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
@@ -724,6 +725,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_gem_lifetime.h', 'remesa_private_gem_lifetime.inc',
                      'remesa_private_gtt_guard.inc',
                      'remesa_private_gtt_resume.inc',
+                     'remesa_console_mapping.h', 'remesa_console_mapping.inc',
                      'remesa_private_fbdev.h', 'remesa_private_fbdev_map.inc',
                      'remesa_private_fbdev_ops.inc', 'remesa_private_fbdev_detach.inc',
                      'remesa_private_fbdev_config.inc',
