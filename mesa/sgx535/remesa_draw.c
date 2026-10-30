@@ -565,9 +565,25 @@ struct remesa_linked_vertex_inputs {
  size_t storage_bytes;
  unsigned char data[];
 };
-int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *info,
+int remesa_linked_topology_prepare(unsigned mode,uint32_t count,
+ struct remesa_linked_topology *out)
+{
+ struct remesa_linked_topology value;
+ if(!out||(uintptr_t)out%_Alignof(struct remesa_linked_topology)||
+    sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ uint64_t expanded;
+ if(mode==MESA_PRIM_TRIANGLES){value.input_count=count-count%3;expanded=value.input_count;}
+ else if(mode==MESA_PRIM_TRIANGLE_STRIP||mode==MESA_PRIM_TRIANGLE_FAN){
+  value.input_count=count;expanded=count<3?0:((uint64_t)count-2)*3;
+ }else return ENOTSUP;
+ if(!expanded)return ENODATA;
+ if(expanded>65535)return E2BIG;
+ value.index_count=(uint32_t)expanded;*out=value;return 0;
+}
+static int linked_vertex_inputs_create(const struct pipe_draw_info *info,
  const struct pipe_draw_start_count_bias *draw,const struct remesa_linked_attribute attributes[3],
- const void *indices,size_t index_bytes,struct remesa_linked_vertex_inputs **out)
+ const void *indices,size_t index_bytes,bool topology,bool first_provoking,
+ struct remesa_linked_vertex_inputs **out)
 {
  if(!info||!draw||!attributes||!out||
     snapshot_overlap(out,sizeof(*out),info,sizeof(*info))||
@@ -584,11 +600,13 @@ int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *info,
  }
  if(in.index_size&&snapshot_overlap(out,sizeof(*out),indices,index_bytes))return EINVAL;
  if(*out)return EBUSY;
- if(in.mode!=MESA_PRIM_TRIANGLES||in.start_instance||in.instance_count>1||
+ if((!topology&&in.mode!=MESA_PRIM_TRIANGLES)||in.start_instance||in.instance_count>1||
     (in.index_size&&in.primitive_restart))return ENOTSUP;
- const uint32_t count=d.count-d.count%3;
- if(!count||!in.instance_count)return ENODATA;
- if(count>65535)return E2BIG;
+ if(in.mode!=MESA_PRIM_TRIANGLES&&in.mode!=MESA_PRIM_TRIANGLE_STRIP&&in.mode!=MESA_PRIM_TRIANGLE_FAN)return ENOTSUP;
+ if(!in.instance_count)return ENODATA;
+ struct remesa_linked_topology counts;int error=remesa_linked_topology_prepare(in.mode,d.count,&counts);
+ if(error)return error;
+ const uint32_t count=counts.input_count;
  uint32_t min=UINT32_MAX,max=0;uint64_t first=0;
  if(in.index_size){
   if(in.index_size!=1&&in.index_size!=2&&in.index_size!=4)return EINVAL;
@@ -612,24 +630,46 @@ int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *info,
  uint64_t records=(uint64_t)max-min+1;
  if(records>4095)return E2BIG;
  for(unsigned k=0;k<3;k++)if(a[k].stride&&max>(a[k].bytes-(size_t)a[k].offset-16)/a[k].stride)return EINVAL;
- const size_t vb=(size_t)records*48,ib=(size_t)count*2;
+ const size_t vb=(size_t)records*48,ib=(size_t)counts.index_count*2;
  struct remesa_linked_vertex_inputs *owned=malloc(sizeof(*owned)+vb+ib);
  if(!owned)return ENOMEM;
  *owned=(struct remesa_linked_vertex_inputs){.storage_bytes=vb+ib,
   .view={.vertices=owned->data,.indices=(uint16_t *)(owned->data+vb),
-   .vertex_bytes=vb,.index_bytes=ib,.vertex_count=(uint32_t)records,.index_count=count,
+   .vertex_bytes=vb,.index_bytes=ib,.vertex_count=(uint32_t)records,.index_count=counts.index_count,
    .stride_bytes=48,.min_source_vertex=min,.max_source_vertex=max}};
  for(uint32_t v=0;v<(uint32_t)records;v++)for(unsigned k=0;k<3;k++)
   memcpy(owned->data+(size_t)v*48+k*16,(const unsigned char *)a[k].data+
    (size_t)a[k].offset+(size_t)(min+v)*a[k].stride,16);
  uint16_t *rebased=(uint16_t *)(owned->data+vb);
- for(uint32_t i=0;i<count;i++){
-  uint32_t id=in.index_size?(uint32_t)((int64_t)read_index((const unsigned char *)indices+
-   (size_t)first+(size_t)i*in.index_size,in.index_size)+d.index_bias):d.start+i;
-  rebased[i]=(uint16_t)(id-min);
+ for(uint32_t triangle=0;triangle<counts.index_count/3;triangle++){
+  uint32_t position[3];
+  if(in.mode==MESA_PRIM_TRIANGLES){
+   position[0]=triangle*3;position[1]=position[0]+1;position[2]=position[0]+2;
+  }else if(in.mode==MESA_PRIM_TRIANGLE_STRIP){
+   uint32_t odd=triangle&1u;
+   position[0]=first_provoking?triangle:triangle+odd;
+   position[1]=first_provoking?triangle+1+odd:triangle+1-odd;
+   position[2]=first_provoking?triangle+2-odd:triangle+2;
+  }else if(first_provoking){
+   position[0]=triangle+1;position[1]=triangle+2;position[2]=0;
+  }else{position[0]=0;position[1]=triangle+1;position[2]=triangle+2;}
+  for(unsigned k=0;k<3;k++){
+   uint32_t i=position[k];
+   uint32_t id=in.index_size?(uint32_t)((int64_t)read_index((const unsigned char *)indices+
+    (size_t)first+(size_t)i*in.index_size,in.index_size)+d.index_bias):d.start+i;
+   rebased[triangle*3+k]=(uint16_t)(id-min);
+  }
  }
  *out=owned;return 0;
 }
+int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *info,
+ const struct pipe_draw_start_count_bias *draw,const struct remesa_linked_attribute attributes[3],
+ const void *indices,size_t index_bytes,struct remesa_linked_vertex_inputs **out)
+{return linked_vertex_inputs_create(info,draw,attributes,indices,index_bytes,false,false,out);}
+int remesa_linked_vertex_inputs_create_topology(const struct pipe_draw_info *info,
+ const struct pipe_draw_start_count_bias *draw,const struct remesa_linked_attribute attributes[3],
+ const void *indices,size_t index_bytes,bool first_provoking,struct remesa_linked_vertex_inputs **out)
+{return linked_vertex_inputs_create(info,draw,attributes,indices,index_bytes,true,first_provoking,out);}
 int remesa_linked_vertex_inputs_inspect(const struct remesa_linked_vertex_inputs *owned,
  struct remesa_linked_vertex_inputs_view *out)
 {

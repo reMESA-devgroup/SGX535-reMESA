@@ -3,6 +3,7 @@
 #define REMESA_DRAW_H
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include "pipe/p_state.h"
 #include "remesa/draw_packet.h"
 /* Supported host position fetch widths. Missing FLOAT2 z/w are 0/1;
@@ -68,6 +69,20 @@ struct remesa_linked_vertex_inputs_view {
 int remesa_linked_vertex_inputs_create(const struct pipe_draw_info *,
  const struct pipe_draw_start_count_bias *,const struct remesa_linked_attribute[3],
  const void *indices,size_t index_bytes,struct remesa_linked_vertex_inputs **);
+/* General linked-input preparation for TRIANGLES, TRIANGLE_STRIP and
+ * TRIANGLE_FAN. Output is always a triangle list with the same first/last
+ * provoking convention, winding and degenerate primitives. This is index
+ * assembly only; attributes remain byte-exact before GPU vertex processing.
+ * The original triangle-only constructor above is unchanged. Restart and
+ * instancing stay unsupported; the expanded list is bounded to65535 indices.
+ */
+struct remesa_linked_topology {uint32_t input_count,index_count;};
+int remesa_linked_topology_prepare(unsigned mode,uint32_t count,
+ struct remesa_linked_topology *);
+int remesa_linked_vertex_inputs_create_topology(const struct pipe_draw_info *,
+ const struct pipe_draw_start_count_bias *,const struct remesa_linked_attribute[3],
+ const void *indices,size_t index_bytes,bool first_provoking,
+ struct remesa_linked_vertex_inputs **);
 int remesa_linked_vertex_inputs_inspect(const struct remesa_linked_vertex_inputs *,
  struct remesa_linked_vertex_inputs_view *);
 void remesa_linked_vertex_inputs_destroy(struct remesa_linked_vertex_inputs *);

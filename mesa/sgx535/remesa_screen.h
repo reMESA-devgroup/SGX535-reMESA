@@ -75,6 +75,10 @@ struct remesa_linked_vertex_inputs;
  * reads; deduplicate aliased VB/IB resources and release all acquired maps.
  * No CPU shader/transform, upload or GPU admission. The owned result remains
  * independent of later source changes and can feed the linked GEM owner.
+ * Triangle strips/fans are assembled to lists with winding and the bound
+ * rasterizer's first/last provoking convention preserved; those two modes
+ * require a valid bound rasterizer before mapping any resource. Triangle-list
+ * snapshot admission and ordinary draw/capability gates remain unchanged.
  * Empty/disjoint output required. The caller serializes source/binding access. */
 int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,

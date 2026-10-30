@@ -22,7 +22,10 @@ static void seed(void)
 }
 static void words(unsigned char *dst,unsigned width,const uint32_t *values,unsigned count)
 {for(unsigned i=0;i<count;i++)memcpy(dst+i*width,&values[i],width);}
-int main(void)
+#ifndef REMESA_LINKED_INPUT_TEST_MAIN
+#define REMESA_LINKED_INPUT_TEST_MAIN main
+#endif
+int REMESA_LINKED_INPUT_TEST_MAIN(void)
 {
  CHECK(!input_persistent_regression());CHECK(!input_linkage_regression());
  seed();const uint32_t raw[7]={99,6,2,6,3,6,2};

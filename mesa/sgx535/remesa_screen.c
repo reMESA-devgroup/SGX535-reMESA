@@ -1095,7 +1095,8 @@ static void *create_raster(struct pipe_context *p,const struct pipe_rasterizer_s
  if(out){out->recording_edge_proof=recording_window;
   out->full_clip=state->depth_clip_near&&state->depth_clip_far;
   out->depth_clip_near=state->depth_clip_near;out->depth_clip_far=state->depth_clip_far;
-  out->cull_face=state->cull_face;out->front_ccw=state->front_ccw;}
+  out->cull_face=state->cull_face;out->front_ccw=state->front_ccw;
+  out->flat_first=state->flatshade_first;}
  return out; }
 static void bind_raster(struct pipe_context *p,void *state){bind_fixed(p,state,FIXED_RASTER);}
 static void delete_raster(struct pipe_context *p,void *state){delete_fixed(p,state,FIXED_RASTER);}
@@ -1445,11 +1446,15 @@ int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *p,
     link.vertex_layout.stride_dwords!=12)return ENOTSUP;
  struct elements *el=ctx->bound_elements;
  if(!el||el->deleted||ctx->invalid_elements||el->count!=3)return ENOTSUP;
- const uint32_t count=draw_info->count-draw_info->count%3;
- if(info->mode!=MESA_PRIM_TRIANGLES||info->start_instance||info->instance_count>1||
+ if(info->start_instance||info->instance_count>1||
     (info->index_size&&info->primitive_restart))return ENOTSUP;
- if(!count||!info->instance_count)return ENODATA;
- if(count>65535)return E2BIG;
+ if(info->mode!=MESA_PRIM_TRIANGLES&&info->mode!=MESA_PRIM_TRIANGLE_STRIP&&info->mode!=MESA_PRIM_TRIANGLE_FAN)return ENOTSUP;
+ if(!info->instance_count)return ENODATA;
+ struct remesa_linked_topology topology;
+ error=remesa_linked_topology_prepare(info->mode,draw_info->count,&topology);if(error)return error;
+ const uint32_t count=topology.input_count;
+ struct fixed *raster=ctx->bound_fixed[FIXED_RASTER];
+ if(info->mode!=MESA_PRIM_TRIANGLES&&(!raster||raster->deleted||ctx->invalid_fixed[FIXED_RASTER]))return ENODATA;
  if(info->index_size&&info->index_size!=1&&info->index_size!=2&&info->index_size!=4)return EINVAL;
  size_t user_index_bytes=0;
  if(info->index_size&&info->has_user_indices){
@@ -1506,7 +1511,8 @@ int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *p,
    indices=info->index.user;index_bytes=user_index_bytes;
   }else{indices=bytes[index_slot];index_bytes=resources[index_slot]->bytes;}
  }
- error=remesa_linked_vertex_inputs_create(info,draw_info,attributes,indices,index_bytes,out);
+ error=remesa_linked_vertex_inputs_create_topology(info,draw_info,attributes,indices,index_bytes,
+                                                 raster&&raster->flat_first,out);
 done:
  for(unsigned j=resource_count;j>0;j--)if(mapped[j-1])
   s(p->screen)->device.ops->unmap(s(p->screen)->device.priv,resources[j-1]->bo,false);

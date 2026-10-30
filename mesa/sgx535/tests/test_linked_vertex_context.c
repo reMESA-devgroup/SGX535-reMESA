@@ -64,15 +64,15 @@ int main(void)
   uint32_t values[3][3][4];
   for(unsigned a=0;a<3;a++)for(unsigned v=0;v<3;v++)for(unsigned k=0;k<4;k++)values[a][v][k]=0x3f000000+a*113+v*13+k;
   values[0][1][0]=0x80000000;values[0][1][1]=0x7fc01234;
-  unsigned char interleaved[160]={0};uint16_t indices[4]={65535,2,0,1};memcpy(interleaved,indices,sizeof(indices));
+  unsigned char interleaved[160]={0};uint16_t indices[7]={65535,2,0,1,2,0,2};memcpy(interleaved,indices,sizeof(indices));
   for(unsigned v=0;v<3;v++)for(unsigned a=0;a<3;a++)memcpy(interleaved+16+v*48+a*16,values[a][v],16);
   struct pipe_resource *pv=buffer(s,sizeof(interleaved),PIPE_BIND_VERTEX_BUFFER|PIPE_BIND_INDEX_BUFFER);assert(pv);
   struct bo *pv_bo=last_allocation;ctx->buffer_subdata(ctx,pv,0,0,sizeof(interleaved),interleaved);
   struct pipe_resource *nv=pv,*lv=pv,*ib=pv;
   if(layout==1){
-   nv=buffer(s,48,PIPE_BIND_VERTEX_BUFFER);lv=buffer(s,16,PIPE_BIND_VERTEX_BUFFER);ib=buffer(s,8,PIPE_BIND_INDEX_BUFFER);
+   nv=buffer(s,48,PIPE_BIND_VERTEX_BUFFER);lv=buffer(s,16,PIPE_BIND_VERTEX_BUFFER);ib=buffer(s,sizeof(indices),PIPE_BIND_INDEX_BUFFER);
    assert(nv&&lv&&ib);ctx->buffer_subdata(ctx,nv,0,0,48,values[1]);ctx->buffer_subdata(ctx,lv,0,0,16,values[2]);
-   ctx->buffer_subdata(ctx,ib,0,0,8,indices);
+   ctx->buffer_subdata(ctx,ib,0,0,sizeof(indices),indices);
   }
   struct pipe_vertex_buffer vb[3]={{.buffer.resource=pv,.buffer_offset=16},
    {.buffer.resource=nv},{.buffer.resource=lv}};
@@ -125,6 +125,27 @@ int main(void)
   pending->retired=true;pv_bo->published=true;
   assert(!remesa_context_linked_vertex_inputs_snapshot(ctx,&info,&draw,&owned));check_inputs(owned,values,layout==1);
   remesa_linked_vertex_inputs_destroy(owned);owned=NULL;s->fence_reference(s,&writer,NULL);
+  info.mode=MESA_PRIM_TRIANGLE_STRIP;draw.count=5;maps=rec.maps;
+  assert(remesa_context_linked_vertex_inputs_snapshot(ctx,&info,&draw,&owned)==ENODATA&&!owned&&rec.maps==maps);
+  const uint16_t expected[2][2][9]={
+   {{2,0,1,1,0,2,1,2,0},{2,0,1,0,2,1,1,2,0}},
+   {{2,0,1,2,1,2,2,2,0},{0,1,2,1,2,2,2,0,2}}};
+  for(unsigned first=0;first<2;first++){
+   struct pipe_rasterizer_state rs={.flatshade_first=first};
+   void *raster=ctx->create_rasterizer_state(ctx,&rs);assert(raster);ctx->bind_rasterizer_state(ctx,raster);
+   for(unsigned mode=0;mode<2;mode++){
+    info.mode=mode?MESA_PRIM_TRIANGLE_FAN:MESA_PRIM_TRIANGLE_STRIP;maps=rec.maps;
+    assert(!remesa_context_linked_vertex_inputs_snapshot(ctx,&info,&draw,&owned));
+    assert(rec.maps-maps==(layout==1?4:1)&&rec.maps==rec.unmaps);
+    struct remesa_linked_vertex_inputs_view v;assert(!remesa_linked_vertex_inputs_inspect(owned,&v));
+    assert(v.index_count==9&&v.vertex_count==3&&!memcmp(v.indices,expected[mode][first],18));
+    for(unsigned i=0;i<3;i++)for(unsigned a=0;a<3;a++)
+     assert(!memcmp((const unsigned char *)v.vertices+i*48+a*16,values[a][layout==1&&a==2?0:i],16));
+    remesa_linked_vertex_inputs_destroy(owned);owned=NULL;
+   }
+   ctx->bind_rasterizer_state(ctx,NULL);ctx->delete_rasterizer_state(ctx,raster);
+  }
+  info.mode=MESA_PRIM_TRIANGLES;draw.count=4;
   ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);assert(remesa_context_error(ctx)&&!rec.draws&&!rec.shader_prepares);
   ctx->delete_vertex_elements_state(ctx,el);
   assert(remesa_context_linked_vertex_inputs_snapshot(ctx,&info,&draw,&owned)==ENOTSUP&&!owned);
@@ -132,5 +153,5 @@ int main(void)
   resource_drop(pv);if(layout==1){resource_drop(nv);resource_drop(lv);resource_drop(ib);}
  }
  s->destroy(s);assert(rec.allocs==rec.frees&&rec.maps==rec.unmaps&&!rec.draws&&!rec.shader_prepares&&!rec.shader_submits);
- glsl_type_singleton_decref();puts("PASS actual Gallium/NIR linked attributes: three sources/interleaved/broadcast/VB-IB aliases, deduplicated maps, source independence, map rollback/busy/alias rejection, writer timeout then simulated retirement, ref cleanup and unchanged draw gate; GPU0/API0");return 0;
+ glsl_type_singleton_decref();puts("PASS actual Gallium/NIR linked attributes: lists/strips/fans, bound first/last provoking, shared/interleaved/broadcast/VB-IB aliases, deduplicated maps, rollback/busy/alias/writer gates, ref cleanup and unchanged draw admission; GPU0/API0");return 0;
 }
