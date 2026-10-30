@@ -65,6 +65,63 @@ parsing and local mapping checks cannot authorize unsupported GPU code.
 
 The pre-pinned equality contract and native receipts are in
 `/home/gama/sgx535-offline/private-c-pds-20261030/v1/EQUALITY_CONTRACT.json` and
-`NATIVE_RECEIPT_REVIEW.json`. Physical execution of this C collector is pending.
+`NATIVE_RECEIPT_REVIEW.json`.
 This component does not enable general Gallium draw dispatch, remove the kernel
 LAB job bound/cold initialization or complete GL/GLES, desktop 2D or installation.
+
+## Physical C qualification (2026-10-30)
+
+Userspace source `5e85c74` ran on the Mini 12 in boot
+`30d1dc2f-5b03-484f-9621-3aaa23c5a548`, with the unchanged kernel module from
+`71e2dda` (SHA-256
+`9c7a3a683af43cd2936086f0d1eb3152f6b132dea0a7f9bc6d590ab68d3be85a`).
+The static i486 executable and all payload files were hash-pinned before use.
+One OPEN, three numbered SUBMITs and one CLOSE completed successfully.
+
+| Job | Native pose | Operation/cookie | SUBMIT wall ms | PDS upload ms | LAB readback ms |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1 | 2/2 | 292.560 | No update | 179.574 |
+| 2 | 2 | 3/3 | 365.655 | 1.542 | 188.357 |
+| 3 | 1 | 4/4 | 322.528 | 1.343 | 259.109 |
+
+Each SUBMIT reported actual core `01130000`, revision `00010201`, phase9,
+ledger7, stages15, ACTIVE and error0. Admission-only operation1 was canceled;
+OPEN/CLOSE are not GPU submissions. The same eleven BOs and source lease stayed
+alive across all jobs. Only two PDS pages (8 KiB) were uploaded per pose change;
+the other four inputs were not reuploaded. Preparation/upload took 346.652 ms
+and OPEN 17.543 ms. These wall times are not GPU-only timings or sustained FPS;
+the cold LAB initialization and diagnostic capture remain in this test.
+
+`VERIFY_PHYSICAL.py` independently checks raw envelopes, distinct operation IDs,
+all thirteen mappings, idle provider counts, all five input images and both A5
+guards. It compares each output against its pre-pinned native pose: every one
+of 4,096,000 COLOR bytes and 1,024,000 defined Z24 values matches exactly. The
+two native COLOR poses differ at 179,447 pixels; the third job returns exactly
+to the first pose. Existing undefined X8 differs at 200,000 pixels in each
+raw depth plane and remains excluded as before. There is no new tolerance or
+edge mask. Native historical conformance limits are not promoted to general GL
+approval. Final status:
+`PHYSICAL_C_SESSION_TYPED_PDS_THREE_JOB_NATIVE_REGRESSION_PASS`.
+
+CLOSE returned state3/stages32, all objects and the memory context were released,
+and an independent final observation found no matching collector process,
+module live, all six controls N, original GRUB custom file and stock saved
+default with empty `next_entry`. The exact-case kernel fault marker scan was
+empty, and all 31 protected files remain unchanged. This boot's source/session
+allowance is consumed: no source rearm, repeated probe, forced unload, reset or
+suspend was attempted.
+
+The first 25.6 MB streaming retrieval timed out; GPU jobs were not repeated.
+Process observation found no remaining earlier Python retrieval. An overly broad
+archive-preparation process filter initially matched its own parent `sudo` and
+refused before creating an archive; the preserved observation identified that
+parent, and the filter was narrowed to actual Python processes. One immutable
+archive was then downloaded in thirteen bounded chunks. Its full SHA-256
+`bb677f40f97c9868b91e4d42b1e0a5211cede6436b41ffee29159552647a930c`
+matches the Mini 12 archive (25,610,240 bytes); raw remote evidence is retained.
+
+Evidence root: `/home/gama/sgx535-offline/private-c-pds-20261030/v1/`, particularly
+`PHYSICAL_COMPARISON.json`, `physical/capture/`, `FINAL_REMOTE_STATE.json`,
+`SOURCE_BINDING.json`, `EQUALITY_CONTRACT.json`, `DOWNLOAD_RESULT.json`,
+`CURRENT_STATE.json` and `EVIDENCE_HASHES.json`. LAB evidence costs stay separate
+from the reusable upload/submission API and from production FAST.

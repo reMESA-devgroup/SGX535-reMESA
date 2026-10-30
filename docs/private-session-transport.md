@@ -47,9 +47,11 @@ the existing retained transport pass their unchanged regression tests.
 The C client also replays all four real OPEN/SUBMIT/SUBMIT/CLOSE request and
 response envelopes from boot `d9f98d2f-c63a-4e9a-910a-a3785c7da95a` byte for byte.
 Memory metadata is modeled in this replay; it is not another hardware run.
-The actual two-job physical qualification and pixel comparisons remain recorded
-separately in `private-session-lab.md`. This C implementation has not yet been
-executed on the Mini 12. It must not inherit physical approval from replay.
+The original two-job physical qualification and pixel comparisons remain
+recorded separately in `private-session-lab.md`. The subsequent
+[C page-upload qualification](private-page-upload.md) executes this transport
+on the Mini 12 with three jobs and two changing PDS poses. Its physical approval
+comes from that run and independent output comparison, not from wire replay.
 
 `LOADER_REVIEW.json` confirms that the pinned Mesa overlay stages the exact new
 UAPI header and that its copied C provider passes syntax compilation. No live
