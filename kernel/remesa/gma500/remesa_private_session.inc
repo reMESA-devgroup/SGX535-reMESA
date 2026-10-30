@@ -35,7 +35,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
  mutex_lock(&s->lock);
  if(s->private_device_lost||!s->file){error=-ENODEV;goto unlock;}
  if(s->private_session!=owner)goto unlock;
- if(s->stream_bound||s->executor){error=-EBUSY;goto unlock;}
+ if(s->stream_bound||s->executor||s->private_source_held||s->private_source_poisoned){error=-EBUSY;goto unlock;}
  for(i=0;i<8;i++)if(s->jobs[i].live){error=-EBUSY;goto unlock;}
  for(i=0;i<OBJECTS;i++)if(s->bo[i].lease||s->bo[i].holds||s->bo[i].quarantine||
                          atomic_read(&s->bo[i].color_vmas)){

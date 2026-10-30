@@ -18,4 +18,23 @@ struct remesa_gem_memory;
 int remesa_private_session_acquire(struct drm_device *,struct drm_file *,u64,
  const void *owner,struct remesa_gem_memory **);
 int remesa_private_session_release(struct remesa_gem_memory *,const void *owner);
+/* Same backing lease, one monotonic source lease across distinct jobs. Caller
+ * holds the outer DRM entry and keeps the token stable. No source rearm. */
+int remesa_private_session_source_begin(struct remesa_gem_memory *,const void *);
+int remesa_private_session_source_end(struct remesa_gem_memory *,const void *);
+struct remesa_gem_private;
+struct sgx535_gma500_owner;
+struct sgx535_gma500_fixed_backend;
+struct remesa_stream_observation;
+struct remesa_memory_view;
+/* Trusted kernel-only execution. Caller authenticates complete final inputs,
+ * commands and permissions, prepares the loan/borrowed scene, and supplies a
+ * fresh observation. Arguments survive any failure. This wraps the qualified
+ * cold executor, keeping source ownership between successful jobs. No hashes,
+ * readback or new user admission; not the cache-reuse/FAST implementation.
+ * Any executor error poisons this session, with no retry or release. */
+int remesa_private_session_execute(struct remesa_gem_memory *,const void *,
+ struct remesa_gem_private *,struct sgx535_gma500_owner *,
+ struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,
+ const struct remesa_memory_view *,unsigned,unsigned,unsigned);
 #endif

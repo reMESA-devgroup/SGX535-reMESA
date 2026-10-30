@@ -420,6 +420,7 @@ def private_file_lost_sources(memory):
         ' int (*pds_write_guard)(u64,const void *,unsigned);\n',
         ' int (*pds_write_guard)(u64,const void *,unsigned);\n'
         ' const void *private_session; /* backing lease, not source authority */\n'
+        ' bool private_source_held, private_source_poisoned;\n'
         ' bool private_device_lost; /* monotonic; do not reclaim after unplug */\n')
     memory = replace_once(memory,
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n',
@@ -434,7 +435,7 @@ def private_file_lost_sources(memory):
     memory = replace_once(memory,
         ' if(!b || !color_readable(s,b)){e=-EBUSY;goto unlock;}\n',
         ' if(s->private_session || !b || !color_readable(s,b)){e=-EBUSY;goto unlock;}\n')
-    return memory + '\n#include "remesa_private_memory_file_lost.inc"\n#include "remesa_private_session.inc"\n'
+    return memory + '\n#include "remesa_private_memory_file_lost.inc"\n#include "remesa_private_session.inc"\n#include "remesa_private_session_source.inc"\n'
 
 
 def private_gem_lifetime_sources(native):
@@ -743,6 +744,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_pci_suspend.inc',
                      'remesa_private_file_lost.h', 'remesa_private_memory_file_lost.inc',
                      'remesa_private_session.h', 'remesa_private_session.inc',
+                     'remesa_private_session_source.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()

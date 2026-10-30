@@ -8,7 +8,7 @@ from test_private_source_mmio import extract
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  p.add_argument('--module',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
- p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path)
+ p.add_argument('--source-session',action='store_true');p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path)
  a=p.parse_args();w=Path(__file__).resolve().parents[2];m=a.module.resolve();o=a.output.resolve();o.mkdir(parents=True,exist_ok=False)
  source=(m/'remesa_gem_memory.c').read_text()
  (o/'memory_close_actual.inc').write_text(extract(source,'remesa_gem_memory_close'))
@@ -24,7 +24,7 @@ def main():
  rows=[]
  def limit(n):
   resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,(n,n))
- test=w/'kernel/remesa/gma500/tests/test_private_session.c'
+ test=w/'kernel/remesa/gma500/tests'/('test_private_session_source.c' if a.source_session else 'test_private_session.c')
  for name,cc,flags,runner in variants:
   exe=o/name
   command=[cc,'-std=c11','-Wall','-Wextra','-Werror',*flags,'-I'+str(o),'-I'+str(m),str(test),'-o',str(exe)]
@@ -33,6 +33,7 @@ def main():
    rows.append(dict(label=label,argv=argv,exit=r.returncode));(o/'COMMANDS.json').write_text(json.dumps(rows,indent=2)+'\n')
    if r.returncode or r.stderr:raise RuntimeError(label+': '+r.stderr)
  files=[Path(__file__).resolve(),test,m/'remesa_gem_memory.c',m/'remesa_private_session.inc',m/'remesa_private_session.h',m/'remesa_private_memory_file_lost.inc',o/'session_gate_actual.inc',o/'memory_close_actual.inc']
- result=dict(status='PRIVATE_BACKING_SESSION_METADATA_PASS',GPU_operations=0,scope='actual metadata/loss/close/admission code; jobs, kernel primitives and CPU leases modeled; no execution/source lease or retirement qualification',sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},commands=rows)
+ files += [w/'kernel/remesa/gma500/tests/test_private_session.c',m/'remesa_private_session_source.inc']
+ result=dict(status='PRIVATE_SOURCE_SESSION_ORCHESTRATION_PASS' if a.source_session else 'PRIVATE_BACKING_SESSION_METADATA_PASS',GPU_operations=0,scope='actual session/metadata/loss/close/admission code; jobs, kernel primitives, CPU leases, source callbacks and cold executor modeled; no GPU or retirement qualification',sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},commands=rows)
  (o/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'status':result['status'],'variants':len(variants)}))
 if __name__=='__main__':main()

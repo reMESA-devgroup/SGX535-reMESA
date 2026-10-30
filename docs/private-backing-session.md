@@ -59,7 +59,8 @@ serialized MMIO and the existing entry/file/device/GEM/fbdev/lid lifetime guards
 header difference: documentation of caller entry-guard/pointer-lifetime duties.
 
 This is the backing-lifetime component of a reusable private renderer. Remaining
-integration includes persistent source ownership with fresh observations and
-operation receipts, authenticated input updates, safe cache ownership/reuse and
-normal userspace submission. The one-shot LAB gate remains unchanged; clearing
+integration includes authenticated input updates, safe cache ownership/reuse and
+normal userspace submission. The subsequent [source-session integration](private-source-session.md)
+now retains one source lease across distinct cold jobs at a kernel-only boundary;
+its CPU tests and build do not qualify physical continuous rendering. The one-shot LAB gate remains unchanged; clearing
 its consumed flag or the source's ever-claimed flag is not a reusable renderer.

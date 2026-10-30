@@ -37,6 +37,7 @@ struct resource {unsigned unused;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct mutex lock;
  const void *private_session;bool stream_bound,private_device_lost,excluded;
+ bool private_source_held,private_source_poisoned;
  void *executor;struct backing bo[OBJECTS];struct retained_job jobs[8];struct resource exclude;
 };
 struct remesa_memory_request {unsigned action;};
