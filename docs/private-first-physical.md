@@ -81,3 +81,46 @@ that does not authorize another operation or prove a fresh private source lease.
 Do not retry the probe on this boot. This result does not upgrade the original
 LAB capsule contract or demonstrate all negative MMU permissions, complete
 driver safety, S3, surprise removal, general rendering or performance targets.
+
+## Subsequent frozen-pose analytical check
+
+The existing pose1 reference is not applicable: all twelve encoded MVP matrices
+differ from the frozen inputs of this probe. A new diagnostic projection was
+generated with the unchanged archived analytical projector and the exact
+pre-existing role0/role2 assets. All twelve draw descriptors were checked against
+the profile, and actual indices were confirmed to be the expanded sequential
+triangle lists assumed by that projector. Neither physical COLOR nor Z was
+provided to the reference generator.
+
+Evidence is under the physical evidence root's `oracle-bound/`:
+`INPUT_BINDING.json`, `REFERENCE_SOURCE_PROVENANCE.json`,
+`GENERATOR_RESULT.json`, `ANALYTICAL_COMPARISON.json` and
+`OLD_MASK_REPRODUCTION_CHECK.json`. The original CPU-only transition-mask program
+was also executed separately on this reference and reproduced the selected mask
+byte-for-byte. The three temporary pose slots in that reproduction all contain
+the same current reference; they are not three hardware tests or poses.
+
+| Fixed reference scope | Compared pixels | Wrong visible gear class | Z error over 1e-4 |
+| --- | ---: | ---: | ---: |
+| Original triangle-edge distance >1.5 pixels | 330,998 | 3 | 5 |
+| Existing CPU-only 2-pixel winner-transition exclusion | 275,276 | 0 | 0 |
+
+The latter scope also has no missing COLOR or non-255 foreground alpha. Maximum
+absolute normalized Z error there is `6.195538005959733e-6`. CPU coverage is
+418,383 pixels versus GPU coverage 418,394, with 45 differing coverage pixels;
+all lie within the fixed two-pixel CPU boundary band. The original five depth
+and three class discrepancies remain recorded. Their exact cause is not proved;
+they must not disappear into a blanket full-image pass.
+
+Criteria were fixed before comparison and reused from the existing diagnostic:
+no mask or tolerance was fitted to this GPU output. Zero-COLOR and clear-Z24
+negative controls fail all 275,276 corresponding interior checks. Physical raw
+files and earlier expected images were not changed. No new GPU operation or
+driver modification was made for this analysis.
+
+This supports only a bound analytical nearest-surface/depth/gear-class
+diagnostic. Simplified reference colors do not test full shader lighting,
+interpolation, channel rounding or exact boundary coverage. Full pixel-oracle
+approval and general GL conformance remain false. The next integration task is
+reusable private render/resource ownership, keeping the one-shot probe gate
+intact; the consumed boot must not be rearmed to simulate a continuous path.
