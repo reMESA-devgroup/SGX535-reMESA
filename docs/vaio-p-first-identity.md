@@ -39,3 +39,25 @@ model have not been collected yet. Q4OS is not treated as requiring the antiX
 kernel. Work on other native kernel backends and the shared userspace wire
 contract is tracked in [kernel portability](kernel-portability.md); those ports
 are not yet qualified for installation.
+
+## Required drawable size
+
+The requested Vaio P drawable is **1600x768**. Keep it in the validation matrix
+alongside 1280x800 and 640x640, with 641x479 for padding/rounding coverage.
+`mesa/sgx535/tests/test_drawable_resolutions.c` checks the existing storage,
+COLOR/Z descriptors, scene layout and background-geometry encoders at all four
+sizes. Its expected Vaio words are arithmetic contract checks, not new captures
+from the original proprietary producer or physical GPU evidence.
+
+For linear BGRA8/Z24X8 at 1600x768, pitch is 1600 pixels (6400 bytes), and each
+plane is 4,915,200 bytes / 1200 pages. Independent front, back and Z planes total
+14,745,600 bytes. Scene storage requires 125,728 bytes, rounded to 31 pages.
+CPU-native, UBSan and emulated i486 results are preserved under
+`/home/gama/sgx535-offline/vaio-resolution-20261030/v1/`.
+
+This does not enable physical 1600x768 rendering. The current retained gear
+runtime, viewport/clear validation, kernel fixed-profile dimensions and legacy
+COLOR mmap still contain 1280x800 contracts. They must be replaced by a bounded
+variable-size rendering path and separately qualified. Do not relax the old
+profile's dimensions to claim support, and do not install the Mini 12's kernel
+module on an unidentified Q4OS kernel.
