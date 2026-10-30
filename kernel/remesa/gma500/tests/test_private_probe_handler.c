@@ -13,7 +13,7 @@ static const struct remesa_stream_profile private_probe_profile;
 enum faults {OK,CAP,DISABLED,MEMDISABLED,CONTEXT,CORE,POWER,VA,SIZE,LIVE,STREAM,
  EXECUTOR,TA,CEILING,ALLOC,PREPARE,SNAPSHOT,VMALLOC,MASK,HASH,GEOMETRY,BORROW,
  VERIFY,RESERVE,LOAN,LOAN_RETAINED,CLAIM,EARLY_EXEC,EXEC,NO_RECEIPT,
- BORROW_CLOSE,SETTLE,SOURCE_CLOSE,LOAN_CLOSE,GUARD_CLOSE,JOB_CLOSE,FAULT_COUNT};
+ BORROW_CLOSE,SETTLE,SOURCE_CLOSE,LOAN_CLOSE,GUARD_CLOSE,JOB_CLOSE,PRIVATE_SESSION,FAULT_COUNT};
 static unsigned checks,fault,reads,allocations,frees,prepares,cancels,retirements;
 static unsigned snapshots,hashes,masks,geometries,borrow_opens,borrow_closes;
 static unsigned reservations,guard_closes,loan_opens,loan_closes,claims,source_closes,settles,executions;
@@ -201,10 +201,14 @@ int main(int argc,char **argv)
  if(fault==EXECUTOR)memory.executor=(void*)1;
  if(fault==TA)memory.ta_cache_domains=true;
  if(fault==CEILING)memory.root.end--;
+ if(fault==PRIVATE_SESSION)memory.private_session=&other;
+ struct remesa_private_probe_request initial=req;
  int code=remesa_private_probe_ioctl(&dev,&req,&file);
  CHECK(!endpoint_lock.held&&!memory.lock.held);
- if(fault==CAP||fault==DISABLED||fault==MEMDISABLED||fault==CONTEXT||fault==POWER){
+ if(fault==CAP||fault==DISABLED||fault==MEMDISABLED||fault==CONTEXT||fault==POWER||fault==PRIVATE_SESSION){
   CHECK(code<0&&!reads&&!allocations&&!executions&&!private_probe_retained);
+  if(fault==PRIVATE_SESSION)CHECK(code==-EBUSY&&!prepares&&!hashes&&!masks&&!claims&&
+    !memcmp(&req,&initial,sizeof(req))&&!private_probe_consumed);
  }else if(fault>=CORE&&fault<=CEILING){
   CHECK(!code&&req.error<0&&!req.retained&&!allocations&&!executions&&reads==2);
  }else if(fault==ALLOC){CHECK(!code&&req.error==-ENOMEM&&!req.retained&&!prepares);}

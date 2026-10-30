@@ -85,6 +85,9 @@ int remesa_private_probe_ioctl(struct drm_device *dev,void *data,struct drm_file
  if(!remesa_private_probe_request_valid(r))return -EINVAL;
  mutex_lock(&endpoint_lock);s=endpoint;
  if(!s||s->dev!=dev||s->file!=file||s->context!=r->context){error=-EACCES;goto done;}
+ /* endpoint_lock serializes this lease with claim/release. Refuse mixed
+  * admission before register reads, image initialization or job preparation. */
+ if(s->private_session){error=-EBUSY;goto done;}
  if(private_probe_retained||private_probe_consumed){error=-EBUSY;goto done;}
  dev_priv=dev->dev_private;
  if(!dev_priv||!dev_priv->sgx_reg||!gma_power_is_on(dev)){error=-ENODEV;goto done;}

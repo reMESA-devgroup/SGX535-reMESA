@@ -431,6 +431,8 @@ def private_file_lost_sources(memory):
         ' if(s->stream_bound || s->private_session) {\n')
     memory = replace_once(memory, ' if(s->stream_bound || s->executor){e=-EBUSY;goto unlock;}\n',
         ' if(s->stream_bound || s->private_session || s->executor){e=-EBUSY;goto unlock;}\n')
+    memory = replace_once(memory, ' if(endpoint->stream_bound){e=-EBUSY;goto done;}\n',
+        ' if(endpoint->stream_bound || endpoint->private_session){e=-EBUSY;goto done;}\n')
     # The legacy fixed-size COLOR mapping has no session-wide CPU/GPU lease.
     memory = replace_once(memory,
         ' if(!b || !color_readable(s,b)){e=-EBUSY;goto unlock;}\n',

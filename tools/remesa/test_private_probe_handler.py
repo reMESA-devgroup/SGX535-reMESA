@@ -48,7 +48,7 @@ struct backing {bool live;u32 generation;struct resource va;struct drm_gem_objec
 struct retained_job {bool live;u64 cookie;struct remesa_memory_ticket ticket;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct resource root;
- struct mutex lock;void *executor;bool stream_bound,ta_cache_domains;
+ struct mutex lock;void *executor;const void *private_session;bool stream_bound,ta_cache_domains;
  struct retained_job jobs[8];struct backing bo[32];struct page page;
 };
 """
@@ -73,14 +73,14 @@ flags=['-fsanitize=undefined','-fno-sanitize-recover=all'] if a.ubsan else []
 run('build',[a.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',
      '-DREMESA_LAB_DEPTH1280_PROFILE=1','-I'+str(r),'-I'+str(m),'-I'+str(w/'include'),
      str(source),*flags,'-o',str(exe)],768*1024**2)
-for case in range(36):
+for case in range(37):
     result=run('case-'+str(case),[*a.runner,str(exe),str(case)],
                6*1024**3 if a.runner else 768*1024**2)
     if not result.stdout.startswith('PASS '):raise RuntimeError('missing test result')
 inputs=[source,w/'kernel/remesa/gma500/remesa_private_probe.inc',
         m/'gma500_bo_owner.h',m/'gma500_fixed_backend.h',m/'stream_profile_asset.h',
         r/'probe_handler_types.h']
-report=dict(status='ACTUAL_PROBE_CONTROLLER_MODEL_PASS',GPU_operations=0,cases=36,
+report=dict(status='ACTUAL_PROBE_CONTROLLER_MODEL_PASS',GPU_operations=0,cases=37,
             dependencies='GEM/crypto/grammar/borrower/source/private execution modeled',
             sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in inputs})
 (r/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')

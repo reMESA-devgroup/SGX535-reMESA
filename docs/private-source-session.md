@@ -65,3 +65,8 @@ runtime integration must expose a bounded, authenticated render submission path
 and validate multiple real operations with fresh receipts, correct readback,
 unchanged guards, idle closure and recovery. Variable-sized drawables, general
 GL/GLES and desktop 2D still need their own integration and physical validation.
+
+The subsequent [admission correction](private-session-admission.md) rejects
+legacy retained/probe calls while this backing lease is held, before those
+interfaces can initialize or mutate the endpoint. This is separate from the
+still-pending authenticated userspace session interface.
