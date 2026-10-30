@@ -10,7 +10,7 @@ _Static_assert(sizeof(struct remesa_memory_request)==4152,"fixed native/i386 mem
 struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poison;};
 struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];
  uint64_t private_session,private_sequence,private_operation;
- uint32_t private_maximum;bool private_attempted,private_active,private_poison;};
+ uint32_t private_maximum,private_pds_id;bool private_attempted,private_active,private_poison;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -219,7 +219,7 @@ static int private_lab_exchange(struct remesa_linux_memory *d,
  if(r->action==REMESA_PRIVATE_SESSION_LAB_OPEN){
   if(!r->session || r->stages!=REMESA_PRIVATE_SESSION_LAB_OPENED ||
      r->operation || r->cookie || r->phase || r->ledger)return private_lab_uncertain(d);
-  d->private_session=r->session;d->private_maximum=r->max_jobs;d->private_active=true;
+  d->private_session=r->session;d->private_maximum=r->max_jobs;d->private_pds_id=r->ids[0];d->private_active=true;
  }else{
   if(r->stages!=15 || r->phase!=9 || r->ledger!=7 || !r->operation ||
      r->operation!=r->cookie || r->operation<=d->private_operation)return private_lab_uncertain(d);
@@ -281,6 +281,29 @@ int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *d,
  r.version=REMESA_PRIVATE_SESSION_LAB_VERSION;r.action=REMESA_PRIVATE_SESSION_LAB_CLOSE;
  r.context=d->context;r.session=d->private_session;r.sequence=d->private_sequence;
  return private_lab_exchange(d,&r,out);
+}
+
+int remesa_linux_memory_upload_pages(struct remesa_linux_memory *d,uint32_t id,
+ uint64_t offset,const void *data,size_t bytes)
+{
+ struct held *b;struct remesa_memory_request r={0};int e;
+ if(!d || !data || !bytes || offset%4096 || bytes%4096)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ b=find(d,id);if(!b || offset>b->bytes || bytes>b->bytes-offset)return EINVAL;
+ if(b->poison)return EOWNERDEAD;
+ if(b->cpu)return EBUSY;
+ if(d->private_active && id!=d->private_pds_id)return EPERM;
+ if(bytes>UINTPTR_MAX-(uintptr_t)data)return EINVAL;
+ r.action=REMESA_MEM_LEASE;r.id=id;r.flags=1;e=call(d,&r);
+ if(e)return e==EOWNERDEAD?private_lab_uncertain(d):e;
+ for(size_t at=0;at<bytes;at+=REMESA_MEMORY_CHUNK){
+  memset(&r,0,sizeof(r));r.action=REMESA_MEM_WRITE;r.id=id;
+  r.offset=offset+at;r.length=REMESA_MEMORY_CHUNK;
+  memcpy(r.data,(const unsigned char *)data+at,REMESA_MEMORY_CHUNK);
+  e=call(d,&r);if(e)return private_lab_uncertain(d);
+ }
+ memset(&r,0,sizeof(r));r.action=REMESA_MEM_UNLEASE;r.id=id;e=call(d,&r);
+ return e?private_lab_uncertain(d):0;
 }
 
 _Static_assert(sizeof(struct remesa_twod_copy_request)==120,"fixed native copy ABI");

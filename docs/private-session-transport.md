@@ -67,3 +67,7 @@ qualification collector; callers still need them to qualify a physical change.
 The kernel cold LAB initialization is unchanged and is not a production FPS
 optimization. General GL/GLES scene admission, a production device broker,
 desktop 2D and installation remain separate unfinished integration work.
+
+[Direct page upload](private-page-upload.md) subsequently adds a write-only
+transfer path and a separate C LAB collector for native pose updates. Its
+qualification is recorded separately from the original transport wire replay.

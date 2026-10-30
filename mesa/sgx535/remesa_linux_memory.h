@@ -29,6 +29,18 @@ int remesa_linux_memory_info(struct remesa_linux_memory *,uint32_t,struct remesa
 int remesa_linux_memory_validate_backing(struct remesa_linux_memory *,uint32_t,
                                         uint64_t,size_t);
 uint64_t remesa_linux_memory_context(const struct remesa_linux_memory *);
+/* Upload caller-owned complete pages without reading the allocation first.
+ * No allocation, READ or SYNC; one write lease, bounded WRITE chunks, unlease.
+ * Caller owns publication: use sync_for_device when required, or the qualified
+ * private executor's existing CPU/GPU publication before SUBMIT. While a
+ * private LAB session is active only its sealed role0 PDS may be updated;
+ * the kernel still validates every written page against the typed guard.
+ * Invalid local ranges never enter ioctl. Any uncertain lease or failure after
+ * successful lease retains/poisons the endpoint; no retry or guessed unlease.
+ * External serialization and immutable source bytes throughout are required.
+ */
+int remesa_linux_memory_upload_pages(struct remesa_linux_memory *,uint32_t,
+ uint64_t offset,const void *,size_t bytes);
 /* Reuse this endpoint's exact fd/drm_file, not a second native-draw path.
  * Kernel admission/borrowed ownership and recorder remain mandatory. */
 int remesa_linux_memory_submit_retained(struct remesa_linux_memory *,
