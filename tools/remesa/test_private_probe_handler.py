@@ -17,6 +17,7 @@ p.add_argument('--module', type=Path, required=True)
 p.add_argument('--output', type=Path, required=True)
 p.add_argument('--cc', default='cc')
 p.add_argument('--ubsan', action='store_true')
+p.add_argument('--lab-controller',action='store_true')
 p.add_argument('--runner', nargs='+', default=[])
 a=p.parse_args()
 w=Path(__file__).resolve().parents[2];r=a.output.resolve();m=a.module.resolve()
@@ -49,6 +50,8 @@ struct retained_job {bool live;u64 cookie;struct remesa_memory_ticket ticket;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct resource root;
  struct mutex lock;void *executor;const void *private_session;bool stream_bound,ta_cache_domains;
+ bool private_device_lost,private_source_held,private_source_poisoned;
+ u32 private_input_ids[5];
  struct retained_job jobs[8];struct backing bo[32];struct page page;
 };
 """
@@ -68,19 +71,23 @@ def run(label,argv,ceiling):
         raise RuntimeError(label+': '+result.stderr[-4000:])
     return result
 exe=r/'test-controller'
-source=w/'kernel/remesa/gma500/tests/test_private_probe_handler.c'
+source=w/'kernel/remesa/gma500/tests'/('test_private_session_lab_handler.c' if a.lab_controller else 'test_private_probe_handler.c')
 flags=['-fsanitize=undefined','-fno-sanitize-recover=all'] if a.ubsan else []
 run('build',[a.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',
      '-DREMESA_LAB_DEPTH1280_PROFILE=1','-I'+str(r),'-I'+str(m),'-I'+str(w/'include'),
      str(source),*flags,'-o',str(exe)],768*1024**2)
-for case in range(37):
+case_count=24 if a.lab_controller else 37
+for case in range(case_count):
     result=run('case-'+str(case),[*a.runner,str(exe),str(case)],
                6*1024**3 if a.runner else 768*1024**2)
     if not result.stdout.startswith('PASS '):raise RuntimeError('missing test result')
 inputs=[source,w/'kernel/remesa/gma500/remesa_private_probe.inc',
         m/'gma500_bo_owner.h',m/'gma500_fixed_backend.h',m/'stream_profile_asset.h',
         r/'probe_handler_types.h']
-report=dict(status='ACTUAL_PROBE_CONTROLLER_MODEL_PASS',GPU_operations=0,cases=37,
+if a.lab_controller:inputs += [w/'kernel/remesa/gma500/remesa_private_session_lab.inc',
+ w/'kernel/remesa/gma500/remesa_private_session_lab_request.h',
+ w/'include/remesa/private_session_lab_uapi.h']
+report=dict(status='ACTUAL_PRIVATE_SESSION_LAB_CONTROLLER_MODEL_PASS' if a.lab_controller else 'ACTUAL_PROBE_CONTROLLER_MODEL_PASS',GPU_operations=0,cases=case_count,
             dependencies='GEM/crypto/grammar/borrower/source/private execution modeled',
             sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in inputs})
 (r/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')

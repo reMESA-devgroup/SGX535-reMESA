@@ -672,7 +672,9 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
+            '#include "remesa_private_session_lab.h"\n#include "remesa_private_session_lab_uapi.h"\n'
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_SESSION_LAB, remesa_private_session_lab_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
         result['psb_drv.c'], result['remesa_gem_memory.c'] = private_entry_sources(
@@ -682,6 +684,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             result.get('psb_irq.c',(native/'psb_irq.c').read_text()),
             (native/'psb_device.c').read_text(),result['opregion.c'])
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
+        result['remesa_gem_memory.c'] += '#include "remesa_private_session_lab.inc"\n'
         result.update(private_gem_lifetime_sources(native))
         display=(native/'gma_display.c').read_bytes()
         if hashlib.sha256(display).hexdigest()!='877140046fcea01a5e8f0face75384a3dfe2d34983539de76bcfa94ef9f5f2c4':
@@ -749,10 +752,13 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_session.h', 'remesa_private_session.inc',
                      'remesa_private_session_source.inc',
                      'remesa_private_inputs.inc',
+                     'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',
+                     'remesa_private_session_lab.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
+        components['remesa_private_session_lab_uapi.h'] = (root / 'include/remesa/private_session_lab_uapi.h').read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:
         components[name] = (root / 'mesa/sgx535' / name).read_bytes()
     for name in ['remesa_twod_lab.h', 'remesa_twod_lab.inc', 'remesa_twod_copy.h', 'remesa_twod_copy.inc']:

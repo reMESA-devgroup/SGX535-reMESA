@@ -45,7 +45,17 @@ static void vfree(void *p){free(p);}
 static unsigned msecs_to_jiffies(unsigned n){return n;}
 static struct retained_job *ticket_job(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
 {return s->jobs[0].live&&!memcmp(&s->jobs[0].ticket,&t,sizeof t)?&s->jobs[0]:NULL;}
-static void in_endpoint(void){CHECK(endpoint_lock.held&&!endpoint->lock.held);}
+static void in_endpoint(void){
+#ifndef REMESA_PRIVATE_LAB_HANDLER_TEST
+ CHECK(endpoint_lock.held);
+#endif
+ CHECK(!endpoint->lock.held);
+}
+#ifdef REMESA_PRIVATE_LAB_HANDLER_TEST
+static unsigned model_operation;
+static void model_drop_views(void)
+{for(unsigned i=0;i<11;i++){free(buffers[i]);free(pages[i]);buffers[i]=NULL;pages[i]=NULL;}}
+#endif
 int remesa_gem_job_prepare(struct remesa_gem_memory *s,const struct remesa_memory_binding *v,
  unsigned count,const void *cmd,unsigned bytes,struct remesa_memory_ticket *out)
 {
@@ -53,7 +63,13 @@ int remesa_gem_job_prepare(struct remesa_gem_memory *s,const struct remesa_memor
  CHECK(!memcmp(cmd,&private_probe_profile.commands,bytes));
  for(unsigned i=0;i<11;i++)CHECK(v[i].id==32+i&&v[i].va==s->bo[i].va.start&&v[i].bytes==s->bo[i].gem.size);
  if(fault==PREPARE)return -ENOMEM;
- s->jobs[0].ticket=(struct remesa_memory_ticket){s->context,1,0,1};s->jobs[0].live=true;
+ s->jobs[0].ticket=(struct remesa_memory_ticket){s->context,
+#ifdef REMESA_PRIVATE_LAB_HANDLER_TEST
+ ++model_operation,
+#else
+ 1,
+#endif
+ 0,1};s->jobs[0].live=true;
  *out=s->jobs[0].ticket;return 0;
 }
 int remesa_gem_job_snapshot(struct remesa_gem_memory *s,struct remesa_memory_ticket t,
@@ -65,6 +81,10 @@ int remesa_gem_job_snapshot(struct remesa_gem_memory *s,struct remesa_memory_tic
   unsigned n=s->bo[i].gem.size/4096;pages[i]=calloc(n,sizeof(*pages[i]));CHECK(pages[i]);
   for(unsigned j=0;j<n;j++)pages[i][j]=&s->page;
   buffers[i]=calloc(1,s->bo[i].gem.size);CHECK(buffers[i]);
+#ifdef REMESA_PRIVATE_LAB_HANDLER_TEST
+  if(i<5)memcpy(buffers[i],remesa_canonical_inputs[i],s->bo[i].gem.size);
+  if(i==1&&fault==HASH)((unsigned char*)buffers[i])[0]^=1;
+#endif
   v[i]=(struct remesa_memory_view){{32+i,s->bo[i].va.start,s->bo[i].gem.size},pages[i],n,buffers[i]};
  }
  *out=(struct remesa_memory_snapshot){s->dev,t,s->root.end+1,&private_probe_profile.commands,264,true,true};return 11;
@@ -147,13 +167,19 @@ int remesa_stream_source_claim(struct drm_device *d,const void *who)
 }
 int remesa_stream_source_release(const void *who)
 {
- in_endpoint();source_closes++;CHECK(source_held&&source_token==who&&endpoint->jobs[0].live);
+ in_endpoint();source_closes++;CHECK(source_held&&source_token==who);
+#ifndef REMESA_PRIVATE_LAB_HANDLER_TEST
+ CHECK(endpoint->jobs[0].live);
+#endif
  if(fault==SOURCE_CLOSE)return -EIO;
  source_held=false;source_token=NULL;return 0;
 }
 int remesa_stream_source_settled(const void *who)
 {
- in_endpoint();settles++;CHECK(source_held&&source_token==who&&endpoint->jobs[0].live);
+ in_endpoint();settles++;CHECK(source_held&&source_token==who);
+#ifndef REMESA_PRIVATE_LAB_HANDLER_TEST
+ CHECK(endpoint->jobs[0].live);
+#endif
  return fault==SETTLE?-EIO:0;
 }
 int remesa_gem_private_execute(struct remesa_gem_private *l,struct sgx535_gma500_owner *o,
@@ -164,18 +190,31 @@ int remesa_gem_private_execute(struct remesa_gem_private *l,struct sgx535_gma500
  CHECK(v[0].cpu==buffers[0]);(void)b;(void)obs;
  if(fault==EARLY_EXEC)return -EACCES;
  l->execution_attempted=true;l->execution_started=true;
- endpoint->jobs[0].cookie=1;
+ endpoint->jobs[0].cookie=l->ticket.operation;
  if(fault==EXEC)return -EIO;
- o->session.phase=SGX535_PHASE_RETIRED;o->session.observed_events=7;o->session.sequence=1;
+ o->session.phase=SGX535_PHASE_RETIRED;o->session.observed_events=7;o->session.sequence=l->ticket.operation;
  l->execution_retired=fault!=NO_RECEIPT;return 0; /* MODELED receipt only */
 }
 int remesa_gem_job_cancel(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
-{in_endpoint();cancels++;CHECK(ticket_job(s,t));s->jobs[0].live=false;return 0;}
+{in_endpoint();cancels++;CHECK(ticket_job(s,t));s->jobs[0].live=false;
+#ifdef REMESA_PRIVATE_LAB_HANDLER_TEST
+ model_drop_views();
+#endif
+ return 0;}
 int remesa_gem_job_retire(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
 {
- in_endpoint();retirements++;CHECK(ticket_job(s,t)&&!source_held);
+ in_endpoint();retirements++;CHECK(ticket_job(s,t));
+#ifndef REMESA_PRIVATE_LAB_HANDLER_TEST
+ CHECK(!source_held);
+#else
+ CHECK(source_held);
+#endif
  if(fault==JOB_CLOSE)return -EIO;
- s->jobs[0].live=false;return 0;
+ s->jobs[0].live=false;
+#ifdef REMESA_PRIVATE_LAB_HANDLER_TEST
+ model_drop_views();
+#endif
+ return 0;
 }
 #include "../remesa_private_probe.inc"
 int main(int argc,char **argv)

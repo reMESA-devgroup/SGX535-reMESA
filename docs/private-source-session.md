@@ -74,3 +74,7 @@ still-pending authenticated userspace session interface.
 The subsequent [private input sealing](private-input-seals.md) records exact
 input identities and protects typed PDS updates between jobs. Its metadata check
 does not replace initial content authentication or qualified GPU permissions.
+
+A bounded [userspace LAB controller](private-session-lab.md) now connects these
+helpers to explicit OPEN/SUBMIT/CLOSE requests. Offline results do not qualify
+its new physical multi-job behavior or make it a production render ABI.
