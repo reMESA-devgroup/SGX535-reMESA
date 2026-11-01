@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After TA reference checker. */
 #include "remesa_gem_scene_states.h"
 #include "remesa_state_upload.h"
-int remesa_gem_scene_states_check_locked(struct remesa_gem_private *loan,
- const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
- const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,
- struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *out)
+/* Keep this transactional result off the prerequisite validators' stack.
+ * The noinline boundary is intentional on the 8 KiB i486 kernel stack. */
+static __attribute__((__noinline__)) int scene_states_build_checked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_controls *controls,
+ const struct remesa_gem_scene_use *use,struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *out)
 {
  struct remesa_gem_scene_states value={0};struct retained_job *j;
  unsigned ref,p,s,e,u;int error;
  if(!ta||!out)return -EINVAL;
- error=remesa_gem_scene_ta_check_locked(loan,views,count,actions,controls,use,ta);if(error)return error;
  j=ticket_job(loan->memory,loan->ticket);
  for(ref=0;ref<ta->reference_count;ref++){
   u32 kind=ta->references[ref].kind,dwords,offset=ta->references[ref].byte_offset,n=value.count;
@@ -50,4 +50,15 @@ int remesa_gem_scene_states_check_locked(struct remesa_gem_private *loan,
  }
  if(value.count!=ta->draw_count+2)return -EPROTO;
  value.ticket=loan->ticket;*out=value;return 0;
+}
+
+int remesa_gem_scene_states_check_locked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
+ const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,
+ struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *out)
+{
+ int error;
+ if(!ta||!out)return -EINVAL;
+ error=remesa_gem_scene_ta_check_locked(loan,views,count,actions,controls,use,ta);if(error)return error;
+ return scene_states_build_checked(loan,views,count,controls,use,ta,out);
 }

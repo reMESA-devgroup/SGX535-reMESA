@@ -103,3 +103,11 @@ Actual vertex PDS/index inputs now have committed-range and index-limit
 validation, with matching frozen userspace geometry windows; see
 [native-scene-vertex-fetch.md](native-scene-vertex-fetch.md). This binds the
 selected USE window but does not certify its shader body or full scene closure.
+
+Selected fragment state references now resolve to committed primary/secondary
+PDS windows and a matching pixel-master USE8 entry; see
+[native-scene-fragment-fetch.md](native-scene-fragment-fetch.md). This validates
+the unchanged producers' selected known fields, not the shader body or full
+scene closure. Transactional builders also separate large temporary results
+from prerequisite validation to reduce nested i486 kernel stack use. General
+native execution and physical qualification remain required.
