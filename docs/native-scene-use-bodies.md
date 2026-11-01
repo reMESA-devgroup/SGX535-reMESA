@@ -55,8 +55,10 @@ LAB controller and full i486 kernel build are separate regression evidence.
 Stack-usage recompilation checks executable-section identity with the normal
 objects; it is not a complete future executor/caller/IRQ stack proof.
 
-Remaining closure includes selected ISP state, canonical unknown-DATA admission,
-background texture/pitch runtime behavior and the ordered general native service.
+The remaining integration is consumption of the existing ISP/DATA and other
+validated components by the general native service. See the
+[current integration audit](general-executor-integration.md); do not restart
+ISP/DATA encoding or generic PDS/USSE research for this handoff.
 The hardware PDS window, initialization/publication, completion, retirement and
 root restoration still need bounded physical qualification. Normal Mesa
 frontends/loader, full GLES2/desktopGL2.1, whole-desktop/X11 acceleration and

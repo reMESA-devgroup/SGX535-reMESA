@@ -46,89 +46,29 @@ resource-only endpoints and retains restricted shader/varying/primitive limits.
 Do not raise those advertised limits before their implementation is correct.
 The offline Mesa25.2.0 archive tests are separate from installed Mesa25.0.7.
 
-## Immediate implementation dependency
+## Current integration boundary (reviewed 2026-11-01)
 
-The preserved fixed event DATA64/CODE84 now has an owned immutable upload and
-is retained by scene footprint/capture (`9a8a43e`, `e991e31`). This removes the
-need to rediscover that fixed program. Owned raster/TA/region control snapshots now bind that frozen graph; see
-[scene-controls.md](scene-controls.md). Explicit native COLOR initialization before capture is also connected; see
-[linked-color-initialize.md](linked-color-initialize.md). Complete the DPM
-initialization contract and authenticated native lifecycle/control consumption next,
-then connect the normal frontend/loader and X11 resource/presentation path.
-The event's general ISA semantics remain distinct from reuse of its already
-preserved fixed CPU construction. Keep LAB diagnostics separate from production
-rendering and retain every required address/lifetime/coherency/fence/retirement
-and failure check throughout that integration.
+ISP, DATA, PDS and USSE already have implementations, original-constructor
+oracles and documented physical results in the selected paths. They are reuse
+targets, not a new reverse-engineering phase. See the current
+[general executor integration audit](general-executor-integration.md) for the
+source call graph, completed components and next bounded physical qualification.
 
-The retained job/private-MMU capacity now covers the current17-allocation
-scene with a shared32-resource software bound; see
-[native-job-capacity.md](native-job-capacity.md). Offline models and a complete
-module build passed. This capacity change is not native scene execution or
-physical deployment qualification.
+The concrete gap is capture-to-job dispatch plus a general service/backend
+adapter. Current execution still demands eleven fixed roles; the captured
+one-draw graph retains seventeen allocations. GEM/MMU capacity32, owned control
+snapshots, DPM29/TA31/raster20 actions, initialization mechanisms, private loans,
+source sessions, completion and retirement must be connected in one operation.
+Changing a count or clearing an incomplete bit is insufficient.
 
-Cold DPM initialization now has a kernel zero-origin claim and selected views
-that avoid mapping the two32MiB pools; see [cold-dpm-origin.md](cold-dpm-origin.md).
-This preserves required publication and does not establish native scene execution
-or physical qualification. The trusted general-scene consumer remains next.
+Existing implementation references:
 
-Kernel-bound DPM/TA/raster action construction now derives the original groups
-from actual retained IDs, and Mesa can retain undefined REGION storage without
-the legacy CPU initialization; see [native-scene-actions.md](native-scene-actions.md).
-Complete image/control validation and ordered native execution are still
-required before this general scene path can be physically qualified.
+- [Control snapshots](scene-controls.md), [COLOR initialization](linked-color-initialize.md), [cold DPM provenance](cold-dpm-origin.md).
+- [Retained job capacity](native-job-capacity.md), [bound actions](native-scene-actions.md), [native controls](native-scene-controls.md).
+- [USE windows](native-scene-use.md), [TA references](native-scene-ta-references.md), [state uploads](native-scene-state-upload.md).
+- [Vertex bounds](native-scene-vertex-fetch.md), [fragment references](native-scene-fragment-fetch.md), [background](native-scene-background-fetch.md), [event closure](native-scene-event-closure.md), [selected USE bodies](native-scene-use-bodies.md).
 
-Raster/TA controls can now also be reconstructed from held kernel IDs and
-checked against the matching action plan; see
-[native-scene-controls.md](native-scene-controls.md). Mesa and kernel share
-the original word serialization. This does not yet establish complete
-image/program admission, source-attributed execution or GPU qualification.
-
-Frozen captures now expose the complete owned USE entry windows and bank
-settings, with corresponding held-ID/window validation in the kernel; see
-[native-scene-use.md](native-scene-use.md). This is numeric ownership metadata,
-not validation of instruction contents or permission to execute the scene.
-
-The actual TA input now has a selected-grammar parser and retained-reference
-resolution, including typed userspace graph binding; see
-[native-scene-ta-references.md](native-scene-ta-references.md). PDS/USE contents,
-indirect fetch bounds and ordered general native execution remain incomplete.
-
-Selected state-upload references now bind actual PDS known fields and CODE to
-read-only source DATA and the held count-specific USE auxiliary; see
-[native-scene-state-upload.md](native-scene-state-upload.md). Vertex/fragment,
-background/event and broader indirect closure still require validation before
-general native execution can be qualified.
-
-Actual vertex PDS/index inputs now have committed-range and index-limit
-validation, with matching frozen userspace geometry windows; see
-[native-scene-vertex-fetch.md](native-scene-vertex-fetch.md). This binds the
-selected USE window but does not certify its shader body or full scene closure.
-
-Selected fragment state references now resolve to committed primary/secondary
-PDS windows and a matching pixel-master USE8 entry; see
-[native-scene-fragment-fetch.md](native-scene-fragment-fetch.md). This validates
-the unchanged producers' selected known fields, not the shader body or full
-scene closure. Transactional builders also separate large temporary results
-from prerequisite validation to reduce nested i486 kernel stack use. General
-native execution and physical qualification remain required.
-
-The background68 object now binds primary64/secondary4 PDS and PIXEL USE8
-windows to the retained COLOR target; see
-[native-scene-background-fetch.md](native-scene-background-fetch.md). Its known
-constructor fields and ownership are checked without reading pixels. Shader
-bodies, unknown fields and texture/pitch runtime semantics still require
-qualification, along with event closure and ordered general execution.
-
-The fixed event now resolves target DATA16 and validates its PIXEL USE16/8
-auxiliaries; the complete selected background USE8 is checked as well. See
-[native-scene-event-closure.md](native-scene-event-closure.md). This reuses the
-preserved DATA64/CODE84 construction and historical CODE oracle. Remaining
-shader/ISP/unknown-field contracts and the ordered general executor still
-precede physical qualification and normal OpenGL integration.
-
-Selected prefix and main vertex/fragment USE bodies now have exact byte
-validation in their retained windows; see
-[native-scene-use-bodies.md](native-scene-use-bodies.md). This covers existing
-POSITION16/green8 and white-Lambert64/COLOR0-MOVE8 profiles without changing
-encoders. The gears/MVP parameterized profile, general shader compilation and
-full APIs remain separate requirements; no execution admission is enabled.
+Preserve their tests and physical evidence. The next native test must consume
+the existing scene through the general ownership/execution path with measured
+submission, completion, retirement and correctness. Complete API/desktop and
+installation claims still require their own evidence.
