@@ -16,6 +16,7 @@
 #include "remesa_scene_layout.h"
 #include "scene_service_model.inc"
 #include "scene_backend_model.inc"
+#include "scene_execute_model.inc"
 static void state_word(u8 *p,u32 word)
 {for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
 /* Modeled inputs only. Separate tests compare validators against unchanged
@@ -199,7 +200,8 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    context->loan.execution_attempted=true;
    CHECK(remesa_gem_scene_job_cancel(context)==-EBUSY&&context->loan.live&&context->memory==s);
    context->loan.execution_attempted=false; /* Model only: no execution occurred. */
-   CHECK(!remesa_gem_scene_job_cancel(context)&&!context->memory&&claimed==before_claimed);
+   if(iteration)scene_execute_case(context);
+   else CHECK(!remesa_gem_scene_job_cancel(context)&&!context->memory&&claimed==before_claimed);
   }
   CHECK(test_zeroed_pages==before_zero);free(context);
   dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;
@@ -444,11 +446,13 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  cleanup:CHECK(!remesa_gem_job_cancel(s,ticket));CHECK(!remesa_gem_memory_close(s));
  CHECK(!gems&&!pins&&!ptes&&!claimed&&!power);expected_memory=NULL;expected_guard=NULL;
 }
-int main(void)
+int main(int argc,char **argv)
 {
+ if(argc==3){CHECK(!strcmp(argv[1],"--execute-fault"));execute_fault=(unsigned)strtoul(argv[2],NULL,10);CHECK(execute_fault>=1&&execute_fault<=10);action_case(640,640,14);CHECK(0);}
+ CHECK(argc==1);
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
  action_case(1280,800,14);action_case(641,479,14);action_case(1600,768,14);
  for(unsigned fault=1;fault<=14;fault++)action_case(640,640,fault);
- CHECK(scene_service_model_runs==208&&backend_model_runs==144);
+ CHECK(scene_service_model_runs==208&&backend_model_runs==144&&execute_cases==4);
  puts("PASS bound scene actions+controls:208 general-service protocol cases;17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
 }

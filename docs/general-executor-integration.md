@@ -45,7 +45,10 @@ or installation.
    control and USE plans while retaining that ownership and attribution. It must
    not cast17 objects into11, manufacture unused role descriptors, relax gates or
    synthesize a completion. Existing lifecycle/IRQ/MMIO helpers are reuse targets.
-4. **One ordered operation.** Retain the complete context before the MMU writer;
+4. **One ordered operation (subsequently implemented).** The
+   [general executor](general-scene-executor.md) now provides this kernel
+   transaction; capture dispatch and hardware qualification remain. Its required
+   order is: retain the complete context before the MMU writer;
    validate default mappings before binding; claim initialization provenance;
    bind the private root; validate the retained closure; publish once; perform the
    existing maintenance/init/USE/DPM/TA/raster sequence; require owned completion;
@@ -121,3 +124,12 @@ ordered executor in item4 and capture submission in item1 still need to call
 this path; no general hardware admission or new physical result follows from
 compiling or modeling the adapter. OpenGL/GLES/desktop installation remains
 part of the full objective.
+
+
+## Ordered transaction connected
+
+The [general executor](general-scene-executor.md) now implements the kernel
+transaction in item4, including selected-view prewriter authentication and
+separate successful job retirement. The entry in item1 still needs capture
+serialization/provider dispatch. No new physical result or normal API/desktop
+qualification follows from this CPU-only transaction coverage.

@@ -92,6 +92,7 @@ Service phase RETIRED alone never authorizes releasing a real GEM loan.
 Source closure, actual hardware completion, CPU/GPU visibility, root restore,
 settlement and acknowledgement remain mandatory in the native executor. The
 [plan-consuming MMIO/source adapter](general-scene-backend.md) is now implemented
-and compiled, with modeled offline checks. The next component is the ordered
-general executor and capture dispatch, followed by bounded physical qualification. ISP, DATA, PDS and USSE
+and compiled, with modeled offline checks. The
+[ordered general executor](general-scene-executor.md) is also implemented;
+capture dispatch and bounded physical qualification remain to exercise it. ISP, DATA, PDS and USSE
 encoders already covered by their existing oracles are not reopened here.

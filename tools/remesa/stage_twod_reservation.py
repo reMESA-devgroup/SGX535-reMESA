@@ -818,7 +818,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_gem_scene_event.inc"\n#include "remesa_gem_scene_job.inc"\n#include "remesa_private_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_gem_scene_event.inc"\n#include "remesa_gem_scene_job.inc"\n#include "remesa_gem_scene_execute.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
@@ -942,7 +942,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_gem_scene_fragments.h', 'remesa_gem_scene_fragments.inc',
                      'remesa_gem_scene_background.h', 'remesa_gem_scene_background.inc',
                      'remesa_gem_scene_event.h', 'remesa_gem_scene_event.inc',
-                     'remesa_gem_scene_job.h', 'remesa_gem_scene_job.inc',
+                     'remesa_gem_scene_job.h', 'remesa_gem_scene_job.inc', 'remesa_gem_scene_execute.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',

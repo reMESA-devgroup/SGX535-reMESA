@@ -83,3 +83,46 @@ int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *c)
  if(error)return -EPROTO;
  return remesa_scene_service_bind(&c->service,&c->session,&c->service_plan)?-EINVAL:0;
 }
+
+/* Default-PD authentication is deliberately before the MMU writer interval.
+ * The original all-view checker remains unchanged. Writable targets must have
+ * no borrowed CPU alias in this selected-view contract. */
+int remesa_gem_scene_job_check_snapshot_locked(struct remesa_gem_scene_job *c)
+{
+ struct remesa_gem_memory *s;struct retained_job *j;
+ struct remesa_memory_binding uses[REMESA_GEM_JOB_BINDINGS];unsigned i;int error;
+ if(!c||!c->memory||c->state!=REMESA_SCENE_JOB_PREPARED||!c->loan.live||
+    c->loan.memory!=c->memory||!c->count||c->count>REMESA_GEM_JOB_BINDINGS)return -EINVAL;
+ s=c->memory;
+#ifdef __KERNEL__
+ lockdep_assert_held(&s->lock);
+#endif
+ if(c->loan.ticket.generation!=c->snapshot.ticket.generation||
+    c->loan.ticket.operation!=c->snapshot.ticket.operation)return -EACCES;
+ j=ticket_job(s,c->snapshot.ticket);if(!j)return -ENOENT;
+ if(j->quarantined)return -EIO;
+ if(j->state!=REMESA_JOB_PREPARED||j->cookie||!j->attached||
+    s->executor!=&private_reserved_executor||s->executor_context!=&c->loan)return -EBUSY;
+ if(c->snapshot.dev!=s->dev||c->snapshot.mmu_end!=s->root.end+1||
+    c->snapshot.commands!=j->commands||c->snapshot.command_bytes!=j->command_bytes||
+    !c->snapshot.exclusive_held||!c->snapshot.power_held||c->count!=j->count)return -EACCES;
+ error=verify_job_bindings(s,j,uses);if(error)return job_fault(s,j,error);
+ for(i=0;i<c->count;i++){
+  const struct remesa_memory_view *v=&c->views[i];struct backing *b=&s->bo[j->ids[i]&31];
+  if(v->binding.id!=uses[i].id||v->binding.va!=uses[i].va||v->binding.bytes!=uses[i].bytes||
+     v->pages!=b->pages||v->page_count!=b->gem.size/PAGE_SIZE||c->loan.rules[i].id!=j->ids[i])return -EACCES;
+  if(c->loan.rules[i].access==REMESA_MMU_GPU_READ){
+   if(!v->cpu||v->cpu!=j->cpu_views[i]||v->cpu!=b->cached_job_view)return -EACCES;
+  }else if(v->cpu)return -EACCES;
+ }
+ return 0;
+}
+int remesa_gem_scene_job_retire(struct remesa_gem_scene_job *c)
+{
+ int error;
+ if(!c||!c->memory||c->state!=REMESA_SCENE_JOB_ACKNOWLEDGED||!c->loan.execution_retired)return -EINVAL;
+ error=remesa_gem_private_release(&c->loan);
+ if(!error)error=remesa_gem_job_retire(c->memory,c->snapshot.ticket);
+ if(error){c->state=REMESA_SCENE_JOB_HELD;return error;}
+ memset(c,0,sizeof(*c));return 0;
+}

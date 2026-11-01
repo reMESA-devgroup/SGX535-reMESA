@@ -74,9 +74,10 @@ an unused parameter in the modeled MMIO macro; a later source test incorrectly
 used the legacy COLOR close before the late-pending check. The corrected test
 uses nohash closure. No production safety check was relaxed for these failures.
 
-## Next execution component
+## Execution integration
 
-The ordered general executor must connect this backend to the real GEM job:
+The [ordered general executor](general-scene-executor.md) now connects this
+backend to the real GEM job:
 authenticate selected snapshots/default mappings before the writer, bind
 source/root, bind the validated service, enter the native backend, record the
 actual issued job/cookie before service publication, run real status callbacks,
@@ -89,3 +90,9 @@ A new pinned recoverable physical qualification is required before general
 rendering or OpenGL/GLES claims. Existing ISP/DATA/PDS/USSE encoders and their
 physical/oracle evidence remain in use. Normal API dispatch, full OpenGL 2.1
 and GLES 2 behavior, whole-desktop integration and installation are incomplete.
+
+
+The subsequent [ordered general executor](general-scene-executor.md) now
+connects this transaction in kernel code. Its source/backend/MMU flow is tested
+with modeled hardware hooks; capture dispatch and physical qualification still
+need to exercise the real native path.

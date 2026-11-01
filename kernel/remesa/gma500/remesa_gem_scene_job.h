@@ -4,7 +4,7 @@
 #include "remesa_gem_scene_event.h"
 #include "remesa_scene_service.h"
 struct remesa_gem_scene_sections {u32 actions,controls,use,vertices;};
-enum remesa_gem_scene_job_state {REMESA_SCENE_JOB_EMPTY,REMESA_SCENE_JOB_PREPARED,REMESA_SCENE_JOB_HELD};
+enum remesa_gem_scene_job_state {REMESA_SCENE_JOB_EMPTY,REMESA_SCENE_JOB_PREPARED,REMESA_SCENE_JOB_HELD,REMESA_SCENE_JOB_ACKNOWLEDGED};
 /* Caller allocates/zeros this stable context before endpoint/MMU locks. It
  * owns actual job holds/plans/views/loan, never eleven synthetic BO roles.
  * No stack-local context: retain on HELD, even when preparation fails. */
@@ -42,4 +42,14 @@ int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *);
 /* Cancel only unissued/unbound preparation. Failure retains the context and
  * holds; never infer retirement/root restoration or release source state. */
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *);
+/* Endpoint mutex, default mappings still active; no MMU writer held. */
+int remesa_gem_scene_job_check_snapshot_locked(struct remesa_gem_scene_job *);
+struct sgx535_gma500_fixed_backend;struct remesa_stream_observation;
+/* Trusted cold transaction. Caller retains DRM/backing-session/device/power,
+ * source lease and immutable complete images. Any consumed failure retains all
+ * context/loan/source state; no retry/free. No registration or ioctl added. */
+int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *,
+ struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,const void *,unsigned,unsigned);
+/* After real acknowledged execution only; separate from preparation cancel. */
+int remesa_gem_scene_job_retire(struct remesa_gem_scene_job *);
 #endif

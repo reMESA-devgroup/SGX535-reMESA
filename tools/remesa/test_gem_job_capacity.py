@@ -46,7 +46,7 @@ def main():
  original=(n/'remesa_gem_memory.c').read_text();header=(n/'remesa_gem_memory.h').read_text()
  core,expanded=job_capacity_sources(original,header)
  core=dpm_origin_source(core)+'\n#include "remesa_gem_dpm.inc"\n'
- if a.scene_actions:core+='\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_gem_scene_event.inc"\n#include "remesa_gem_scene_job.inc"\n'
+ if a.scene_actions:core+='\nstatic const struct remesa_job_executor private_reserved_executor;\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_gem_scene_event.inc"\n#include "remesa_gem_scene_job.inc"\n'
  # Reject absent/duplicate anchors instead of silently widening the wrong source.
  for old in ['cpu_views[16]','ids[16]','count>16','uses[16]','added[16]']:
   for bad in [original.replace(old,old.replace('16','15'),1),original+'\n/* '+old+' */\n']:
@@ -73,7 +73,7 @@ def main():
   variants.append(('i486',str(a.i486_cc),['-O2','-static','-march=i486'],[str(a.qemu_i386)]))
  rows=[];files=[Path(__file__).resolve(),w/'tools/remesa/stage_twod_reservation.py',n/'remesa_gem_memory.c',n/'remesa_gem_memory.h',n.parent/'tests/test_gem_shim.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_actions.h','remesa_gem_scene_actions.inc','remesa_gem_dpm.h','remesa_gem_dpm.inc','remesa_gem_job_limits.h','remesa_gem_private.h','remesa_gem_private.inc','remesa_mmu_confinement.h','remesa_mmu_confinement.inc']]
- files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_scene_actions.c','test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c','scene_service_model.inc','scene_backend_model.inc']]
+ files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_scene_actions.c','test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c','scene_service_model.inc','scene_backend_model.inc','scene_execute_model.inc']]
  files += [w/'tools/remesa/lab_scene_actions.c',w/'tools/remesa/lab_scene_actions.h',w/'include/remesa/scene_layout.h',w/'include/remesa/scene_dpm.h',w/'include/remesa/scene_control_words.h',n/'frozen_kernel_contract.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_controls.h','remesa_gem_scene_controls.inc']]
  files += [w/'mesa/sgx535'/name for name in ['remesa_render_target.c','remesa_render_target.h']]
@@ -87,7 +87,7 @@ def main():
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_event.h','remesa_gem_scene_event.inc']]+[w/'include/remesa/event_fetch.h',w/'include/remesa/scene_auxiliary.h']
  files += [w/'tools/remesa/stage_scene_backend.py',w/'kernel/remesa/gma500/remesa_scene_backend.inc',w/'kernel/remesa/gma500/remesa_scene_backend.h']
  files += [w/'include/remesa/scene_use_bodies.h',w/'kernel/remesa/gma500/remesa_scene_service.h',w/'tools/remesa/stage_scene_service.py',n/'frozen_fixed_service.c',n/'frozen_kernel_contract.c']
- files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_job.h','remesa_gem_scene_job.inc']]
+ files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_job.h','remesa_gem_scene_job.inc','remesa_gem_scene_execute.inc']]
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
  def run(label,cmd,ceiling):
   def limit():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,(ceiling,ceiling))
@@ -104,6 +104,9 @@ def main():
    command=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-missing-field-initializers',*flags,*includes,*sources,'-o',str(exe)]
    run(variant+'-'+name+'-build',command,768*1024**2)
    out=run(variant+'-'+name+'-run',runner+[str(exe)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
+   if a.scene_actions:
+    for fault in range(1,11):
+     out=run(variant+'-execute-fault'+str(fault),runner+[str(exe),'--execute-fault',str(fault)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
  if any(sha(Path(f))!=h for f,h in before.items()):raise RuntimeError('source changed during qualification')
  (o/'RESULT.json').write_text(json.dumps(dict(status='BOUND_SCENE_JOB_AND_GENERAL_SERVICE_MODEL_PASS' if a.scene_actions else 'COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
 if __name__=='__main__':main()
