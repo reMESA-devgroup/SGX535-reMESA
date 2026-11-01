@@ -1,5 +1,10 @@
 # Real Mesa owners through the Linux resource endpoint
 
+The subsequent [provider/fence integration](scene-provider-fence.md) now carries
+this real owner graph through the normal device fence lifecycle. Historical
+network-pending notes below describe the earlier direct-transport checkpoint.
+The unexecuted earlier payload remains preserved.
+
 The general kernel executor already has physical COLOR/Z24 evidence at1280x800
 and640x640. Its first collectors uploaded exported constructor images. The next
 integration removes that export/upload handoff: the existing Mesa constructors

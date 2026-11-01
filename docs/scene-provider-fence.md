@@ -53,6 +53,17 @@ retains the original12 constructor regressions. These are CPU models/GPU0.
 The first scene-provider compile failure used an incorrect test callback name;
 it is preserved, and the test now uses the actual existing `device.ops->wait`.
 
-Physical validation of this new provider/fence route is pending. Existing
+The actual i486 provider/fence client has now completed one1280x800 physical
+submission on the unchanged qualified kernel. `PRE_RECOVERY_AUDIT.json` checks
+the raw identity/completion/retirement receipt, whole capture namespace and
+executed controls, all23 INFO records, unchanged12 GPU READ images and2 CPU-only
+buffers,4 guards, source closure, seven controls N and complete memory cleanup.
+The unchanged analytical oracle finds zero COLOR/Z24 mismatches across1024000
+pixels. Reference images were compared after execution, never uploaded by the
+collector. The native client returned only after the ordinary device fence wait
+and destruction, and verified that submission had consumed its capture.
+Stock return was requested once with the original GRUB already restored;
+network observation is pending. This remains explicitly separate from a final
+recovery-verified physical receipt. Existing
 kernel COLOR/Z24 passes remain valid. Normal Gallium dispatch/resource state,
 full OpenGL/GLES behavior, desktop integration and installation are still open.
