@@ -82,6 +82,52 @@ module-parameter macro did not reference the registered variable, producing an
 unused-variable error. The final test-only shim models that registration
 reference. No warning or runtime validation was disabled to pass that test.
 
-Physical comparison and adoption into the default path remain pending. An
+The comparison below qualifies this bounded component; adoption into the default path remains pending. An
 installed general GL/GLES/desktop 2D driver still requires the outstanding
 generated-scene/native admission, presentation and installation work.
+
+## Physical A/B/A comparison
+
+The candidate module SHA-256
+`1e2e4e3a58c61e14ab5f1b23f8b7b4c1b2db4f5dab2f77c0d7f1711803478ae6`
+ran on Mini12 boot `70dd7bf6-c517-4bf1-9d22-fae779900a5f`.
+Nine owned-factory contexts completed441 operations: one copy and48 fills
+per context, across three sizes and conservative/deferred/conservative phases.
+Each context reported SGX535 core01130000/rev00010201, operation49, stages31,
+no retained/uncertain/error outcome, one session close and final owned-FD close.
+All four guarded source/destination readbacks per context matched the previous
+physical oracles byte-for-byte. These inspect logical buffer/guard bytes after
+each API sequence, not page padding or every intermediate operation.
+
+| Size | Conservative before | Deferred | Conservative after |
+| --- | ---: | ---: | ---: |
+| 1280×800 | 25.775 ms | 24.671 ms | 27.631 ms |
+| 640×640 | 11.571 ms | 8.763 ms | 10.157 ms |
+| 641×479 | 7.468 ms | 6.235 ms | 7.865 ms |
+
+These are mean native fill callback wall times, including checks, cache,
+synchronization and retirement. Relative to the mean of both conservative
+controls, reductions are7.61%,19.33%,18.67%. Total client times, including
+uploads, four readback/check/capture sequences and cleanup, changed by
++0.27%,+1.43% and−0.93% respectively when expressed as reductions. The short
+sequences and variable CPU/readback costs do not establish a sustained total
+performance gain. The option remains default N. No desktop or glxgears FPS
+is measured by this test.
+
+Evidence: `hardware/MATRIX_COMPLETE.json`, `hardware/COMPARISON.json`, and
+`hardware/cases/*/VERIFIED.json` under the root above. The same original
+factory client is hash-pinned; diagnostics/readbacks remain outside native
+loops. Initial SSH verification timed out during boot; subsequent observation
+confirmed the new identity and restored stock GRUB configuration before any
+GPU work. The first conservative1280 case predates an additional completion
+policy sample; its preflight default-N, absence of a policy write to Y and
+final controls remain recorded. The other eight also sample the selected
+policy at client completion.
+
+All nine supervisors were terminal and all controls N in their final receipts.
+Stock GRUB/default and empty next entry were restored before testing. A later
+SSH attempt to request the stock reboot could not connect, followed by
+`No route to host`; no acknowledgment of that reboot exists. Consequently
+current remote state and actual stock return are **not verified**. Inspect
+the existing namespace and current boot before taking any further action;
+never replay GPU cases or blindly repeat a reboot based on the transport error.
