@@ -4,7 +4,7 @@ int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *c)
 {
  int error;
  if(!c||!c->memory||c->state==REMESA_SCENE_JOB_EMPTY)return -EINVAL;
- if(c->loan.execution_attempted||c->loan.execution_started||c->loan.execution_retired)return -EBUSY;
+ if(c->loan.execution_attempted||c->loan.execution_started||c->loan.execution_retired||c->service.started)return -EBUSY;
  if(c->loan.live){
   error=remesa_gem_private_release(&c->loan);
   if(error){c->state=REMESA_SCENE_JOB_HELD;return error;}
@@ -51,4 +51,35 @@ int remesa_gem_scene_job_prepare(struct remesa_gem_memory *s,
   * original error. Caller checks HELD and never frees/reissues that context. */
  if(cleanup)c->state=REMESA_SCENE_JOB_HELD;
  return error;
+}
+
+int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *c)
+{
+ struct retained_job *j;unsigned i;int error;
+ if(!c||!c->memory||c->state!=REMESA_SCENE_JOB_PREPARED||!c->loan.live||
+    c->loan.memory!=c->memory||c->loan.execution_started||c->loan.host_published)return -EINVAL;
+ if(c->service.session||c->service.started)return -EALREADY;
+ error=remesa_gem_scene_event_check_locked(&c->loan,c->views,c->count,&c->actions,&c->controls,&c->use,c->sections.vertices,
+  &c->ta,&c->states,&c->vertices,&c->fragments,&c->background,&c->event);if(error)return error;
+ j=ticket_job(c->memory,c->snapshot.ticket);
+ if(!j||j->state!=REMESA_JOB_PREPARED||j->commands!=c->snapshot.commands||j->command_bytes!=c->snapshot.command_bytes)return -EACCES;
+ c->service_plan.binding_count=c->count;
+ c->service_plan.load_count=c->actions.load_count;c->service_plan.ta_count=c->actions.ta_count;c->service_plan.raster_count=c->actions.raster_count;
+ memcpy(c->service_plan.commands.ta,c->controls.ta,sizeof(c->controls.ta));
+ memcpy(c->service_plan.commands.raster,c->controls.raster,sizeof(c->controls.raster));
+ memcpy(c->service_plan.load,c->actions.load,sizeof(c->actions.load));
+ memcpy(c->service_plan.ta,c->actions.ta,sizeof(c->actions.ta));
+ memcpy(c->service_plan.raster,c->actions.raster,sizeof(c->actions.raster));
+ c->service_plan.use.mask=c->use.bank_mask;
+ for(i=0;i<16;i++){c->service_plan.use.banks[i].offset=c->use.banks[i].offset;c->service_plan.use.banks[i].word=c->use.banks[i].word;}
+ /* Successful real general-loan/closure validation supplies BOS_VALIDATED.
+  * The fixed eleven-role request/bos admission is not called or fabricated. */
+ c->session=(struct sgx535_frozen_session){.phase=SGX535_PHASE_BOS_VALIDATED};
+#ifdef __KERNEL__
+ error=remesa_stream_sgx535_frozen_session_advance(&c->session,SGX535_PHASE_HOST_IMAGE_FINAL);
+#else
+ error=sgx535_frozen_session_advance(&c->session,SGX535_PHASE_HOST_IMAGE_FINAL);
+#endif
+ if(error)return -EPROTO;
+ return remesa_scene_service_bind(&c->service,&c->session,&c->service_plan)?-EINVAL:0;
 }

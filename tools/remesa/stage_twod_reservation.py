@@ -6,6 +6,7 @@ Normal profiles integrate producer/IRQ exclusion. The private profile also
 registers a default-disabled, fixed-profile qualification ioctl; it is not a
 production submission interface and this tool never installs a module.
 """
+from stage_scene_service import scene_service_components
 import argparse
 import hashlib
 import json
@@ -919,7 +920,8 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
     if private:
         components.update(scene_action_components(root, native))
         components.update(scene_use_components(root))
-        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o remesa_program_registers.o\n'
+        components.update(scene_service_components(root, native))
+        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o remesa_program_registers.o remesa_scene_service.o\n'
         for name in ['remesa_mmu_confinement.h', 'remesa_mmu_confinement.inc',
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',

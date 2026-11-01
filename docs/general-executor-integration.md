@@ -35,7 +35,10 @@ or installation.
    check and ties each descriptor to a fixed role. `sgx535_fixed_service` embeds
    eleven BOs; its bind/prepare/fire stages reconstruct groups from those roles.
    The new one-draw captured graph has seventeen allocations. The software GEM
-   bound32 is already implemented; it does not make this service generic.
+   bound32 is already implemented; it does not make this old service generic.
+   The subsequent `remesa_scene_service` now consumes the actual retained
+   general plans, preserving the qualified lifecycle; native dispatch to it
+   still needs the backend/source adapter in item3.
 3. **Backend/source adapter.** The current backend compares action payloads with
    fixed-role reconstructions and its source observation is associated with that
    backend/owner/session. A general adapter must consume the validated action,
@@ -101,5 +104,8 @@ The subsequent [general GEM job assembly](general-scene-job.md) now combines the
 existing preparers into one stable context with real held objects, selected
 views, action/control/USE plans and an unbound private loan. It is the kernel
 preparation half of item1 above. Capture serialization/submission and the
-plan-consuming service/backend/source adapter remain to connect. No encoder or
+backend/source adapter remain to connect. The plan-consuming general service is
+now bound to the real prepared context and tested with the original phase
+helpers; see the same assembly document for its exact callback contract and
+CPU-only coverage. No encoder or
 canonical fixed executor was replaced, and no GPU admission was enabled.

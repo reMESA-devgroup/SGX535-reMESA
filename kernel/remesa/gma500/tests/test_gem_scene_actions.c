@@ -14,6 +14,7 @@
 #include "remesa_render_target.h"
 #include "remesa_ta_index.h"
 #include "remesa_scene_layout.h"
+#include "scene_service_model.inc"
 static void state_word(u8 *p,u32 word)
 {for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
 /* Modeled inputs only. Separate tests compare validators against unchanged
@@ -38,6 +39,63 @@ static void fragment_fixture(u8 *p,u32 fixup,bool color)
  state_word(p+48,0x07000345);
  if(color){state_word(p+36,0x0fc0a00f);state_word(p+52,0x070418a2);state_word(p+56,0xaf000000);}
  else state_word(p+52,0xaf000000);
+}
+static void scene_images(struct remesa_memory_view views[17],const struct remesa_memory_binding uses[17],
+ const struct remesa_gem_scene_use *use,unsigned width,unsigned height,unsigned pitch)
+{
+ u8 *stream=(u8 *)views[6].cpu+4,stream_saved[68];
+ CHECK(!remesa_ta_state_reference_encode(uses[9].va+352,11,false,stream));
+ struct remesa_ta_index_request index={.index_bo_gpu_va=uses[9].va,.index_bo_bytes=4096,.index_byte_offset=128,
+  .pds_bo_gpu_va=uses[9].va,.pds_bo_bytes=4096,.pds_byte_offset=160,.pds_object_bytes=64,
+  .index_count=3,.pds_data_dwords=12,.descriptor_a_field10=4,.descriptor_b_field38=4};
+ CHECK(!remesa_ta_index_triangles_encode(&index,stream+8));
+ CHECK(!remesa_ta_state_reference_encode(uses[10].va+96,14,false,stream+28));
+ index.index_bo_gpu_va=uses[11].va;index.index_byte_offset=144;index.pds_bo_gpu_va=uses[12].va;
+ index.pds_byte_offset=0;index.descriptor_a_field10=12;index.descriptor_b_field38=32;
+ CHECK(!remesa_ta_index_compiled_position_color_triangles_encode(&index,stream+36));
+ struct remesa_ta_scene_close_request end={uses[13].va,4096,256,60};
+ CHECK(!remesa_ta_scene_close_encode(&end,stream+56));memcpy(stream_saved,stream,68);
+ u8 *prefix=views[9].cpu,*draw=views[10].cpu,*close=views[13].cpu;
+ state_fixture(prefix+352,uses[9].va+304,11,use->lower19[0],prefix+32);state_word(prefix+304,0x54c5);
+ state_fixture(draw+96,uses[10].va,14,use->lower19[2],draw+64);state_word(draw,0xf41);
+ state_fixture(close+256,uses[13].va,2,use->lower19[3],close+16);state_word(close,0x2000);
+ state_word(close+4,(((width+15)>>4)<<16)|((height+15)>>4));
+ vertex_fixture(prefix+160,uses[9].va+64,4,use->lower19[4],false);
+ vertex_fixture(views[12].cpu,uses[11].va,12,use->lower19[5],true);
+ u8 *indices=views[11].cpu;for(unsigned k=0;k<3;k++){prefix[128+k*2]=k;prefix[129+k*2]=0;indices[144+k*2]=k;indices[145+k*2]=0;}
+ fragment_fixture(prefix+224,use->lower19[1],false);state_word(prefix+288,0xaf000000);
+ fragment_fixture((u8 *)views[12].cpu+192,use->lower19[6],true);state_word((u8 *)views[12].cpu+256,0xaf000000);
+ state_word(prefix+316,((uses[9].va+288)>>4)&0xffffff);state_word(prefix+320,0x30000);state_word(prefix+324,0x0c000000|(((uses[9].va+224)>>4)&0xffffff));
+ state_word(draw+8,((uses[12].va+256)>>4)&0xffffff);state_word(draw+12,0x30030001);state_word(draw+16,0x0c000000|(((uses[12].va+192)>>4)&0xffffff));
+ u8 *bg=(u8 *)views[7].cpu+16,*bp=(u8 *)views[16].cpu+32;
+ memset(bg,0,68);state_word(bg,((uses[16].va+96)>>4)&0xffffff);state_word(bg+4,0x30001);
+ state_word(bg+8,0x0c000000|(((uses[16].va+32)>>4)&0xffffff));
+ state_word(bg+20,0x3f800000);state_word(bg+32,0x3f800000);state_word(bg+36,2);
+ state_word(bg+44,(1024u<<20)|(1024u<<4));state_word(bg+52,((1024u+width)<<20)|(1024u<<4));
+ state_word(bg+60,(1024u<<20)|((1024u+height)<<4));
+ state_word(bg+48,0x3f800000);state_word(bg+56,0x3f800000);state_word(bg+64,0x3f800000);
+ memset(bp,0xa5,64);state_word(bp,0x100000u|use->lower19[7]);state_word(bp+4,0);state_word(bp+8,0x001e0092);
+ state_word(bp+12,0x6c000000u|((width-1)<<12)|(height-1));state_word(bp+32,0x20);state_word(bp+36,0xf800);
+ state_word(bp+40,uses[4].va);state_word(bp+48,0x07000345);state_word(bp+52,0x070418a2);
+ state_word(bp+56,0x07042364);state_word(bp+60,0xaf000000);state_word(bp+64,0xaf000000);
+ state_word(views[16].cpu,0xa0000000);state_word((u8 *)views[16].cpu+4,0x28851001);
+ u8 *ep=(u8 *)views[8].cpu+32,*target=views[15].cpu,*transfer=(u8 *)views[14].cpu+96,*end_aux=(u8 *)views[14].cpu+128;
+ memset(ep,0xa5,148);state_word(ep,use->lower19[9]);state_word(ep+4,0);state_word(ep+8,uses[15].va);
+ state_word(ep+12,0x80000003);state_word(ep+16,0x200000u|use->lower19[8]);state_word(ep+20,0);
+ const u32 event_tail[7]={8,0,2,0x10000000,0x7f800,0x07f00000,0x08000000};
+ const u32 event_code[21]={0xcf820030,0x87600000,0x90000005,0x070003e5,0xaf000000,0xcf820830,0x87600000,0x90000014,
+  0x07042363,0x170086e0,0xf7800b31,0xcf621031,0xc762c070,0xf7800b32,0xcf641432,0xc764c070,0xf7811933,0xcf661833,0xc766c070,0x070b0345,0xaf000000};
+ for(unsigned k=0;k<7;k++)state_word(ep+32+k*4,event_tail[k]);
+ for(unsigned k=0;k<21;k++)state_word(ep+64+k*4,event_code[k]);
+ state_word(target,(((pitch>>1)-1)<<16)|0x8000);state_word(target+4,uses[4].va);state_word(target+8,0);state_word(target+12,((height-1)<<12)|(pitch-1));
+ state_word(transfer,0x84208180);state_word(transfer+4,0xfb200004);state_word(transfer+8,0x81200080);state_word(transfer+12,0xfb240044);
+ state_word(end_aux,0);state_word(end_aux+4,0xf8348000);
+ const u32 compiled_body[16]={0xa0000000,0x28a13001,0xa0400208,0x10a02001,0x01000001,0xfa100000,0x60a00200,0x28a12001,
+  0x01010100,0xfa100000,0x50800230,0x18a13201,0x50800234,0x18a13001,0xa0200000,0xfb275000};
+ state_word(prefix,compiled_body[0]);state_word(prefix+4,compiled_body[1]);state_word(prefix+8,compiled_body[14]);state_word(prefix+12,compiled_body[15]);
+ state_word(prefix+16,0xff00);state_word(prefix+20,0xfca7f181);
+ for(unsigned k=0;k<16;k++)state_word((u8 *)views[14].cpu+k*4,compiled_body[k]);
+ state_word((u8 *)views[14].cpu+64,0xa0000000);state_word((u8 *)views[14].cpu+68,0x28851001);
 }
 static u32 scene_storage(struct remesa_gem_memory *s,u64 size,u64 address)
 {
@@ -126,6 +184,16 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    CHECK(context->actions.load_count==29&&context->actions.ta_count==31&&context->actions.raster_count==20&&context->use.entry_count==10);
    CHECK(!context->views[1].cpu&&!context->views[2].cpu&&!context->views[3].cpu&&!context->views[4].cpu&&!context->views[5].cpu&&context->views[9].cpu);
    CHECK(remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&sections,prepare_rules,&guard,context)==-EBUSY);
+   scene_images(context->views,uses,&context->use,width,height,pitch);
+   mutex_lock(&s->lock);
+   CHECK(!remesa_gem_scene_job_bind_service_locked(context));
+   CHECK(context->service_plan.binding_count==17&&context->service.plan==&context->service_plan&&
+    context->service.session==&context->session&&context->session.phase==SGX535_PHASE_HOST_IMAGE_FINAL);
+   CHECK(remesa_gem_scene_job_bind_service_locked(context)==-EALREADY);
+   mutex_unlock(&s->lock);
+   scene_service_cases(context);
+   context->service.started=1;CHECK(remesa_gem_scene_job_cancel(context)==-EBUSY&&context->loan.live);
+   context->service.started=0; /* Model only: no actual service ran. */
    context->loan.execution_attempted=true;
    CHECK(remesa_gem_scene_job_cancel(context)==-EBUSY&&context->loan.live&&context->memory==s);
    context->loan.execution_attempted=false; /* Model only: no execution occurred. */
@@ -225,59 +293,11 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,9)==-EACCES);
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,0x1ffc1)==17&&vmap_calls==maps_before+12);
  CHECK(!views[1].cpu&&!views[2].cpu&&!views[3].cpu);
- u8 *stream=(u8 *)views[6].cpu+4,stream_saved[68];
- CHECK(!remesa_ta_state_reference_encode(uses[9].va+352,11,false,stream));
- struct remesa_ta_index_request index={.index_bo_gpu_va=uses[9].va,.index_bo_bytes=4096,.index_byte_offset=128,
-  .pds_bo_gpu_va=uses[9].va,.pds_bo_bytes=4096,.pds_byte_offset=160,.pds_object_bytes=64,
-  .index_count=3,.pds_data_dwords=12,.descriptor_a_field10=4,.descriptor_b_field38=4};
- CHECK(!remesa_ta_index_triangles_encode(&index,stream+8));
- CHECK(!remesa_ta_state_reference_encode(uses[10].va+96,14,false,stream+28));
- index.index_bo_gpu_va=uses[11].va;index.index_byte_offset=144;index.pds_bo_gpu_va=uses[12].va;
- index.pds_byte_offset=0;index.descriptor_a_field10=12;index.descriptor_b_field38=32;
- CHECK(!remesa_ta_index_compiled_position_color_triangles_encode(&index,stream+36));
- struct remesa_ta_scene_close_request end={uses[13].va,4096,256,60};
- CHECK(!remesa_ta_scene_close_encode(&end,stream+56));memcpy(stream_saved,stream,68);
- u8 *prefix=views[9].cpu,*draw=views[10].cpu,*close=views[13].cpu;
- state_fixture(prefix+352,uses[9].va+304,11,use.lower19[0],prefix+32);state_word(prefix+304,0x54c5);
- state_fixture(draw+96,uses[10].va,14,use.lower19[2],draw+64);state_word(draw,0xf41);
- state_fixture(close+256,uses[13].va,2,use.lower19[3],close+16);state_word(close,0x2000);
- state_word(close+4,(((width+15)>>4)<<16)|((height+15)>>4));
- vertex_fixture(prefix+160,uses[9].va+64,4,use.lower19[4],false);
- vertex_fixture(views[12].cpu,uses[11].va,12,use.lower19[5],true);
- u8 *indices=views[11].cpu;for(unsigned k=0;k<3;k++){prefix[128+k*2]=k;prefix[129+k*2]=0;indices[144+k*2]=k;indices[145+k*2]=0;}
- fragment_fixture(prefix+224,use.lower19[1],false);state_word(prefix+288,0xaf000000);
- fragment_fixture((u8 *)views[12].cpu+192,use.lower19[6],true);state_word((u8 *)views[12].cpu+256,0xaf000000);
- state_word(prefix+316,((uses[9].va+288)>>4)&0xffffff);state_word(prefix+320,0x30000);state_word(prefix+324,0x0c000000|(((uses[9].va+224)>>4)&0xffffff));
- state_word(draw+8,((uses[12].va+256)>>4)&0xffffff);state_word(draw+12,0x30030001);state_word(draw+16,0x0c000000|(((uses[12].va+192)>>4)&0xffffff));
- u8 *bg=(u8 *)views[7].cpu+16,*bp=(u8 *)views[16].cpu+32;
- memset(bg,0,68);state_word(bg,((uses[16].va+96)>>4)&0xffffff);state_word(bg+4,0x30001);
- state_word(bg+8,0x0c000000|(((uses[16].va+32)>>4)&0xffffff));
- state_word(bg+20,0x3f800000);state_word(bg+32,0x3f800000);state_word(bg+36,2);
- state_word(bg+44,(1024u<<20)|(1024u<<4));state_word(bg+52,((1024u+width)<<20)|(1024u<<4));
- state_word(bg+60,(1024u<<20)|((1024u+height)<<4));
- state_word(bg+48,0x3f800000);state_word(bg+56,0x3f800000);state_word(bg+64,0x3f800000);
- memset(bp,0xa5,64);state_word(bp,0x100000u|use.lower19[7]);state_word(bp+4,0);state_word(bp+8,0x001e0092);
- state_word(bp+12,0x6c000000u|((width-1)<<12)|(height-1));state_word(bp+32,0x20);state_word(bp+36,0xf800);
- state_word(bp+40,uses[4].va);state_word(bp+48,0x07000345);state_word(bp+52,0x070418a2);
- state_word(bp+56,0x07042364);state_word(bp+60,0xaf000000);state_word(bp+64,0xaf000000);
- state_word(views[16].cpu,0xa0000000);state_word((u8 *)views[16].cpu+4,0x28851001);
- u8 *ep=(u8 *)views[8].cpu+32,*target=views[15].cpu,*transfer=(u8 *)views[14].cpu+96,*end_aux=(u8 *)views[14].cpu+128;
- memset(ep,0xa5,148);state_word(ep,use.lower19[9]);state_word(ep+4,0);state_word(ep+8,uses[15].va);
- state_word(ep+12,0x80000003);state_word(ep+16,0x200000u|use.lower19[8]);state_word(ep+20,0);
- const u32 event_tail[7]={8,0,2,0x10000000,0x7f800,0x07f00000,0x08000000};
- const u32 event_code[21]={0xcf820030,0x87600000,0x90000005,0x070003e5,0xaf000000,0xcf820830,0x87600000,0x90000014,
-  0x07042363,0x170086e0,0xf7800b31,0xcf621031,0xc762c070,0xf7800b32,0xcf641432,0xc764c070,0xf7811933,0xcf661833,0xc766c070,0x070b0345,0xaf000000};
- for(unsigned k=0;k<7;k++)state_word(ep+32+k*4,event_tail[k]);
- for(unsigned k=0;k<21;k++)state_word(ep+64+k*4,event_code[k]);
- state_word(target,(((pitch>>1)-1)<<16)|0x8000);state_word(target+4,uses[4].va);state_word(target+8,0);state_word(target+12,((height-1)<<12)|(pitch-1));
- state_word(transfer,0x84208180);state_word(transfer+4,0xfb200004);state_word(transfer+8,0x81200080);state_word(transfer+12,0xfb240044);
- state_word(end_aux,0);state_word(end_aux+4,0xf8348000);
- const u32 compiled_body[16]={0xa0000000,0x28a13001,0xa0400208,0x10a02001,0x01000001,0xfa100000,0x60a00200,0x28a12001,
-  0x01010100,0xfa100000,0x50800230,0x18a13201,0x50800234,0x18a13001,0xa0200000,0xfb275000};
- state_word(prefix,compiled_body[0]);state_word(prefix+4,compiled_body[1]);state_word(prefix+8,compiled_body[14]);state_word(prefix+12,compiled_body[15]);
- state_word(prefix+16,0xff00);state_word(prefix+20,0xfca7f181);
- for(unsigned k=0;k<16;k++)state_word((u8 *)views[14].cpu+k*4,compiled_body[k]);
- state_word((u8 *)views[14].cpu+64,0xa0000000);state_word((u8 *)views[14].cpu+68,0x28851001);
+ scene_images(views,uses,&use,width,height,pitch);
+ u8 *stream=(u8 *)views[6].cpu+4,stream_saved[68];memcpy(stream_saved,stream,68);
+ u8 *prefix=views[9].cpu,*draw=views[10].cpu,*close=views[13].cpu,*indices=views[11].cpu;
+ u8 *bg=(u8 *)views[7].cpu+16,*bp=(u8 *)views[16].cpu+32,*ep=(u8 *)views[8].cpu+32,*target=views[15].cpu;
+ u8 *transfer=(u8 *)views[14].cpu+96,*end_aux=(u8 *)views[14].cpu+128;
  struct remesa_gem_private_rule rules[17];
  scene_readonly_role=fault>=2&&fault<=4?(fault==2?3:fault==3?1:2):fault==6?4:fault==7?5:0;
  scene_uncached_role=fault==5?3:fault==8?6:fault==10?9:0;scene_write_role=fault==9?9:(fault==11||fault==12)?15:0;
@@ -427,5 +447,6 @@ int main(void)
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
  action_case(1280,800,14);action_case(641,479,14);action_case(1600,768,14);
  for(unsigned fault=1;fault<=14;fault++)action_case(640,640,fault);
- puts("PASS bound scene actions+controls:17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
+ CHECK(scene_service_model_runs==208);
+ puts("PASS bound scene actions+controls:208 general-service protocol cases;17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
 }
