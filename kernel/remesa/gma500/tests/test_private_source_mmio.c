@@ -16,9 +16,15 @@ typedef uint32_t u32;
 struct task_struct {unsigned id;};
 struct drm_psb_private {void *sgx_reg;};
 struct drm_device {struct drm_psb_private *dev_private;};
-struct sgx535_gma500_owner {struct drm_device *dev;};
+#include "remesa_scene_service.h"
+struct sgx535_gma500_owner {struct drm_device *dev;struct sgx535_frozen_session session;struct sgx535_fixed_service fixed_service;};
+#define REMESA_GEM_SCENE_JOB_H
+struct remesa_gem_scene_job {struct {struct drm_device *dev;} snapshot;struct sgx535_frozen_session session;struct remesa_scene_service service;};
+#ifdef REMESA_MMIO_GENERAL_MODEL
+#define REMESA_GENERAL_SCENE 1
+#endif
 struct sgx535_gma500_fixed_backend {
- struct sgx535_gma500_owner *owner;void *private_loan;
+ struct sgx535_gma500_owner *owner;struct remesa_gem_scene_job *general_scene;void *private_loan;
  bool active,power_held,fire_possible;unsigned long deadline;
 };
 struct observation {
@@ -62,7 +68,8 @@ static struct task_struct owner_task={1},wrong_task={2};
 static int token;
 static struct drm_psb_private priv={(void*)1};
 static struct drm_device dev={&priv};
-static struct sgx535_gma500_owner owner={&dev};
+static struct sgx535_gma500_owner owner={.dev=&dev};
+static struct remesa_gem_scene_job scene={.snapshot={.dev=&dev}};
 static struct sgx535_gma500_fixed_backend backend;
 static struct observation observation;
 static void fixture(void)
@@ -102,8 +109,21 @@ int main(void)
  assert(atomic_load(&write_sequence)<atomic_load(&invalidate_sequence));
  assert(remesa_private_source_write(&backend,0x80,0x1234)==-EAGAIN);
  assert(atomic_load(&writes)==1);
- for(unsigned fault=0;fault<9;fault++){
-  fixture();unsigned offset=0x80;int expected=-EAGAIN;
+#ifdef REMESA_MMIO_GENERAL_MODEL
+ fixture();backend.owner=NULL;backend.general_scene=&scene;concurrent=true;
+ assert(!pthread_create(&thread,NULL,invalidate,NULL));
+ assert(!remesa_private_source_write(&backend,0x80,0x1234));assert(!pthread_join(thread,NULL));
+ assert(atomic_load(&writes)==1&&!atomic_load(&writes_after_invalid));
+ assert(atomic_load(&write_sequence)<atomic_load(&invalidate_sequence));
+#endif
+ for(unsigned flavor=0;flavor<
+#ifdef REMESA_MMIO_GENERAL_MODEL
+ 2
+#else
+ 1
+#endif
+ ;flavor++)for(unsigned fault=0;fault<9;fault++){
+  fixture();if(flavor){backend.owner=NULL;backend.general_scene=&scene;}unsigned offset=0x80;int expected=-EAGAIN;
   if(fault==0)remesa_stream_source_poison(&token);
   if(fault==1)current=&wrong_task;
   if(fault==2)backend.power_held=false,expected=-ENODEV;

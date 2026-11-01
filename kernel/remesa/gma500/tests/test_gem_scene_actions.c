@@ -15,6 +15,7 @@
 #include "remesa_ta_index.h"
 #include "remesa_scene_layout.h"
 #include "scene_service_model.inc"
+#include "scene_backend_model.inc"
 static void state_word(u8 *p,u32 word)
 {for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
 /* Modeled inputs only. Separate tests compare validators against unchanged
@@ -192,6 +193,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    CHECK(remesa_gem_scene_job_bind_service_locked(context)==-EALREADY);
    mutex_unlock(&s->lock);
    scene_service_cases(context);
+   scene_backend_cases(context);
    context->service.started=1;CHECK(remesa_gem_scene_job_cancel(context)==-EBUSY&&context->loan.live);
    context->service.started=0; /* Model only: no actual service ran. */
    context->loan.execution_attempted=true;
@@ -447,6 +449,6 @@ int main(void)
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
  action_case(1280,800,14);action_case(641,479,14);action_case(1600,768,14);
  for(unsigned fault=1;fault<=14;fault++)action_case(640,640,fault);
- CHECK(scene_service_model_runs==208);
+ CHECK(scene_service_model_runs==208&&backend_model_runs==144);
  puts("PASS bound scene actions+controls:208 general-service protocol cases;17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
 }

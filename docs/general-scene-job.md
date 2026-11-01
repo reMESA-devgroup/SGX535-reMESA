@@ -91,6 +91,7 @@ transformations also pass. The full candidate builds but remains uninstalled.
 Service phase RETIRED alone never authorizes releasing a real GEM loan.
 Source closure, actual hardware completion, CPU/GPU visibility, root restore,
 settlement and acknowledgement remain mandatory in the native executor. The
-next component is the plan-consuming MMIO/source adapter followed by the
-ordered executor and bounded physical qualification. ISP, DATA, PDS and USSE
+[plan-consuming MMIO/source adapter](general-scene-backend.md) is now implemented
+and compiled, with modeled offline checks. The next component is the ordered
+general executor and capture dispatch, followed by bounded physical qualification. ISP, DATA, PDS and USSE
 encoders already covered by their existing oracles are not reopened here.

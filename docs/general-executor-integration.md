@@ -109,3 +109,15 @@ now bound to the real prepared context and tested with the original phase
 helpers; see the same assembly document for its exact callback contract and
 CPU-only coverage. No encoder or
 canonical fixed executor was replaced, and no GPU admission was enabled.
+
+
+## Native plan consumer connected
+
+The subsequent [general scene backend](general-scene-backend.md) implements
+item3's native stage consumer and general device/session/source identities.
+It reuses the existing MMIO, IRQ owner, boundary and capsule primitives. Its
+compiled profile now checks retained backend ABI offsets explicitly. The
+ordered executor in item4 and capture submission in item1 still need to call
+this path; no general hardware admission or new physical result follows from
+compiling or modeling the adapter. OpenGL/GLES/desktop installation remains
+part of the full objective.

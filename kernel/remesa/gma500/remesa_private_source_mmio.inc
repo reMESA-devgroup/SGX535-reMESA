@@ -1,3 +1,4 @@
+#include "remesa_scene_backend.h"
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Included in private remesa_stream_source.c, whose source_lock/valid/lost are
  * the existing authority. This is NOT a PCI remove/resource lifetime fix.
@@ -12,12 +13,12 @@ int remesa_private_source_write(struct sgx535_gma500_fixed_backend *backend,
 {
  struct drm_psb_private *dev_priv;
  unsigned long flags;int error=-EAGAIN;
- if(!backend||!backend->owner||!backend->owner->dev)return -EINVAL;
+ if(!backend||!remesa_backend_device(backend))return -EINVAL;
  if((offset&3)||offset>PSB_SGX_SIZE-sizeof(u32))return -EINVAL;
  spin_lock_irqsave(&source_lock,flags);
  if(!backend->private_loan||!valid(backend)||
     !sgx535_source_valid(&operation->boundary,backend))goto rejected;
- dev_priv=backend->owner->dev->dev_private;
+ dev_priv=remesa_backend_device(backend)->dev_private;
  if(!backend->active||!backend->power_held||!dev_priv||!dev_priv->sgx_reg){
   error=-ENODEV;goto rejected;
  }

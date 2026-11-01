@@ -7,6 +7,7 @@ registers a default-disabled, fixed-profile qualification ioctl; it is not a
 production submission interface and this tool never installs a module.
 """
 from stage_scene_service import scene_service_components
+from stage_scene_backend import backend_sources, source_code
 import argparse
 import hashlib
 import json
@@ -802,11 +803,17 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             raise ValueError('unreviewed private backend header')
         result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = private_fixed_sources(
             result['gma500_fixed_backend.c'], private_header.read_text())
-        result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1\n'
+        header_before_general = result['gma500_fixed_backend.h']
+        baseline_start = header_before_general.index('struct sgx535_gma500_fixed_backend {')
+        baseline_end = header_before_general.index('};', baseline_start)+2
+        result['remesa_backend_abi_baseline.h'] = header_before_general[baseline_start:baseline_end].replace('struct sgx535_gma500_fixed_backend {','struct remesa_private_baseline_backend {')+'\n'
+        result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'] = backend_sources(
+            result['gma500_fixed_backend.c'], result['gma500_fixed_backend.h'])
+        result['Makefile'] = result.get('Makefile', (native / 'Makefile').read_text()) + '\nccflags-y += -DREMESA_PRIVATE_IRQ_HANDOFF=1 -DREMESA_GENERAL_SCENE=1\n'
         source = (native / 'remesa_stream_source.c').read_text()
         if hashlib.sha256(source.encode()).hexdigest() != '45fbe31cfdf36c96433ffaef97167477a5f7ad090fa2f5040943aa64ac600bca':
             raise ValueError('unreviewed private stream source')
-        result['remesa_stream_source.c'] = private_stream_source(source)
+        result['remesa_stream_source.c'] = source_code(private_stream_source(source))
         result['mmu.c'] = private_mmu_flush_source(result['mmu.c'])
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
@@ -921,7 +928,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
         components.update(scene_action_components(root, native))
         components.update(scene_use_components(root))
         components.update(scene_service_components(root, native))
-        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o remesa_program_registers.o remesa_scene_service.o\n'
+        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o remesa_program_registers.o remesa_scene_service.o remesa_scene_backend_abi.o\n'
         for name in ['remesa_mmu_confinement.h', 'remesa_mmu_confinement.inc',
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
@@ -957,7 +964,8 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',
                      'remesa_private_session_lab.inc',
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
-                     'remesa_easter_egg.h', 'remesa_fixed_private.inc']:
+                     'remesa_easter_egg.h', 'remesa_fixed_private.inc',
+                     'remesa_scene_backend.h', 'remesa_scene_backend.inc', 'remesa_scene_source.inc', 'remesa_scene_backend_abi.c']:
             components[name] = (additions / name).read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
         components['remesa_private_session_lab_uapi.h'] = (root / 'include/remesa/private_session_lab_uapi.h').read_bytes()

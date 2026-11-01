@@ -41,7 +41,7 @@ def main():
     def limits():
         resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
         resource.setrlimit(resource.RLIMIT_AS, (768*1024**2,)*2)
-    for name, flags in (("native", ["-O2"]), ("ubsan", ["-O1", "-fsanitize=undefined", "-fno-sanitize-recover=all"])):
+    for name, flags in (("native", ["-O2"]), ("ubsan", ["-O1", "-fsanitize=undefined", "-fno-sanitize-recover=all"]), ("general", ["-O1", "-DREMESA_MMIO_GENERAL_MODEL=1", "-fsanitize=undefined", "-fno-sanitize-recover=all"])):
         executable = output / name
         command = ["cc", "-std=c11", "-Wall", "-Wextra", "-Werror", *flags,
                    "-I"+str(output), "-I"+str(a.baseline_module.resolve()),
@@ -53,7 +53,7 @@ def main():
             (output / (label+".log")).write_text(result.stdout+result.stderr)
             rows.append(dict(label=label, argv=argv, exit=result.returncode))
             if result.returncode or result.stderr:raise RuntimeError(label+": "+result.stderr)
-    paths = [test, root / "kernel/remesa/gma500/remesa_private_source_mmio.inc",
+    paths = [test, root / "kernel/remesa/gma500/remesa_scene_backend.h", root / "kernel/remesa/gma500/remesa_scene_service.h", root / "kernel/remesa/gma500/remesa_private_source_mmio.inc",
              a.baseline_module / "remesa_stream_source.c", a.baseline_module / "gma500_fixed_backend.c",
              a.baseline_module / "frozen_source_guard.c"]
     report = dict(status="PRIVATE_SOURCE_CPU_WRITE_LINEARIZATION_PASS", GPU_operations=0,
