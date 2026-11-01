@@ -101,6 +101,15 @@ int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *,
  * Resource-only graphics/draw/capability gates stay unchanged; this is not the
  * CPU-depth LAB mode. Rejects nonpersistent or incompatible allocation owners. */
 int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *);
+struct remesa_isp_opaque_triangle_request;
+/* Snapshot the bound opaque blend/depth state for typed GEM COLOR/Z. Uses the
+ * existing full-RGBA/disabled-or-LESS-write state contract. No default state is
+ * inferred, no upload/clear/synchronization/encoding or draw admission occurs.
+ * Disabled depth canonicalizes to ALWAYS/no-write. Rejects missing/invalid
+ * bindings, failed attachments and output aliasing. Output unchanged on error;
+ * snapshot is independent of later state deletion. Caller serializes bindings. */
+int remesa_context_linked_isp_snapshot(struct pipe_context *,
+ struct remesa_isp_opaque_triangle_request *);
 struct remesa_linked_scene_request;struct remesa_scene_capture;
 /* Compose a library scene from the bound semantic programs and raw application
  * VB/IB snapshot plus the bound typed COLOR/Z GEM attachments. options supplies

@@ -171,13 +171,18 @@ int main(int argc,char **argv)
  struct pipe_context *ctx=screen->context_create(screen,NULL,0);CHECK(ctx);
  const struct pipe_framebuffer_state fb={.width=width,.height=height,.nr_cbufs=1,.cbufs={{.texture=color,.format=PIPE_FORMAT_B8G8R8A8_UNORM}},.zsbuf={.texture=depth,.format=PIPE_FORMAT_Z24X8_UNORM}};
  ctx->set_framebuffer_state(ctx,&fb);OK(remesa_context_error(ctx));
+ const struct pipe_blend_state blend={.rt={{.colormask=PIPE_MASK_RGBA}}};
+ const struct pipe_depth_stencil_alpha_state less={.depth_enabled=true,.depth_writemask=true,.depth_func=PIPE_FUNC_LESS};
+ void *bs=ctx->create_blend_state(ctx,&blend),*ds=ctx->create_depth_stencil_alpha_state(ctx,&less);CHECK(bs&&ds);
+ ctx->bind_blend_state(ctx,bs);ctx->bind_depth_stencil_alpha_state(ctx,ds);OK(remesa_context_error(ctx));
  struct pipe_shader_state sh={.type=PIPE_SHADER_IR_NIR,.ir.nir=linked_shader(0)};void *vs=ctx->create_vs_state(ctx,&sh);CHECK(vs);ctx->bind_vs_state(ctx,vs);sh.ir.nir=linked_shader(1);void *fs=ctx->create_fs_state(ctx,&sh);CHECK(fs);ctx->bind_fs_state(ctx,fs);
  const float raw[3][12]={{width*.25f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.75f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.25f,height*.75f,.125f,1,0,0,1,0,0,0,1,0}};
  const struct pipe_resource vb_template={.target=PIPE_BUFFER,.format=PIPE_FORMAT_R8_UNORM,.bind=PIPE_BIND_VERTEX_BUFFER,.width0=sizeof raw,.height0=1,.depth0=1,.array_size=1};struct pipe_resource *vb=screen->resource_create(screen,&vb_template);CHECK(vb);ctx->buffer_subdata(ctx,vb,0,0,sizeof raw,raw);OK(remesa_context_error(ctx));
  struct pipe_vertex_buffer binding={.buffer.resource=vb};vb->reference.count++;ctx->set_vertex_buffers(ctx,1,&binding);OK(remesa_context_error(ctx));
  struct pipe_vertex_element elements[3]={0};for(unsigned i=0;i<3;i++){elements[i].src_format=PIPE_FORMAT_R32G32B32A32_FLOAT;elements[i].src_stride=48;elements[i].src_offset=i*16;}void *el=ctx->create_vertex_elements_state(ctx,3,elements);CHECK(el);ctx->bind_vertex_elements_state(ctx,el);
  struct pipe_draw_info info={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};struct pipe_draw_start_count_bias draw={.count=3};
- const struct remesa_linked_scene_request options={.state={.isp={.depth_bits_present=true,.depth_test=true,.depth_write=true,.compare=REMESA_DEPTH_LESS,.rgba_mask=15},.viewport={.framebuffer_width=width,.framebuffer_height=height,.width=width,.height=height,.depth_bits=24,.far_z=1,.path=REMESA_TA_VIEWPORT_INITIAL_ZERO}},.vertex_bank=4,.pixel_bank=3,.state_bank=4,.clear_depth=width==640?.25f:1};
+ struct remesa_linked_scene_request options={.state={.viewport={.framebuffer_width=width,.framebuffer_height=height,.width=width,.height=height,.depth_bits=24,.far_z=1,.path=REMESA_TA_VIEWPORT_INITIAL_ZERO}},.vertex_bank=4,.pixel_bank=3,.state_bank=4,.clear_depth=width==640?.25f:1};
+ OK(remesa_context_linked_isp_snapshot(ctx,&options.state.isp));
  struct pipe_fence_handle *fence=NULL;int e=remesa_context_submit_linked_scene(ctx,&info,&draw,&options,&fence);
  output(out_dir,"TIMES.bin",timings,sizeof timings);output(out_dir,"RESULT.bin",&e,sizeof e);
  if(!e||(prepare_only&&e==EOPNOTSUPP)){

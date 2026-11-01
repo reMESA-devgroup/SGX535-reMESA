@@ -1071,13 +1071,48 @@ static void bind_blend(struct pipe_context *p,void *state){bind_fixed(p,state,FI
 static void delete_blend(struct pipe_context *p,void *state){delete_fixed(p,state,FIXED_BLEND);}
 static void *create_dsa(struct pipe_context *p,const struct pipe_depth_stencil_alpha_state *state)
 {
- int error=s(p->screen)->gears_runtime?remesa_validate_gears_dsa(state):remesa_validate_dsa(state);
+ /* The typed GEM path shares the already qualified opaque LESS/write
+  * contract. This admits state ownership only, never ordinary draw or CPU Z. */
+ int error=(s(p->screen)->gears_runtime||s(p->screen)->linked_attachment_storage)?
+  remesa_validate_gears_dsa(state):remesa_validate_dsa(state);
  struct fixed *out=create_fixed(p,FIXED_DSA,error,false,false);
  if(out&&state){out->depth_enabled=state->depth_enabled;out->depth_write=state->depth_writemask;out->depth_func=state->depth_func;}
  return out;
 }
 static void bind_dsa(struct pipe_context *p,void *state){bind_fixed(p,state,FIXED_DSA);}
 static void delete_dsa(struct pipe_context *p,void *state){delete_fixed(p,state,FIXED_DSA);}
+int remesa_context_linked_isp_snapshot(struct pipe_context *p,
+ struct remesa_isp_opaque_triangle_request *out)
+{
+ if(!p||p->draw_vbo!=draw||!out||
+    (uintptr_t)out%_Alignof(struct remesa_isp_opaque_triangle_request)||
+    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(!sc->linked_attachment_storage)return ENOTSUP;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!ctx->target||!ctx->depth_target)return ENODATA;
+ struct pipe_resource *owners[]={ctx->target,ctx->depth_target,ctx->vb.buffer.resource,
+  ctx->second_vb.buffer.resource,ctx->third_vb.buffer.resource,
+  ctx->vertex_constants,ctx->fragment_constants};
+ for(unsigned i=0;i<sizeof(owners)/sizeof(owners[0]);i++)if(owners[i]){
+  uintptr_t base=(uintptr_t)owners[i],at=(uintptr_t)out;
+  if(at<base+sizeof(struct resource)&&base<at+sizeof(*out))return EINVAL;
+ }
+ if(r(ctx->target)->write_error)return r(ctx->target)->write_error;
+ if(r(ctx->depth_target)->write_error)return r(ctx->depth_target)->write_error;
+ if(ctx->invalid_fixed[FIXED_BLEND]||ctx->invalid_fixed[FIXED_DSA])return EINVAL;
+ struct fixed *blend=ctx->bound_fixed[FIXED_BLEND],*depth=ctx->bound_fixed[FIXED_DSA];
+ if(!blend||!depth)return ENODATA;
+ if(depth->depth_enabled&&(!depth->depth_write||depth->depth_func!=PIPE_FUNC_LESS))return ENOTSUP;
+ /* create_blend admitted only opaque/full RGBA; disabled depth ignores both
+  * the API comparison operand and its write mask. No ISA/register encoding. */
+ const struct remesa_isp_opaque_triangle_request value={
+  .depth_bits_present=true,.depth_test=depth->depth_enabled,
+  .depth_write=depth->depth_enabled&&depth->depth_write,
+  .compare=depth->depth_enabled?REMESA_DEPTH_LESS:REMESA_DEPTH_ALWAYS,.rgba_mask=15};
+ *out=value;return 0;
+}
 static void *create_raster(struct pipe_context *p,const struct pipe_rasterizer_state *state)
 {
  if(s(p->screen)->gears_runtime){
@@ -2392,6 +2427,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+int remesa_context_linked_isp_snapshot(struct pipe_context *p,struct remesa_isp_opaque_triangle_request *out)
+{(void)p;(void)out;return ENOTSUP;}
 int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_context_prepare_linked_scene(struct pipe_context *p,const struct pipe_draw_info *i,

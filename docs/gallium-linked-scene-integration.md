@@ -97,3 +97,28 @@ Ordinary GL state translation, dynamic production admission, repeated sessions,
 load/preserve semantics, API coverage, desktop presentation and installation
 remain separate unfinished work. This change claims neither sustained FPS nor
 OpenGL 2.1/GLES 2.0 conformance.
+
+## Bound opaque depth state
+
+The typed attachment mode now admits the existing disabled-depth or LESS/write
+DSA contract at `create_depth_stencil_alpha_state`, using the same validator
+already used by the qualified gears state. Legacy and CPU-LAB admission stay
+unchanged. Previously, this frontend rejected enabled depth even though the
+scene's ISP encoder and physical depth execution were already available.
+
+`remesa_context_linked_isp_snapshot` derives the existing typed ISP request from
+bound opaque/full-RGBA blend and depth objects, paired with COLOR/Z attachments.
+It canonicalizes disabled depth to ALWAYS/no-write, preserves latched invalid
+state errors, rejects failed contexts/attachments and output aliases, and needs
+no GPU operation, allocation, mapping or synchronization. The returned value
+owns no state pointers. The native LAB client now binds those actual Gallium
+objects and uses the snapshot instead of constructing a literal ISP request.
+
+Evidence is in
+`/home/gama/sgx535-offline/gallium-bound-isp-20261101/v1/FINAL_INTEGRATION_RESULT.json`:
+22 actual Gallium/NIR context cases, the existing context regression, ten
+native/UBSan legacy suites, the standalone stub and six Linux-transport client
+cases. All previous packet/placement and READ images remain byte-identical in
+four storage sizes. These new binding tests use modeled GPU receipts; the
+earlier physical qualification remains the physical baseline, not a new physical
+approval of this frontend change. Ordinary draw/caps remain unchanged.
