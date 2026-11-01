@@ -10,6 +10,7 @@
 #include "remesa_ta_scene.h"
 #include "remesa/scene_dpm.h"
 #include "remesa/scene_use_limits.h"
+#include "remesa/ta_references.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -765,6 +766,20 @@ struct remesa_persistent_scene_use {
 };
 int remesa_persistent_scene_use_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_use *);
+/* Resolve the exact emitted CPU TA shadow against this frozen typed graph.
+ * minimum_bytes comes from TA syntax; object_bytes is the committed producer
+ * extent. Neither is a measured GPU fetch length. No provider readback/hash,
+ * initialization, instruction certification or native admission. */
+struct remesa_persistent_scene_ta {
+ uint64_t owner,serial;
+ uint32_t draw_count,reference_count,incomplete;
+ struct {
+  uint64_t generation;
+  uint32_t handle,byte_offset,minimum_bytes,object_bytes,kind,index_count,draw;
+ } references[REMESA_TA_REFERENCE_MAX];
+};
+int remesa_persistent_scene_ta_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_ta *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

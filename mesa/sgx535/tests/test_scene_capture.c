@@ -19,6 +19,8 @@ static void unchanged(struct remesa_device *d,struct remesa_scene_capture c,int 
 {
  struct remesa_persistent_scene_footprint r,saved;memset(&r,0xa5,sizeof r);saved=r;
  CHECK(remesa_persistent_scene_capture_snapshot(d,c,&r)==error&&!memcmp(&r,&saved,sizeof r));
+ struct remesa_persistent_scene_ta ta,ta_saved;memset(&ta,0xa5,sizeof ta);ta_saved=ta;
+ CHECK(remesa_persistent_scene_ta_snapshot(d,c,&ta)==error&&!memcmp(&ta,&ta_saved,sizeof ta));
  controls_error(d,c,error);
  CHECK(remesa_persistent_scene_capture_release(d,c)==error);
 }
@@ -61,6 +63,7 @@ int main(void)
   }
   struct remesa_persistent_scene_controls control_reference={0},control={0};
   struct remesa_persistent_scene_use use_reference={0},use={0};
+  struct remesa_persistent_scene_ta ta_reference={0},ta={0};
   struct remesa_scene_capture tokens[REMESA_PROVIDER_MAX_JOBS],bad,saved;
   memset(&bad,0xa5,sizeof bad);saved=bad;
   /* Raw REGION remains unreadable until GPU initialization. Exercise the
@@ -78,6 +81,21 @@ int main(void)
    CHECK(!remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&tokens[i]));
    CHECK(tokens[i].owner==4100+v&&tokens[i].serial==i+1&&!tokens[i].reserved&&tokens[i].slot==i);
    CHECK(!remesa_persistent_scene_capture_snapshot(&d,tokens[i],&r)&&!memcmp(&r,&expected,sizeof r));
+   CHECK(!remesa_persistent_scene_ta_snapshot(&d,tokens[i],&ta));
+   CHECK(ta.owner==tokens[i].owner&&ta.serial==tokens[i].serial&&ta.draw_count==1&&ta.reference_count==7&&ta.incomplete==31);
+   if(!i){
+    ta_reference=ta;
+    for(unsigned q=0;q<ta.reference_count;q++){
+     unsigned a=0;for(;a<expected.allocation_count&&expected.allocations[a].handle!=ta.references[q].handle;a++);
+     CHECK(a<expected.allocation_count&&expected.allocations[a].generation==ta.references[q].generation&&
+      expected.allocations[a].access==REMESA_ACCESS_READ&&ta.references[q].minimum_bytes<=ta.references[q].object_bytes&&
+      ta.references[q].byte_offset+ta.references[q].object_bytes<=expected.allocations[a].logical_bytes&&ta.references[q].kind==q+1);
+    }
+    CHECK(ta.references[0].object_bytes==60&&ta.references[1].object_bytes==6&&ta.references[2].object_bytes==64&&
+     ta.references[3].object_bytes==60&&ta.references[4].object_bytes==6&&ta.references[5].object_bytes==64&&ta.references[6].object_bytes==60);
+    CHECK(remesa_persistent_scene_ta_snapshot(&d,tokens[i],(void *)((uint8_t *)&ta+1))==EINVAL);
+    CHECK(remesa_persistent_scene_ta_snapshot(&d,tokens[i],p[0])==EINVAL);
+   }else{ta.serial=ta_reference.serial;CHECK(!memcmp(&ta,&ta_reference,sizeof ta));}
    if(event_profile){
     CHECK(!remesa_persistent_scene_use_snapshot(&d,tokens[i],&use));
     CHECK(use.owner==tokens[i].owner&&use.serial==tokens[i].serial&&use.incomplete==31&&use.entry_count==10&&use.bank_mask==24);
@@ -157,6 +175,8 @@ int main(void)
   CHECK(remesa_persistent_close(&d)==EBUSY&&f.destroys==0);
   for(unsigned repeat=0;repeat<100;repeat++){
    CHECK(!remesa_persistent_scene_capture_snapshot(&d,tokens[0],&r));CHECK(!memcmp(&r,&expected,sizeof r));
+   CHECK(!remesa_persistent_scene_ta_snapshot(&d,tokens[0],&ta)&&ta.serial==tokens[0].serial);
+   ta.serial=ta_reference.serial;CHECK(!memcmp(&ta,&ta_reference,sizeof ta));
    if(event_profile){
     CHECK(!remesa_persistent_scene_use_snapshot(&d,tokens[0],&use)&&use.serial==tokens[0].serial);
     use.serial=use_reference.serial;CHECK(!memcmp(&use,&use_reference,sizeof use));

@@ -15,6 +15,7 @@
 #include <string.h>
 #define PAGE_BYTES 4096u
 _Static_assert(REMESA_SCENE_USE_ENTRIES<=REMESA_SCENE_USE_MAX,"native USE reference capacity");
+_Static_assert(REMESA_LINKED_BODY_MAX_DRAWS==REMESA_TA_REFERENCE_MAX_DRAWS,"TA reference capacity");
 struct linked_program {
  struct remesa_shader_linkage linkage;
  size_t offset[2],bytes[2],reserved[2];
@@ -32,7 +33,10 @@ struct linked_body {
  size_t bytes;
  uint8_t commands[REMESA_LINKED_BODY_MAX_DRAWS*28+12];
 };
-struct linked_ta {struct memory *prefix,*body;size_t bytes;};
+struct linked_ta {
+ struct memory *prefix,*body;size_t bytes;
+ uint8_t commands[40+28*REMESA_LINKED_BODY_MAX_DRAWS];
+};
 struct linked_dpm {struct memory *table,*parameter;};
 struct linked_targets {struct memory *ta,*color,*depth;uint32_t pitch;};
 struct linked_background {
@@ -2497,7 +2501,9 @@ int remesa_persistent_linked_ta_prepare(struct remesa_device *device,void *prefi
  size_t bytes=28+body->linked_body->bytes;
  memcpy(image+28,body->linked_body->commands,body->linked_body->bytes);
  struct linked_ta *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
- *owned=(struct linked_ta){prefix,body,bytes};void *object=NULL;size_t before=d->allocated;
+ *owned=(struct linked_ta){.prefix=prefix,.body=body,.bytes=bytes};
+ memcpy(owned->commands,image,bytes);
+ void *object=NULL;size_t before=d->allocated;
  e=allocate_class(d,bytes,&object,REMESA_VA_DEFAULT);
  if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
  struct memory *b=object;b->linked_ta=owned;prefix->refs++;body->refs++;
@@ -3263,6 +3269,90 @@ int remesa_persistent_scene_use_snapshot(const struct remesa_device *device,
  }
  if(!value.entry_count||!value.bank_mask)return ENODATA;
  *out=value;return 0;
+}
+struct scene_ta_context {
+ struct persistent *device;struct scene_capture *capture;
+ struct remesa_persistent_scene_ta *result;struct memory *state;
+};
+static int scene_ta_reference(void *context,const struct remesa_ta_reference *ref)
+{
+ struct scene_ta_context *ctx=context;struct persistent *d=ctx->device;
+ struct scene_capture *c=ctx->capture;struct remesa_persistent_scene_ta *out=ctx->result;
+ struct memory *b=NULL,*ta=c->parents[0]->linked_background->targets->linked_targets->ta;
+ struct linked_ta *t=ta->linked_ta;size_t offset=0,object_bytes=ref->minimum_bytes;unsigned i;
+ for(i=0;i<c->footprint.allocation_count;i++){
+  const uint64_t va=c->footprint.allocations[i].gpu_va;
+  if(ref->address<va||(uint64_t)ref->address-va>c->footprint.allocations[i].logical_bytes||
+     ref->minimum_bytes>c->footprint.allocations[i].logical_bytes-((uint64_t)ref->address-va))continue;
+  if(c->footprint.allocations[i].access!=REMESA_ACCESS_READ)return EACCES;
+  for(unsigned k=0;k<c->count;k++)if(c->held[k]->handle==c->footprint.allocations[i].handle){b=c->held[k];break;}
+  if(b&&(b->token.generation!=c->footprint.allocations[i].generation||b->va!=va))return ESTALE;
+  offset=(uint64_t)ref->address-va;break;
+ }
+ if(!b)return ENOENT;
+ int e=linked_live(d,b,false);if(e)return e;
+ switch(ref->kind){
+ case REMESA_TA_REF_PREFIX_STATE:
+ case REMESA_TA_REF_PREFIX_VERTEX:
+ case REMESA_TA_REF_PREFIX_INDEX:{
+  const struct remesa_persistent_zclear_prefix_backing *p=t->prefix->zclear_prefix;
+  unsigned which=ref->kind==REMESA_TA_REF_PREFIX_STATE?3:0;
+  if(b!=t->prefix)return EINVAL;
+  if(ref->kind==REMESA_TA_REF_PREFIX_INDEX){if(offset!=p->index_offset||ref->index_count!=p->index_count)return EINVAL;}
+  else{if(offset!=p->pds_offset[which])return EINVAL;object_bytes=p->pds_bytes[which];}
+  break;
+ }
+ case REMESA_TA_REF_DRAW_STATE:{
+  const struct linked_body *body=t->body->linked_body;bool found=false;
+  for(unsigned k=1;k<body->dependency_count;k++)if(body->dependencies[k]==b)found=true;
+  if(!found||b->state_kind!=REMESA_PERSISTENT_STATE_LINKED_DRAW||offset!=b->state_pds_offset)return EINVAL;
+  object_bytes=60;ctx->state=b;break;
+ }
+ case REMESA_TA_REF_DRAW_INDEX:{
+  if(!ctx->state||!ctx->state->linked_dependency||!ctx->state->linked_dependency->linked_pds)return EINVAL;
+  struct memory *geometry=ctx->state->linked_dependency->linked_pds->geometry;
+  if(b!=geometry||!b->linked_geometry)return EINVAL;
+  const struct linked_geometry *g=b->linked_geometry;
+  if(offset<g->index_offset||((offset-g->index_offset)&1)||offset-g->index_offset>g->index_bytes||
+     ref->minimum_bytes>g->index_bytes-(offset-g->index_offset))return ERANGE;
+  break;
+ }
+ case REMESA_TA_REF_DRAW_VERTEX:{
+  if(!ctx->state||b!=ctx->state->linked_dependency||!b->linked_pds)return EINVAL;
+  struct remesa_persistent_linked_pds_backing p;
+  e=linked_pds_metadata(d,b,false,&p);if(e)return e;
+  if(offset!=p.object_offset[0])return EINVAL;
+  object_bytes=p.image_bytes[0];break;
+ }
+ case REMESA_TA_REF_CLOSE_STATE:
+  if(b!=t->body->linked_body->dependencies[0]||!b->scene_close||offset!=b->state_pds_offset)return EINVAL;
+  object_bytes=60;break;
+ default:return EINVAL;
+ }
+ if(object_bytes<ref->minimum_bytes||offset>b->bytes||object_bytes>b->bytes-offset||
+    out->reference_count==REMESA_TA_REFERENCE_MAX)return ERANGE;
+ unsigned n=out->reference_count++;
+ out->references[n].generation=b->token.generation;out->references[n].handle=b->handle;
+ out->references[n].byte_offset=offset;out->references[n].minimum_bytes=ref->minimum_bytes;
+ out->references[n].object_bytes=object_bytes;out->references[n].kind=ref->kind;
+ out->references[n].index_count=ref->index_count;out->references[n].draw=ref->draw;
+ return 0;
+}
+int remesa_persistent_scene_ta_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_persistent_scene_ta *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_ta))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ struct memory *ta=c->parents[0]->linked_background->targets->linked_targets->ta;
+ e=linked_live(d,ta,false);if(e)return e;
+ if(!ta->linked_ta)return EINVAL;
+ struct remesa_persistent_scene_ta value={.owner=token.owner,.serial=token.serial,.incomplete=c->footprint.incomplete};
+ struct scene_ta_context ctx={d,c,&value,NULL};struct remesa_ta_reference_counts counts;
+ e=remesa_ta_references_walk(ta->linked_ta->commands,ta->linked_ta->bytes,scene_ta_reference,&ctx,&counts);if(e)return e;
+ if(counts.references!=value.reference_count||counts.draws!=c->footprint.draw_count)return ESTALE;
+ value.draw_count=counts.draws;*out=value;return 0;
 }
 int remesa_persistent_scene_capture_release(struct remesa_device *device,
  struct remesa_scene_capture token)

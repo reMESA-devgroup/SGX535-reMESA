@@ -87,3 +87,8 @@ Frozen captures now expose the complete owned USE entry windows and bank
 settings, with corresponding held-ID/window validation in the kernel; see
 [native-scene-use.md](native-scene-use.md). This is numeric ownership metadata,
 not validation of instruction contents or permission to execute the scene.
+
+The actual TA input now has a selected-grammar parser and retained-reference
+resolution, including typed userspace graph binding; see
+[native-scene-ta-references.md](native-scene-ta-references.md). PDS/USE contents,
+indirect fetch bounds and ordered general native execution remain incomplete.
