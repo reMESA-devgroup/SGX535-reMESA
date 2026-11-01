@@ -1,5 +1,14 @@
 # Capture metadata connected to native job preparation
 
+Current integration status (2026-11-01): the bounded admission, capture packet,
+general service/backend, ordered executor and existing initialization/depth
+finalization are connected and physically verified at1280x800 and640x640, with
+full COLOR/Z24 oracle and retirement. See
+[depth finalization](general-scene-depth-finalization.md) for current evidence.
+Descriptions of missing transport/adapter work below record earlier checkpoints;
+do not reimplement those completed components. Normal GL/GLES provider dispatch,
+complete API/resource behavior, desktop integration and installation remain open.
+
 `remesa_persistent_scene_packet_snapshot()` derives a compact submission
 snapshot from the existing frozen capture and its actual typed owners. It
 reuses the controls, USE and vertex snapshots, target metadata, original clear

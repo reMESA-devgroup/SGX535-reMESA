@@ -34,7 +34,30 @@ Models make no GPU claim. The first two producer attempts are preserved:
 one runner environment-key error and one obsolete unfinalized-only test
 expectation; neither required weakening a driver gate.
 
-Physical validation is pending. This component does not establish complete
-OpenGL/GLES, continuous rendering, FPS or whole-desktop acceleration. The
-existing physical GLXGEARS path is preserved. No hashes, readbacks or other LAB
-diagnostics were added to the normal FAST loop.
+Both1280x800 and640x640 passed in separate fresh recoverable boots with the
+same module. Physical evidence is in `v1/PHYSICAL_RESULT.json` and
+`v2-640/PHYSICAL_RESULT.json`. Each verifies core01130000/rev00010201, one
+submission, phase9/ledger7, completion/retirement, unchanged12 READ inputs,
+4 guards and21 object INFO records. The unchanged prelaunch analytical oracle
+finds zero COLOR and Z24 mismatches across1024000 pixels at1280 and409600 at640.
+The640 case has320 exact edge ties, checked for coherent COLOR/Z coverage;
+defined Z24 permits one quantization unit and ignores undefined X8. Source
+closure, all seven controls N, memory cleanup and return to stock are verified.
+The640 raster208/TA56 trace also matches the prelaunch output of the existing
+Mesa encoder, whose output reproduces the physical1280 trace exactly.
+
+| Size | CPU publication flush | TA completion observed | Raster completion observed | Execute ioctl |
+| --- | --- | --- | --- | --- |
+|1280x800|55.782303 ms|1.549080 ms|16.395381 ms|185.990970 ms|
+|640x640|52.244353 ms|0.785784 ms|6.132065 ms|163.655448 ms|
+
+These are isolated cold LAB operations. Completion intervals start before the
+corresponding dispatch and include host/observation effects; they are not
+hardware GPU counters, sustained throughput, a before/after performance result
+or GLXGEARS FPS. The normal FAST path received no new diagnostic cost.
+
+This component does not establish complete OpenGL/GLES, continuous rendering,
+FPS or whole-desktop acceleration. The existing physical GLXGEARS path is
+preserved and was not remeasured. Normal frontend/provider dispatch and its
+production session/resource lifecycle remain to be integrated with this now
+physically qualified general-scene path; do not reopen the completed encoders.

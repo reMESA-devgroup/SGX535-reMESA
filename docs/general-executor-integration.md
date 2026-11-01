@@ -1,5 +1,14 @@
 # General executor integration: reuse the completed rendering components
 
+Current integration status (2026-11-01): the bounded admission, capture packet,
+general service/backend, ordered executor and existing initialization/depth
+finalization are connected and physically verified at1280x800 and640x640, with
+full COLOR/Z24 oracle and retirement. See
+[depth finalization](general-scene-depth-finalization.md) for current evidence.
+Descriptions of missing transport/adapter work below record earlier checkpoints;
+do not reimplement those completed components. Normal GL/GLES provider dispatch,
+complete API/resource behavior, desktop integration and installation remain open.
+
 Reviewed against the current source on 2026-11-01, following the user's explicit
 instruction to integrate the existing ISP, DATA, PDS and USSE components rather
 than restart their implementation or reverse engineering. Earlier shorthand
@@ -23,7 +32,7 @@ components for the next integration; general ISA decoding is not its prerequisit
 They do not themselves claim complete GLES2/GL2.1, textures, desktop integration
 or installation.
 
-## Concrete gaps in the current call graph
+## Call-graph gaps at the initial review (historical)
 
 1. **Capture to native job.** The capture APIs deliberately reserve no GPU
    operation and do not enter provider dispatch. The general job serializer and

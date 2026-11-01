@@ -1,5 +1,14 @@
 # Real Mesa images through the general kernel scene path
 
+Current integration status (2026-11-01): the bounded admission, capture packet,
+general service/backend, ordered executor and existing initialization/depth
+finalization are connected and physically verified at1280x800 and640x640, with
+full COLOR/Z24 oracle and retirement. See
+[depth finalization](general-scene-depth-finalization.md) for current evidence.
+Descriptions of missing transport/adapter work below record earlier checkpoints;
+do not reimplement those completed components. Normal GL/GLES provider dispatch,
+complete API/resource behavior, desktop integration and installation remain open.
+
 The producer/consumer integration test now feeds actual bytes from the existing
 Mesa owner constructors into the retained kernel memory service, full scene
 closure, ordered executor and explicit retirement. It preserves every GPU
