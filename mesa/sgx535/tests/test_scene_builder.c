@@ -22,6 +22,7 @@ static enum remesa_dispatch complete(void *priv,const struct remesa_gpu_scene_su
  (void)priv;CHECK(remesa_scene_packet_valid(s->packet)&&s->packet->binding_count==17);
  *r=(struct remesa_gpu_scene_receipt){.context=s->context,.operation=s->operation,.retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
 }
+#ifndef REMESA_SCENE_BUILDER_FIXTURE
 int main(int argc,char **argv)
 {
  CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<13);
@@ -69,3 +70,5 @@ int main(int argc,char **argv)
  else {CHECK(!remesa_persistent_scene_capture_release(&d,capture));CHECK(f.creates-f.destroys==2);d.ops->destroy_bo(d.priv,color);d.ops->destroy_bo(d.priv,depth);}
  CHECK(f.creates==f.destroys&&f.pins==f.unpins);CHECK(!remesa_persistent_close(&d));puts("PASS existing driver encoders compose frontend-owned attachments/raw vertices into complete frozen scene, no attachment/DPM CPU clear and complete cleanup; GPU0");
 }
+
+#endif

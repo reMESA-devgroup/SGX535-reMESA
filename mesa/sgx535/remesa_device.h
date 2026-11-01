@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "remesa/draw_packet.h"
+struct remesa_device;
+struct remesa_linked_scene_request;struct remesa_scene_capture;
 struct remesa_gears_runtime_ops;
 struct remesa_shader_draw_programs;
 struct remesa_shader_draw_inputs;
@@ -60,6 +62,21 @@ struct remesa_device_ops {
  /* Release frontend token ownership. Submitted backing must remain owned by
   * the backend through retirement/quarantine; destruction cannot imply it. */
  void (*destroy_shader_programs)(void *,void *);
+ /* Optional typed attachment/scene preparation, independent of ordinary draw.
+  * Use the actual owning device object so the backend verifies its identity;
+  * no fabricated owner/context or generic allocation fallback is permitted.
+  * These hooks allocate/prepare only, never establish graphics capabilities. */
+ int (*validate_attachment_storage)(const struct remesa_device *);
+ int (*allocate_color_attachment)(struct remesa_device *,uint32_t,uint32_t,void **);
+ int (*allocate_depth_attachment)(struct remesa_device *,uint32_t,uint32_t,uint32_t,void **);
+ int (*prepare_linked_scene)(struct remesa_device *,const struct remesa_linked_scene_request *,struct remesa_scene_capture *);
+ /* Explicit scene execution: success consumes the capture; an error with no
+  * fence is NOT_ISSUED and leaves it releasable. Any error fence or
+  * EOWNERDEAD means uncertain execution: retain/quarantine backend ownership.
+  * These hooks do not admit ordinary draws or change graphics capabilities. */
+ int (*submit_linked_scene)(struct remesa_device *,struct remesa_scene_capture,void **);
+ int (*release_linked_scene)(struct remesa_device *,struct remesa_scene_capture);
+
 };
 /* Explicit target load contract. Current physical executor is REPLACE only.
  * PRESERVE is permitted solely for opt-in offline fixtures until an actual

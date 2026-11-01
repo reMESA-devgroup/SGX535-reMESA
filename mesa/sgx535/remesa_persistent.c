@@ -737,6 +737,12 @@ static const struct remesa_device_ops device_ops={
  .prepare_shader_programs=prepare_shader_programs,
  .submit_shader_programs=submit_shader_programs,
  .destroy_shader_programs=destroy_shader_programs,
+ .validate_attachment_storage=remesa_persistent_validate_attachment_storage,
+ .allocate_color_attachment=remesa_persistent_color_attachment_allocate,
+ .allocate_depth_attachment=remesa_persistent_depth_allocate,
+ .prepare_linked_scene=remesa_persistent_linked_scene_prepare,
+ .submit_linked_scene=remesa_persistent_scene_capture_submit,
+ .release_linked_scene=remesa_persistent_scene_capture_release,
 };
 int remesa_persistent_open(struct remesa_device *device,const struct remesa_persistent_config *cfg)
 {
@@ -773,6 +779,26 @@ int remesa_persistent_open(struct remesa_device *device,const struct remesa_pers
  if(capacity>cfg->va_end-cfg->va_start)capacity=cfg->va_end-cfg->va_start;
  if(!limits.max_resource_bytes || limits.max_resource_bytes>capacity)limits.max_resource_bytes=capacity;
  *device=(struct remesa_device){.ops=&device_ops,.priv=d,.offline_test_backend=cfg->offline_test_backend,.qualified_hardware_backend=cfg->qualified_hardware_backend,.resource_only_backend=cfg->resource_only_backend,.framebuffer_mode=REMESA_FRAMEBUFFER_REPLACE,.resource_limits=limits};return 0;
+}
+int remesa_persistent_validate_attachment_storage(const struct remesa_device *device)
+{
+ if(!device||device->ops!=&device_ops||!device->priv)return EINVAL;
+ const struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ const struct remesa_persistent_va_range range=placement_range(d,REMESA_VA_SURFACE);
+ const uint32_t alignment=device->resource_limits.row_alignment;
+ if(alignment<128||alignment>8192||(alignment&(alignment-1)))return ENOTSUP;
+ if(!device->resource_only_backend||!d->cfg.resource_only_backend||
+    range.start<UINT64_C(0x40000000)||range.end>UINT64_C(0x100000000))return ENOTSUP;
+ return 0;
+}
+int remesa_persistent_color_attachment_allocate(struct remesa_device *device,
+ uint32_t width,uint32_t height,void **out)
+{
+ int e=remesa_persistent_validate_attachment_storage(device);if(e)return e;
+ struct remesa_resource_layout layout;
+ e=remesa_resource_layout(&device->resource_limits,width,height,4,&layout);if(e)return e;
+ return remesa_persistent_allocate_placed(device,layout.bytes,REMESA_VA_SURFACE,out);
 }
 int remesa_persistent_collect(struct remesa_device *device)
 {

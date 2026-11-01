@@ -101,6 +101,14 @@ struct remesa_persistent_config {
  * qualification is performed here. The real GEM/MMU binding is not supplied
  * by this library. No mode silently falls back to host rasterization. */
 int remesa_persistent_open(struct remesa_device *,const struct remesa_persistent_config *);
+/* Read-only identity/placement check for the frontend's explicit typed GEM
+ * attachment storage mode. No allocation, dispatch or graphics capability. */
+int remesa_persistent_validate_attachment_storage(const struct remesa_device *);
+/* BGRA8 storage in the existing surface VA class, with the device's checked
+ * layout/row alignment. No content initialization or render admission. */
+int remesa_persistent_color_attachment_allocate(struct remesa_device *,uint32_t width,uint32_t height,void **);
+
+
 /* Explicit native-copy opt-in, before any resources/shaders/captures exist.
  * Leaves draw admission and resource-only flags unchanged. Callback uses the
  * same cfg.priv and ownership as the memory provider. No reentry permitted. */

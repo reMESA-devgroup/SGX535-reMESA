@@ -97,6 +97,34 @@ struct remesa_linked_vertex_inputs;
 int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  struct remesa_linked_vertex_inputs **);
+/* Before children, explicitly allow typed persistent COLOR/Z GEM storage.
+ * Resource-only graphics/draw/capability gates stay unchanged; this is not the
+ * CPU-depth LAB mode. Rejects nonpersistent or incompatible allocation owners. */
+int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *);
+struct remesa_linked_scene_request;struct remesa_scene_capture;
+/* Compose a library scene from the bound semantic programs and raw application
+ * VB/IB snapshot plus the bound typed COLOR/Z GEM attachments. options supplies
+ * only the existing typed ISP/viewport/bank/clear contract; attachment, size,
+ * linkage and geometry fields MUST be zero and are derived here. It remains
+ * the native caller's responsibility to authenticate the selected state/load
+ * profile: this preparation is not ordinary pipe_draw_vbo or GL admission.
+ * Fresh attachments only; existing content/preserve is refused. No CPU vertex
+ * execution, attachment clear, submission or capability change. All mapping
+ * leases end before the frozen capture is returned. External serialization. */
+int remesa_context_prepare_linked_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *);
+/* Explicit cold-scene execution using the same bound inputs as preparation.
+ * Preallocates one fence shared by COLOR/Z and the context, reserves both pass
+ * transitions before dispatch, and leaves resources unchanged on NOT_ISSUED.
+ * Uncertain issuance poisons both attachments/context and retains backend
+ * quarantine. Success returns one owned pipe fence; normal transfers wait for
+ * authenticated retirement/publication. Caller serializes the entire call.
+ * This is not ordinary draw_vbo admission or an OpenGL capability claim. */
+int remesa_context_submit_linked_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
+
 struct remesa_shader_host_pipeline_request;
 struct remesa_shader_host_pipeline;
 /* Snapshot the currently bound owned semantic pair into the original host
