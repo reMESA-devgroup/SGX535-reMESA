@@ -51,6 +51,16 @@ static void ta_setup(struct fixture *f,struct remesa_device *d,unsigned context,
  struct remesa_shader_program vs=vertex(2),fs=fragment(1);struct remesa_shader_linkage link;
  CHECK(!remesa_shader_linkage_prepare(&vs,&fs,&link));const uint32_t banks[2]={4,3};
  unsigned char raw[144];for(unsigned n=0;n<144;n++)raw[n]=(unsigned char)(n*43+7);
+ /* Optional offline export fixture: finite bounded P/N/L inputs through the
+  * same real owner/encoder path. No CPU vertex transformation or rendering. */
+ if(getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_FINITE_VERTICES")){
+  const float vertices[3][12]={
+   {width*.25f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},
+   {width*.75f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},
+   {width*.25f,height*.75f,.125f,1,0,0,1,0,0,0,1,0}};
+  memcpy(raw,vertices,sizeof raw);
+ }
+
  const struct remesa_linked_geometry_input in={.vertices=raw,.vertex_bytes=144,.vertex_count=3};
  CHECK(!remesa_persistent_linked_program_prepare(d,&link,banks,code));
  CHECK(!remesa_persistent_linked_geometry_prepare(d,&in,geometry));

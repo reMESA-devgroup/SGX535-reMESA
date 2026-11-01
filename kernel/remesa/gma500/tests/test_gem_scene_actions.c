@@ -101,12 +101,13 @@ static void scene_images(struct remesa_memory_view views[17],const struct remesa
 }
 static u32 scene_storage(struct remesa_gem_memory *s,u64 size,u64 address)
 {
- struct remesa_memory_request r={.version=1,.action=REMESA_MEM_CREATE,.context=77,.bytes=size};
+ struct remesa_memory_request r={.version=1,.action=REMESA_MEM_CREATE,.context=s->context,.bytes=size};
  CHECK(!remesa_gem_memory_request(s,&file,&r));u32 id=r.id;
- r=(struct remesa_memory_request){.version=1,.action=REMESA_MEM_PIN,.context=77,.id=id};
+ r=(struct remesa_memory_request){.version=1,.action=REMESA_MEM_PIN,.context=s->context,.id=id};
  CHECK(!remesa_gem_memory_request(s,&file,&r));r.action=REMESA_MEM_MAP;r.va=address;
  CHECK(!remesa_gem_memory_request(s,&file,&r));return id;
 }
+#include "scene_replay_model.inc"
 static void action_case(unsigned width,unsigned height,unsigned fault)
 {
  struct test_mmu mmu={.has_clflush=true,.pd={.driver=&driver}};
@@ -458,6 +459,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(int argc,char **argv)
 {
+ if(argc==3&&!strcmp(argv[1],"--replay")){scene_replay(argv[2]);return 0;}
  if(argc==3){CHECK(!strcmp(argv[1],"--execute-fault"));execute_fault=(unsigned)strtoul(argv[2],NULL,10);CHECK(execute_fault>=1&&execute_fault<=10);action_case(640,640,14);CHECK(0);}
  CHECK(argc==1);
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);

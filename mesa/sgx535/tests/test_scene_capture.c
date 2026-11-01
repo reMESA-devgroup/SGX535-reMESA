@@ -8,6 +8,7 @@
 #include "test_linked_background.c"
 #include <unistd.h>
 #include <sys/wait.h>
+#include "scene_capture_export.inc"
 static void controls_error(struct remesa_device *d,struct remesa_scene_capture token,int error)
 {
  struct remesa_persistent_scene_controls out,saved;memset(&out,0xa5,sizeof out);saved=out;
@@ -90,6 +91,7 @@ int main(void)
     CHECK(!remesa_persistent_scene_packet_snapshot(&d,tokens[i],&packet));
     CHECK(remesa_scene_packet_valid(&packet)&&packet.owner==tokens[i].owner&&packet.serial==tokens[i].serial);
     CHECK(packet.binding_count==17&&packet.use_count==10&&packet.window_count==2);
+    if(!i&&raw_region)scene_capture_export(&f,&expected,&packet);
     CHECK(packet.actions.width==sizes[size][0]&&packet.controls.height==sizes[size][1]);
     CHECK(packet.controls.event_bytes==148&&packet.controls.background_bytes==68);
     unsigned char commands[REMESA_SCENE_PACKET_COMMAND_MAX];memset(commands,0xa5,sizeof commands);

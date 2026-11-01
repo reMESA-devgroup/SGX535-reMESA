@@ -73,7 +73,7 @@ def main():
   variants.append(('i486',str(a.i486_cc),['-O2','-static','-march=i486'],[str(a.qemu_i386)]))
  rows=[];files=[Path(__file__).resolve(),w/'tools/remesa/stage_twod_reservation.py',n/'remesa_gem_memory.c',n/'remesa_gem_memory.h',n.parent/'tests/test_gem_shim.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_actions.h','remesa_gem_scene_actions.inc','remesa_gem_dpm.h','remesa_gem_dpm.inc','remesa_gem_job_limits.h','remesa_gem_private.h','remesa_gem_private.inc','remesa_mmu_confinement.h','remesa_mmu_confinement.inc']]
- files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_scene_actions.c','test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c','scene_service_model.inc','scene_backend_model.inc','scene_execute_model.inc']]
+ files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_scene_actions.c','test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c','scene_service_model.inc','scene_backend_model.inc','scene_execute_model.inc','scene_replay_model.inc']]
  files += [w/'tools/remesa/lab_scene_actions.c',w/'tools/remesa/lab_scene_actions.h',w/'include/remesa/scene_layout.h',w/'include/remesa/scene_dpm.h',w/'include/remesa/scene_control_words.h',n/'frozen_kernel_contract.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_controls.h','remesa_gem_scene_controls.inc']]
  files += [w/'mesa/sgx535'/name for name in ['remesa_render_target.c','remesa_render_target.h']]
@@ -86,7 +86,7 @@ def main():
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_background.h','remesa_gem_scene_background.inc']]+[w/'include/remesa/background_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_event.h','remesa_gem_scene_event.inc']]+[w/'include/remesa/event_fetch.h',w/'include/remesa/scene_auxiliary.h']
  files += [w/'tools/remesa/stage_scene_backend.py',w/'kernel/remesa/gma500/remesa_scene_backend.inc',w/'kernel/remesa/gma500/remesa_scene_backend.h']
- files += [w/'include/remesa/scene_packet.h']
+ files += [w/'include/remesa/scene_packet.h',w/'tools/remesa/scene_fixture.h']
  files += [w/'include/remesa/scene_use_bodies.h',w/'kernel/remesa/gma500/remesa_scene_service.h',w/'tools/remesa/stage_scene_service.py',n/'frozen_fixed_service.c',n/'frozen_kernel_contract.c']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_job.h','remesa_gem_scene_job.inc','remesa_gem_scene_execute.inc','remesa_gem_scene_packet.inc']]
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}

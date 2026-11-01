@@ -84,3 +84,10 @@ submission or turn the canonical eleven-role path into a seventeen-role job.
 Fresh bounded recoverable physical qualification follows that entry. Complete
 normal GL 2.1/GLES 2 dispatch/resource behavior, desktop integration and driver
 installation remain incomplete.
+
+
+The subsequent [real producer/consumer replay](mesa-kernel-scene-replay.md)
+now feeds actual captured READ image bytes, unchanged GPU addresses and packet
+metadata through the kernel closure and ordered transaction. Both source and
+hardware callbacks remain modeled, so this does not enable live transport or
+supply physical qualification.
