@@ -111,3 +111,10 @@ the unchanged producers' selected known fields, not the shader body or full
 scene closure. Transactional builders also separate large temporary results
 from prerequisite validation to reduce nested i486 kernel stack use. General
 native execution and physical qualification remain required.
+
+The background68 object now binds primary64/secondary4 PDS and PIXEL USE8
+windows to the retained COLOR target; see
+[native-scene-background-fetch.md](native-scene-background-fetch.md). Its known
+constructor fields and ownership are checked without reading pixels. Shader
+bodies, unknown fields and texture/pitch runtime semantics still require
+qualification, along with event closure and ordered general execution.
