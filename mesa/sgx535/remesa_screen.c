@@ -135,6 +135,19 @@ static bool context_output_valid(struct context *ctx,const void *out,size_t byte
 #undef OUTPUT_OVERLAPS
  return true;
 }
+static bool context_state_output_valid(struct context *ctx,const void *out,size_t bytes)
+{
+ if(!context_output_valid(ctx,out,bytes))return false;
+ struct pipe_resource *owners[]={ctx->target,ctx->depth_target,ctx->vb.buffer.resource,
+  ctx->second_vb.buffer.resource,ctx->third_vb.buffer.resource,
+  ctx->vertex_constants,ctx->fragment_constants};
+ uintptr_t at=(uintptr_t)out;
+ for(unsigned i=0;i<sizeof(owners)/sizeof(owners[0]);i++)if(owners[i]){
+  uintptr_t base=(uintptr_t)owners[i];
+  if(at<base+sizeof(struct resource)&&base<at+bytes)return false;
+ }
+ return true;
+}
 static void fence_ref(struct pipe_screen *,struct pipe_fence_handle **,struct pipe_fence_handle *);
 static void set_capabilities(struct screen *sc)
 {
@@ -1086,19 +1099,12 @@ int remesa_context_linked_isp_snapshot(struct pipe_context *p,
 {
  if(!p||p->draw_vbo!=draw||!out||
     (uintptr_t)out%_Alignof(struct remesa_isp_opaque_triangle_request)||
-    !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+    !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
  struct context *ctx=c(p);struct screen *sc=s(p->screen);
  if(sc->closing)return ESHUTDOWN;
  if(!sc->linked_attachment_storage)return ENOTSUP;
  if(ctx->failed_submission)return EOWNERDEAD;
  if(!ctx->target||!ctx->depth_target)return ENODATA;
- struct pipe_resource *owners[]={ctx->target,ctx->depth_target,ctx->vb.buffer.resource,
-  ctx->second_vb.buffer.resource,ctx->third_vb.buffer.resource,
-  ctx->vertex_constants,ctx->fragment_constants};
- for(unsigned i=0;i<sizeof(owners)/sizeof(owners[0]);i++)if(owners[i]){
-  uintptr_t base=(uintptr_t)owners[i],at=(uintptr_t)out;
-  if(at<base+sizeof(struct resource)&&base<at+sizeof(*out))return EINVAL;
- }
  if(r(ctx->target)->write_error)return r(ctx->target)->write_error;
  if(r(ctx->depth_target)->write_error)return r(ctx->depth_target)->write_error;
  if(ctx->invalid_fixed[FIXED_BLEND]||ctx->invalid_fixed[FIXED_DSA])return EINVAL;
@@ -1173,18 +1179,13 @@ static void viewport_state(struct pipe_context *p,unsigned start,unsigned count,
  if(!identity&&!canonical){ctx->error=ENOTSUP;return;}
  ctx->viewport=*v;ctx->viewport_set=true;ctx->invalid_viewport=false;ctx->error=0;
 }
-int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t depth_bits,
- unsigned char out[28])
+static int window_viewport_request(struct context *ctx,uint32_t depth_bits,
+ struct remesa_ta_window_viewport_request *out)
 {
- if(!p||p->draw_vbo!=draw||!context_output_valid(c(p),out,28))return EINVAL;
- struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ struct screen *sc=s(ctx->base.screen);
  if(sc->closing)return ESHUTDOWN;
  if(!sc->device.resource_only_backend||sc->gears_runtime)return ENOTSUP;
  if(!ctx->viewport_set||ctx->invalid_viewport||!ctx->target)return ENODATA;
- uintptr_t at=(uintptr_t)out,resource=(uintptr_t)r(ctx->target);
- if(at<resource+sizeof(struct resource)&&resource<at+28)return EINVAL;
- if(ctx->depth_target){resource=(uintptr_t)r(ctx->depth_target);
-  if(at<resource+sizeof(struct resource)&&resource<at+28)return EINVAL;}
  const struct pipe_viewport_state *v=&ctx->viewport;
  double width=2.0*(double)v->scale[0],height=-2.0*(double)v->scale[1];
  double x=(double)v->translate[0]-(double)v->scale[0];
@@ -1205,6 +1206,24 @@ int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t depth_
   .x=(uint32_t)x,.y=(uint32_t)y,.width=(uint32_t)width,.height=(uint32_t)height,
   .depth_bits=depth_bits,.near_z=(float)near_z,.far_z=(float)far_z,
   .path=REMESA_TA_VIEWPORT_MATRIX_WINDOW};
+ unsigned char encoded[28];int error=remesa_ta_window_viewport_encode(&request,encoded);
+ if(!error)*out=request;
+ return error;
+}
+int remesa_context_window_viewport_snapshot(struct pipe_context *p,uint32_t depth_bits,
+ struct remesa_ta_window_viewport_request *out)
+{
+ if(!p||p->draw_vbo!=draw||!out||
+    (uintptr_t)out%_Alignof(struct remesa_ta_window_viewport_request)||
+    !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ return window_viewport_request(c(p),depth_bits,out);
+}
+int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t depth_bits,
+ unsigned char out[28])
+{
+ if(!p||p->draw_vbo!=draw||!context_state_output_valid(c(p),out,28))return EINVAL;
+ struct remesa_ta_window_viewport_request request;
+ int error=window_viewport_request(c(p),depth_bits,&request);if(error)return error;
  return remesa_ta_window_viewport_encode(&request,out);
 }
 static void scissor_state(struct pipe_context *p,unsigned start,unsigned count,const struct pipe_scissor_state *v)
@@ -2429,6 +2448,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
 #else
 int remesa_context_linked_isp_snapshot(struct pipe_context *p,struct remesa_isp_opaque_triangle_request *out)
 {(void)p;(void)out;return ENOTSUP;}
+int remesa_context_window_viewport_snapshot(struct pipe_context *p,uint32_t bits,struct remesa_ta_window_viewport_request *out)
+{(void)p;(void)bits;(void)out;return ENOTSUP;}
 int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_context_prepare_linked_scene(struct pipe_context *p,const struct pipe_draw_info *i,

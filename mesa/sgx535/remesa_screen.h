@@ -28,6 +28,14 @@ struct pipe_context; struct pipe_resource; struct pipe_fence_handle;
  */
 int remesa_context_window_viewport_encode(struct pipe_context *,uint32_t depth_bits,
  unsigned char out[28]);
+struct remesa_ta_window_viewport_request;
+/* Same explicit original window branch and validation as the encoder above,
+ * returned as owned typed input for the existing scene-state builder. No CPU
+ * vertex transform, upload, allocation, draw or physical viewport claim.
+ * MATRIX_WINDOW is distinct from the physically qualified INITIAL_ZERO path.
+ * Disjoint aligned output storage required; errors preserve the output. */
+int remesa_context_window_viewport_snapshot(struct pipe_context *,uint32_t depth_bits,
+ struct remesa_ta_window_viewport_request *);
 struct remesa_shader_program_report;
 struct remesa_shader_pipeline;
 struct remesa_shader_linkage;

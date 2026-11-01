@@ -122,3 +122,23 @@ cases. All previous packet/placement and READ images remain byte-identical in
 four storage sizes. These new binding tests use modeled GPU receipts; the
 earlier physical qualification remains the physical baseline, not a new physical
 approval of this frontend change. Ordinary draw/caps remain unchanged.
+
+## Bound window viewport input
+
+`remesa_context_window_viewport_snapshot` returns the existing typed viewport
+request from the bound Gallium viewport and COLOR dimensions. It shares the
+encoder's existing validation and arithmetic; callers can pass the returned
+value to the scene-state builder without reconstructing rectangle or depth
+parameters. Output must be aligned and disjoint from context, state and bound
+resource headers. Errors preserve it. This host operation performs no mapping,
+allocation, synchronization or GPU submission.
+
+The returned `MATRIX_WINDOW` request is still distinct from the physically
+qualified profiles 7/8, which use `INITIAL_ZERO` and window-coordinate vertex
+inputs. Switching their viewport to a matrix would apply a second transform.
+Physical qualification of the matrix branch needs a separate bounded clip-space
+input experiment, with the existing POSITION passthrough program and encoder;
+it must not silently change the qualified profiles or ordinary draw admission.
+
+Offline evidence for the typed binding is kept at
+`/home/gama/sgx535-offline/gallium-bound-viewport-20261101/v1/`.

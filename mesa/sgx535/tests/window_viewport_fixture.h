@@ -9,7 +9,9 @@ static void check_window_viewports(void)
  assert(!remesa_screen_enable_native_fill(s,reject_viewport_fill)); /* existing large native2D storage route */
  struct pipe_context *c=s->context_create(s,NULL,0);assert(c);
  unsigned char out[28],saved[28],expected[28];memset(out,0xa5,sizeof(out));memcpy(saved,out,sizeof(out));
+ struct remesa_ta_window_viewport_request typed,saved_typed;memset(&typed,0xa5,sizeof typed);saved_typed=typed;
  assert(remesa_context_window_viewport_encode(c,24,out)==ENODATA&&!memcmp(out,saved,28));
+ assert(remesa_context_window_viewport_snapshot(c,24,&typed)==ENODATA&&!memcmp(&typed,&saved_typed,sizeof typed));
  const unsigned sizes[][2]={{1280,800},{640,640},{641,479},{1600,768}};
  for(unsigned k=0;k<4;k++){
   unsigned w=sizes[k][0],h=sizes[k][1];
@@ -28,10 +30,20 @@ static void check_window_viewports(void)
    unsigned maps=rec.maps,allocs=rec.allocs;
    assert(!remesa_context_window_viewport_encode(c,q.depth_bits,out));
    assert(!remesa_ta_window_viewport_encode(&q,expected)&&!memcmp(out,expected,28));
+   assert(!remesa_context_window_viewport_snapshot(c,q.depth_bits,&typed));
+   assert(typed.framebuffer_width==q.framebuffer_width&&typed.framebuffer_height==q.framebuffer_height&&
+    typed.x==q.x&&typed.y==q.y&&typed.width==q.width&&typed.height==q.height&&
+    typed.depth_bits==q.depth_bits&&typed.near_z==q.near_z&&typed.far_z==q.far_z&&typed.path==q.path);
+   assert(!remesa_ta_window_viewport_encode(&typed,expected)&&!memcmp(out,expected,28));saved_typed=typed;
    assert(rec.maps==maps&&rec.allocs==allocs&&!remesa_context_error(c));
    memcpy(saved,out,28);
    assert(remesa_context_window_viewport_encode(c,32,out)==ENOTSUP&&!memcmp(out,saved,28));
+   assert(remesa_context_window_viewport_snapshot(c,32,&typed)==ENOTSUP&&!memcmp(&typed,&saved_typed,sizeof typed));
    assert(remesa_context_window_viewport_encode(c,24,(void *)target)==EINVAL);
+   assert(remesa_context_window_viewport_snapshot(c,24,(void *)target)==EINVAL);
+   assert(remesa_context_window_viewport_snapshot(c,24,(void *)c)==EINVAL);
+   assert(remesa_context_window_viewport_snapshot(c,24,(void *)((unsigned char *)&typed+1))==EINVAL);
+   assert(remesa_context_window_viewport_snapshot(c,24,(void *)(UINTPTR_MAX-3))==EINVAL);
    const struct pipe_viewport_state good=v;
    for(unsigned bad=0;bad<9;bad++){
     v=good;
@@ -48,11 +60,13 @@ static void check_window_viewports(void)
     }
     c->set_viewport_states(c,0,1,&v);
     assert(remesa_context_window_viewport_encode(c,24,out)!=0&&!memcmp(out,saved,28));
+    assert(remesa_context_window_viewport_snapshot(c,24,&typed)!=0&&!memcmp(&typed,&saved_typed,sizeof typed));
    }
    c->set_viewport_states(c,0,1,&good);assert(!remesa_context_error(c));
   }
   struct pipe_framebuffer_state empty={0};c->set_framebuffer_state(c,&empty);
   assert(remesa_context_window_viewport_encode(c,24,out)==ENODATA);resource_drop(target);
+  assert(remesa_context_window_viewport_snapshot(c,24,&typed)==ENODATA);
  }
  c->destroy(c);s->destroy(s);assert(rec.allocs==rec.frees&&!rec.maps&&!rec.draws);
  struct remesa_device legacy={.ops=&ops,.priv=&rec,.offline_test_backend=true};s=remesa_screen_create(&legacy);assert(s);
@@ -60,5 +74,6 @@ static void check_window_viewports(void)
  struct pipe_viewport_state large={.scale={640,-400,.5},.translate={640,400,.5}};
  c->set_viewport_states(c,0,1,&large);assert(remesa_context_error(c)==ENOTSUP);
  assert(remesa_context_window_viewport_encode(c,24,out)==ENOTSUP);
+ assert(remesa_context_window_viewport_snapshot(c,24,&typed)==ENOTSUP);
  c->destroy(c);s->destroy(s);
 }
