@@ -14,6 +14,20 @@ struct remesa_device;
  * Enables Z24X8 host storage/clear; every draw with Z bound stays ENOTSUP. */
 int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *);
 struct pipe_context; struct pipe_resource; struct pipe_fence_handle;
+/* Explicit original window-serializer branch for the bound Gallium viewport.
+ * Resource-only endpoints may bind finite general viewport state; legacy
+ * executable endpoints keep their old restrictions. This call derives bounds
+ * from the currently retained color target and accepts only positive X,
+ * negative Y, integral in-target rectangles and the existing dyadic Z contract.
+ * depth_bits selects the CPU codec normalization (16/24), not an attachment
+ * capability or initialized-depth claim. This does not infer window/FBO
+ * identity, grant raster state, upload, draw admission or execution. A caller
+ * must select this explicit window branch appropriately; other orientations
+ * reject rather than silently invert a second time. Output is unchanged on
+ * error; no allocation, mapping, hashing or provider operation is performed.
+ */
+int remesa_context_window_viewport_encode(struct pipe_context *,uint32_t depth_bits,
+ unsigned char out[28]);
 struct remesa_shader_program_report;
 struct remesa_shader_pipeline;
 struct remesa_shader_linkage;

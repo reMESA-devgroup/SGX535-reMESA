@@ -11,6 +11,7 @@
 #include "remesa_fixed_state.h"
 #include "remesa_depth_cpu.h"
 #include "remesa_render_pass.h"
+#include "remesa_ta_scene.h"
 #include "remesa_sampler_state.h"
 #include "remesa_texture_binding.h"
 #include "remesa_texture_descriptor.h"
@@ -129,6 +130,7 @@ static bool context_output_valid(struct context *ctx,const void *out,size_t byte
  for(struct vertex *v=ctx->vertices;v;v=v->next)if(OUTPUT_OVERLAPS(v))return false;
  for(struct fragment *f=ctx->fragments;f;f=f->next)if(OUTPUT_OVERLAPS(f))return false;
  for(struct elements *e=ctx->elements;e;e=e->next)if(OUTPUT_OVERLAPS(e))return false;
+ for(struct fixed *f=ctx->fixed_states;f;f=f->next)if(OUTPUT_OVERLAPS(f))return false;
 #undef OUTPUT_OVERLAPS
  return true;
 }
@@ -1105,6 +1107,12 @@ static void viewport_state(struct pipe_context *p,unsigned start,unsigned count,
  struct context *ctx=c(p);ctx->invalid_viewport=true;
  if(start || count!=1 || !v){ctx->error=ENOTSUP;return;}
  if(!remesa_viewport_swizzle_is_identity(v)){ctx->error=ENOTSUP;return;}
+ if(s(p->screen)->device.resource_only_backend&&!s(p->screen)->gears_runtime){
+  for(unsigned i=0;i<3;i++)if(!isfinite(v->scale[i])||!isfinite(v->translate[i])){ctx->error=EINVAL;return;}
+  /* State binding is independent of the selected serializer and never admits
+   * a draw on a resource-only endpoint. Preserve the exact application bits. */
+  ctx->viewport=*v;ctx->viewport_set=true;ctx->invalid_viewport=false;ctx->error=0;return;
+ }
  if(s(p->screen)->gears_runtime){
   if(v->scale[0]!=640.0f||(v->scale[1]!=400.0f&&v->scale[1]!=-400.0f)||v->scale[2]!=0.5f||
      v->translate[0]!=640.0f||v->translate[1]!=400.0f||v->translate[2]!=0.5f){ctx->error=ENOTSUP;return;}
@@ -1122,6 +1130,40 @@ static void viewport_state(struct pipe_context *p,unsigned start,unsigned count,
  }
  if(!identity&&!canonical){ctx->error=ENOTSUP;return;}
  ctx->viewport=*v;ctx->viewport_set=true;ctx->invalid_viewport=false;ctx->error=0;
+}
+int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t depth_bits,
+ unsigned char out[28])
+{
+ if(!p||p->draw_vbo!=draw||!context_output_valid(c(p),out,28))return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(!sc->device.resource_only_backend||sc->gears_runtime)return ENOTSUP;
+ if(!ctx->viewport_set||ctx->invalid_viewport||!ctx->target)return ENODATA;
+ uintptr_t at=(uintptr_t)out,resource=(uintptr_t)r(ctx->target);
+ if(at<resource+sizeof(struct resource)&&resource<at+28)return EINVAL;
+ if(ctx->depth_target){resource=(uintptr_t)r(ctx->depth_target);
+  if(at<resource+sizeof(struct resource)&&resource<at+28)return EINVAL;}
+ const struct pipe_viewport_state *v=&ctx->viewport;
+ double width=2.0*(double)v->scale[0],height=-2.0*(double)v->scale[1];
+ double x=(double)v->translate[0]-(double)v->scale[0];
+ double y=(double)ctx->target->height0-(double)v->translate[1]+(double)v->scale[1];
+ double near_z=(double)v->translate[2]-(double)v->scale[2];
+ double far_z=(double)v->translate[2]+(double)v->scale[2];
+ /* Check all bounds before floating-to-integer conversion. Positive-Y/FBO
+  * and mirrored-X viewports are not this original window CPU contract. */
+ if(!isfinite(width)||!isfinite(height)||!isfinite(x)||!isfinite(y)||
+    width<=0||height<=0||x<0||y<0||width>2048||height>2048||x>2048||y>2048)return ENOTSUP;
+ if(width!=(double)(uint32_t)width||height!=(double)(uint32_t)height||
+    x!=(double)(uint32_t)x||y!=(double)(uint32_t)y)return ENOTSUP;
+ if(!isfinite(near_z)||!isfinite(far_z)||near_z<0||near_z>1||far_z<0||far_z>1)return ENOTSUP;
+ /* Conversion must not silently round the source viewport's depth interval. */
+ if((double)(float)near_z!=near_z||(double)(float)far_z!=far_z)return ENOTSUP;
+ struct remesa_ta_window_viewport_request request={
+  .framebuffer_width=ctx->target->width0,.framebuffer_height=ctx->target->height0,
+  .x=(uint32_t)x,.y=(uint32_t)y,.width=(uint32_t)width,.height=(uint32_t)height,
+  .depth_bits=depth_bits,.near_z=(float)near_z,.far_z=(float)far_z,
+  .path=REMESA_TA_VIEWPORT_MATRIX_WINDOW};
+ return remesa_ta_window_viewport_encode(&request,out);
 }
 static void scissor_state(struct pipe_context *p,unsigned start,unsigned count,const struct pipe_scissor_state *v)
 {
@@ -2188,6 +2230,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t bits,unsigned char out[28])
+{(void)p;(void)bits;(void)out;return ENOTSUP;}
 int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}
 int remesa_context_gears_bottom_left(struct pipe_context *p,bool *b){(void)p;(void)b;return ENOTSUP;}
 int remesa_context_gears_geometry_snapshot(struct pipe_context *p,const struct pipe_draw_info *i,

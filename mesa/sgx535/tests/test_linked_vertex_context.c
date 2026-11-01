@@ -4,6 +4,7 @@ int linked_context_driver_fixture(void);
 #include "test_driver.c"
 #undef main
 #include "nir_builder.h"
+#include "remesa_ta_scene.h"
 uint32_t nir_debug=NIR_DEBUG_EXTENDED_VALIDATION;
 static void *last_allocation;
 static unsigned fail_map_after;
@@ -50,8 +51,11 @@ static void check_inputs(const struct remesa_linked_vertex_inputs *owned,const u
  for(unsigned i=0;i<3;i++)for(unsigned a=0;a<3;a++)
   assert(!memcmp((const unsigned char *)v.vertices+i*48+a*16,values[a][separate&&a==2?0:i],16));
 }
+#include "window_viewport_fixture.h"
+
 int main(void)
 {
+ check_window_viewports();
  glsl_type_singleton_init_or_ref();struct recorder rec={0};struct remesa_device_ops tracked=ops;
  tracked.allocate=tracked_alloc;tracked.map=linked_map;
  struct remesa_device dev={.ops=&tracked,.priv=&rec,.resource_only_backend=true};
