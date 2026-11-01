@@ -51,3 +51,22 @@ Physical validation of this new userspace route is pending.
 Normal GL/GLES provider dispatch, production session/resource lifecycle,
 complete API behavior, desktop integration and installation remain incomplete.
 This LAB integration adds no per-frame cost to the established FAST path.
+
+The first physical attempt currently waits for network reconnection: after one
+requested reboot,12 boot observations and4 reconnection observations returned
+SSH failure; the separate network probe reports `NO_ROUTE`. No native client,
+upload or new GPU submission has been requested. The saved stock default was
+preserved by the confirmed one-shot boot preparation. The current boot and
+restoration of the temporary GRUB entry remain unverified until SSH returns.
+Do not repeat the reboot or launch against an assumed boot. Restore the original
+GRUB and verify the actual module/observer/seven N controls/source freshness
+before executing the already-prepared single-scene collector.
+
+The remaining ordinary frontend contracts are explicit in current source:
+Linux memory `dispatch` still returns `REMESA_NOT_ISSUED`; persistent shader
+submission still rejects execution without a native scene/fence handoff;
+ordinary Gallium draw rejects a resource-only backend and CPU depth target.
+Its legacy32x32 restrictions are not lifted by this LAB bridge. The existing
+native2D factory has a32MiB resource-only budget, separate from the96MiB scene
+owner. These require real integration, not another ISP/PDS/USSE investigation
+or unconditional capability changes.
