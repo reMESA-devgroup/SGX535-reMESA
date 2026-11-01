@@ -16,7 +16,8 @@ def load_profile(catalogue,size,asset_root=None):
  assert [x['size'] for x in c['profiles']]==['1280x800','640x640']
  index=next(i for i,x in enumerate(c['profiles']) if x['size']==size);profile=c['profiles'][index]
  finalized=c.get('depth_finalize',False);initialized=c.get('initialization_predecessor',False)
- gallium=c.get('bound_gallium_inputs',False)
+ gallium=c.get('bound_gallium_inputs',False);matrix=c.get('matrix_window',False)
+ if matrix and not gallium:raise ValueError('matrix profile requires bound Gallium inputs')
  if finalized and not initialized:raise ValueError('finalized profile requires initialization predecessor')
  if gallium and not finalized:raise ValueError('bound Gallium profile requires finalized initialized depth')
  def path(original,name):return asset_root/size/name if asset_root else Path(original)
@@ -44,7 +45,7 @@ def load_profile(catalogue,size,asset_root=None):
   for va in [min(b['va'] for b in group)-4096,max(b['va']+b['bytes'] for b in group)]:
    if lower<=va and va+4096<=upper and not any(va<b['va']+b['bytes'] and b['va']<va+4096 for b in bindings) and va not in guards:guards.append(va)
  if len(bindings)+len(guards)>32:raise ValueError('guard allocation exceeds endpoint capacity')
- return {'profile':index+1+(6 if gallium else 4 if finalized else 2 if initialized else 0),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
+ return {'profile':index+1+(8 if matrix else 6 if gallium else 4 if finalized else 2 if initialized else 0),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
 
 def receipt(packet,context,profile,ids,budget):
  q=PROBE.unpack(packet)

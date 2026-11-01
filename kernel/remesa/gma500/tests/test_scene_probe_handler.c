@@ -7,7 +7,7 @@
 #include "remesa_private_session.h"
 enum {OK,OK640,CAP,DISABLED,MEMDISABLED,INVALID,ALLOC,DUPALLOC,BACKING,LOST,POWER,CORE,REV,PDS,
  VA,SIZE,GEN,LEASE,HOLD,PIN,RESERVED,QUAR,VMA,ZERO,CPU_ALIAS,STREAM,EXECUTOR,TA,CEILING,LIVE,
- RESERVE,CLAIM,PREPARE,PREPARE_HELD,HASH,EARLY_EXEC,EXEC,NO_RECEIPT,LOAN_DROP,GUARD_DROP,JOB_DROP,SOURCE_END,BACKING_END,LOST_AFTER_CLAIM,OK_INIT,OK640_INIT,OK_FINAL,OK640_FINAL,OK_GALLIUM,OK640_GALLIUM,VA_GALLIUM,HASH_GALLIUM,WRONG_LEGACY,CASE_COUNT};
+ RESERVE,CLAIM,PREPARE,PREPARE_HELD,HASH,EARLY_EXEC,EXEC,NO_RECEIPT,LOAN_DROP,GUARD_DROP,JOB_DROP,SOURCE_END,BACKING_END,LOST_AFTER_CLAIM,OK_INIT,OK640_INIT,OK_FINAL,OK640_FINAL,OK_GALLIUM,OK640_GALLIUM,VA_GALLIUM,HASH_GALLIUM,WRONG_LEGACY,OK_MATRIX,OK640_MATRIX,VA_MATRIX,HASH_MATRIX,WRONG_WINDOW,CASE_COUNT};
 static unsigned fault,checks,reads,allocs,frees,dup_calls,hashes,reserves,claims,executions,source_ends,backing_ends;
 static bool administrator=true,memory_enabled=true,powered=true;
 static struct mutex endpoint_lock;
@@ -88,7 +88,7 @@ int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *s,const struct rem
  return fault==PREPARE_HELD?-EUCLEAN:0;
 }
 static int remesa_depth1280_sha256(const void *data,size_t size,u8 digest[32])
-{CHECK(endpoint_lock.held);for(unsigned i=0;i<17;i++)if(images[i]==data){CHECK(size==expected_profile->bindings[i].bytes&&expected_profile->bindings[i].access==1);memcpy(digest,expected_profile->bindings[i].digest,32);hashes++;if(fault==HASH||fault==HASH_GALLIUM)digest[0]^=1;return 0;}CHECK(0);return -EIO;}
+{CHECK(endpoint_lock.held);for(unsigned i=0;i<17;i++)if(images[i]==data){CHECK(size==expected_profile->bindings[i].bytes&&expected_profile->bindings[i].access==1);memcpy(digest,expected_profile->bindings[i].digest,32);hashes++;if(fault==HASH||fault==HASH_GALLIUM||fault==HASH_MATRIX)digest[0]^=1;return 0;}CHECK(0);return -EIO;}
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *c)
 {
  CHECK(endpoint_lock.held&&!c->loan.execution_attempted);
@@ -116,7 +116,7 @@ int main(int argc,char **argv)
  CHECK(argc==2);fault=(unsigned)strtoul(argv[1],NULL,10);CHECK(fault<CASE_COUNT);
  struct drm_psb_private priv={(void*)1};struct drm_device dev={&priv};struct drm_file file={1};
  struct remesa_gem_memory memory={.dev=&dev,.file=&file,.context=77,.root={0,0xdfffffffULL}};
- struct remesa_scene_probe_request request={.version=1,.profile=fault==OK640?2:fault==OK_INIT?3:fault==OK640_INIT?4:fault==OK_FINAL?5:fault==OK640_FINAL?6:fault==OK640_GALLIUM?8:fault>=OK_GALLIUM?7:1,.context=77,.budget_ms=1000};
+ struct remesa_scene_probe_request request={.version=1,.profile=fault==OK640_MATRIX?10:fault>=OK_MATRIX?9:fault==OK640?2:fault==OK_INIT?3:fault==OK640_INIT?4:fault==OK_FINAL?5:fault==OK640_FINAL?6:fault==OK640_GALLIUM?8:fault>=OK_GALLIUM?7:1,.context=77,.budget_ms=1000};
  endpoint=&memory;expected_profile=&scene_probe_profiles[request.profile-1];scene_probe_enabled=true;
  for(unsigned i=0;i<17;i++){
   request.ids[i]=32+i;memory.bo[i]=(struct backing){.live=true,.generation=1,.va={expected_profile->bindings[i].address,0},.gem={expected_profile->bindings[i].bytes},.pinned=true,.reserved=true,.initialized=true,.zero_pristine=true};
@@ -125,14 +125,15 @@ int main(int argc,char **argv)
  if(fault==CAP)administrator=false;if(fault==DISABLED)scene_probe_enabled=false;if(fault==MEMDISABLED)memory_enabled=false;
  if(fault==INVALID){
 #define BAD(field,value) do{struct remesa_scene_probe_request bad=request;bad.field=(value);CHECK(remesa_scene_probe_ioctl(&dev,&bad,&file)==-EINVAL);}while(0)
-  BAD(version,0);BAD(profile,0);BAD(profile,9);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);
+  BAD(version,0);BAD(profile,0);BAD(profile,REMESA_SCENE_PROBE_PROFILE_COUNT+1);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);
   BAD(ids[0],0);BAD(ids[16],32);BAD(operation,1);BAD(cookie,1);BAD(core,1);BAD(revision,1);BAD(pds_base,1);
   BAD(phase,1);BAD(ledger,1);BAD(error,1);BAD(retained,1);BAD(stages,1);BAD(reserved[0],1);BAD(reserved[1],1);
 #undef BAD
   CHECK(!allocs&&!reads);request.reserved[0]=1;
  }
- if(fault==POWER)powered=false;if(fault==VA||fault==VA_GALLIUM)memory.bo[0].va.start++;if(fault==SIZE)memory.bo[0].gem.size++;
+ if(fault==POWER)powered=false;if(fault==VA||fault==VA_GALLIUM||fault==VA_MATRIX)memory.bo[0].va.start++;if(fault==SIZE)memory.bo[0].gem.size++;
  if(fault==WRONG_LEGACY)request.profile=5;
+ if(fault==WRONG_WINDOW)request.profile=7;
  if(fault==GEN)memory.bo[0].generation++;
  if(fault==LEASE)memory.bo[0].lease=true;if(fault==HOLD)memory.bo[0].holds=1;if(fault==PIN)memory.bo[0].pinned=false;
  if(fault==RESERVED)memory.bo[0].reserved=false;if(fault==QUAR)memory.bo[0].quarantine=true;if(fault==VMA)memory.bo[0].color_vmas=1;
@@ -145,7 +146,7 @@ int main(int argc,char **argv)
  if(fault==CAP)CHECK(error==-EPERM&&!reads&&!allocs);
  if(fault==DISABLED||fault==MEMDISABLED)CHECK(error==-EOPNOTSUPP&&!reads&&!allocs);
  if(fault==INVALID)CHECK(error==-EINVAL&&!reads&&!allocs);
- if(fault==OK||fault==OK640||fault==OK_INIT||fault==OK640_INIT||fault==OK_FINAL||fault==OK640_FINAL||fault==OK_GALLIUM||fault==OK640_GALLIUM){
+ if(fault==OK||fault==OK640||fault==OK_INIT||fault==OK640_INIT||fault==OK_FINAL||fault==OK640_FINAL||fault==OK_GALLIUM||fault==OK640_GALLIUM||fault==OK_MATRIX||fault==OK640_MATRIX){
   CHECK(!error&&!request.error&&!request.retained&&request.stages==15&&request.phase==9&&request.ledger==7&&request.operation==91&&request.cookie==91);
   CHECK(!memory.private_session&&!memory.private_source_held&&!memory.jobs[0].live&&source_ends==1&&backing_ends==1&&allocs==frees);
   struct remesa_scene_trace_request *query=calloc(1,sizeof(*query));CHECK(query);
@@ -170,8 +171,8 @@ int main(int argc,char **argv)
  bool must_retain=fault==LOST||fault==PREPARE_HELD||fault==EXEC||fault==NO_RECEIPT||
   fault==LOAN_DROP||fault==GUARD_DROP||fault==JOB_DROP||fault==SOURCE_END||fault==BACKING_END||fault==LOST_AFTER_CLAIM;
  CHECK((scene_probe_retained!=NULL)==must_retain);
- if(fault==HASH||fault==HASH_GALLIUM)CHECK(!executions&&hashes==1&&!request.retained);
- if(fault==VA_GALLIUM||fault==WRONG_LEGACY)CHECK(!executions&&!hashes&&!request.retained);
+ if(fault==HASH||fault==HASH_GALLIUM||fault==HASH_MATRIX)CHECK(!executions&&hashes==1&&!request.retained);
+ if(fault==VA_GALLIUM||fault==VA_MATRIX||fault==WRONG_LEGACY)CHECK(!executions&&!hashes&&!request.retained);
  if(fault==LOST||fault==LOST_AFTER_CLAIM)CHECK(!executions);
  if(scene_probe_retained){
   CHECK(request.retained&&memory.private_session==scene_probe_retained&&allocs>frees);

@@ -79,7 +79,7 @@ int main(void)
  struct remesa_scene_probe_request out,saved;memset(&out,0xa5,sizeof out);saved=out;
  for(unsigned f=0;f<14;f++){
   struct remesa_scene_packet bad=p;unsigned profile=5,budget=1000;
-  switch(f){case 0:profile=0;break;case 1:profile=9;break;case 2:budget=0;break;case 3:budget=10001;break;
+  switch(f){case 0:profile=0;break;case 1:profile=REMESA_SCENE_PROBE_PROFILE_COUNT+1;break;case 2:budget=0;break;case 3:budget=10001;break;
    case 4:bad.owner++;break;case 5:bad.serial=0;break;case 6:bad.bindings[0].id=900;break;
    case 7:bad.bindings[0].id=bad.bindings[1].id;break;case 8:bad.controls.depth_finalize=0;break;
    case 9:bad.controls.ta_bytes=68;break;case 10:bad.controls.height=640;break;
@@ -109,12 +109,12 @@ int main(void)
   }
  }
  fault=0;
- for(expected_profile=7;expected_profile<=8;expected_profile++)for(fault=0;fault<=22;fault++){
+ for(expected_profile=7;expected_profile<=10;expected_profile++)for(fault=0;fault<=22;fault++){
   d=setup();p=packet();
-  if(expected_profile==8){p.actions.width=p.actions.height=640;p.controls.width=p.controls.height=640;}
+  if(!(expected_profile&1)){p.actions.width=p.actions.height=640;p.controls.width=p.controls.height=640;}
   struct remesa_gpu_scene_submit job={77,19,&p};struct remesa_gpu_scene_receipt receipt={0},zero=receipt;
   unsigned before=memcalls;
-  enum remesa_dispatch status=remesa_linux_memory_gallium_scene_lab_dispatch(d,&job,&receipt);
+  enum remesa_dispatch status=expected_profile>=9?remesa_linux_memory_gallium_matrix_scene_lab_dispatch(d,&job,&receipt):remesa_linux_memory_gallium_scene_lab_dispatch(d,&job,&receipt);
   assert(status==(fault?REMESA_ISSUANCE_AMBIGUOUS:REMESA_ISSUED)&&scenecalls==1&&memcalls==before);
   if(fault){assert(!memcmp(&receipt,&zero,sizeof receipt));assert(remesa_linux_memory_detach(d)==EOWNERDEAD);remesa_linux_memory_forget(d);}
   else{assert(receipt.context==77&&receipt.operation==19&&receipt.retired&&receipt.published&&receipt.acknowledged);cleanup(d);}

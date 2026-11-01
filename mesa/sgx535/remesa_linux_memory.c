@@ -270,7 +270,7 @@ int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
  return 0;
 }
 static enum remesa_dispatch scene_lab_dispatch(void *opaque,
- const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out,bool gallium)
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out,unsigned profile_offset)
 {
  struct remesa_linux_memory *d=opaque;
  if(!d||!submit||!out||(uintptr_t)submit%_Alignof(struct remesa_gpu_scene_submit)||
@@ -281,7 +281,7 @@ static enum remesa_dispatch scene_lab_dispatch(void *opaque,
     scene_host_overlap(out,sizeof(*out),submit->packet,sizeof(*submit->packet)))return REMESA_NOT_ISSUED;
  if(d->private_poison)return REMESA_ISSUANCE_AMBIGUOUS;
  if(d->scene_attempted)return REMESA_NOT_ISSUED;
- unsigned profile=(submit->packet->controls.width==1280?5:6)+(gallium?2:0);
+ unsigned profile=(submit->packet->controls.width==1280?5:6)+profile_offset;
  struct remesa_scene_probe_request response;
  int error=remesa_linux_memory_scene_lab_submit(d,submit->packet,profile,1000,&response);
  if(error)return d->private_poison?REMESA_ISSUANCE_AMBIGUOUS:REMESA_NOT_ISSUED;
@@ -291,10 +291,13 @@ static enum remesa_dispatch scene_lab_dispatch(void *opaque,
 }
 enum remesa_dispatch remesa_linux_memory_scene_lab_dispatch(void *opaque,
  const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
-{return scene_lab_dispatch(opaque,submit,out,false);}
+{return scene_lab_dispatch(opaque,submit,out,0);}
 enum remesa_dispatch remesa_linux_memory_gallium_scene_lab_dispatch(void *opaque,
  const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
-{return scene_lab_dispatch(opaque,submit,out,true);}
+{return scene_lab_dispatch(opaque,submit,out,2);}
+enum remesa_dispatch remesa_linux_memory_gallium_matrix_scene_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{return scene_lab_dispatch(opaque,submit,out,4);}
 int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *d,
  struct remesa_scene_probe_request *out)
 {

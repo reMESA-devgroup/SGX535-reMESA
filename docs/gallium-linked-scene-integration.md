@@ -142,3 +142,20 @@ it must not silently change the qualified profiles or ordinary draw admission.
 
 Offline evidence for the typed binding is kept at
 `/home/gama/sgx535-offline/gallium-bound-viewport-20261101/v1/`.
+
+The separate closed LAB profiles 9/10 now retain the same graph and CODE as
+7/8 while replacing only three raw POSITION values with bounded clip inputs
+and the six viewport fields with the existing matrix encoding. The native
+client selects this path only with `--matrix-window`; the supervisor selects
+it from a matching pinned matrix catalogue. The original selectors and default
+client invocation remain unchanged. These additions do not admit ordinary GL
+draws or arbitrary programs.
+
+Offline qualification is recorded at
+`/home/gama/sgx535-offline/gallium-matrix-viewport-20261101/v1/`: actual bound
+Gallium captures, deep kernel replay, controller and transport fault tests,
+client collection models, input-byte audit and a full module build. The pixel
+oracle retains the previous window-input checks by default and separately
+validates the clip inputs and matrix before applying the same analytical
+coverage/Z expectation. Its regression uses previous physical readbacks and
+does not constitute matrix hardware qualification.

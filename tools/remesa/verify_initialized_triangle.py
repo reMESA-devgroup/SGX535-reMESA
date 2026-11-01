@@ -8,7 +8,7 @@ undefined. Exact edge ties require COLOR/Z co-coverage but allow either fill.
 import argparse,array,json,struct,sys
 from pathlib import Path
 
-def verify(capture):
+def verify(capture,*,matrix_window=False):
  c=json.loads((capture/'RESULT.json').read_text());w,h=map(int,c['plan']['size'].split('x'));pitch=(w+31)&~31
  assert c['status']=='RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING' and c['memory_cleanup']=='complete' and c['guards_intact']
  packet=(capture.parent/c['plan']['size']/'packet.bin').read_bytes();clear_bits=struct.unpack_from('<I',packet,348)[0];clear=struct.unpack('<f',struct.pack('<I',clear_bits))[0]
@@ -16,7 +16,17 @@ def verify(capture):
  # Fixed existing producer exports screen positions, unit N/L, and Z=.125.
  raw=(capture.parent/c['plan']['size']/'bo-6.bin').read_bytes()
  expected=[(w*.25,h*.25),(w*.75,h*.25),(w*.25,h*.75)]
- for i,(x,y) in enumerate(expected):assert struct.unpack_from('<12f',raw,i*48)==(x,y,.125,1,0,0,1,0,0,0,1,0)
+ if matrix_window:
+  assert c['plan']['profile'] in (9,10)
+  state=(capture.parent/c['plan']['size']/'bo-3.bin').read_bytes()
+  assert state[20:44]==struct.pack('<6f',w*.5,w*.5,h*.5,-h*.5,.5,.5)
+  clip=[(-.5,.5),(.5,.5),(-.5,-.5)]
+  for i,(x,y) in enumerate(clip):
+   assert struct.unpack_from('<12f',raw,i*48)==(x,y,-.75,1,0,0,1,0,0,0,1,0)
+   # Analytical expectation only. These values are never sent to the GPU.
+   assert (w*.5*(x+1),h*.5*(1-y))==expected[i]
+ else:
+  for i,(x,y) in enumerate(expected):assert struct.unpack_from('<12f',raw,i*48)==(x,y,.125,1,0,0,1,0,0,0,1,0)
  arrays=[]
  for name in ('color_index','depth_index'):
   data=(capture/('bo-'+str(c['plan'][name])+'-readback.bin')).read_bytes();assert len(data)>=pitch*h*4
@@ -39,4 +49,4 @@ def verify(capture):
    if (wrong_color or wrong_z) and len(examples)<12:examples.append({'x':x,'y':y,'color':hex(cv),'Z24':hex(z),'expected_color':hex(wanted),'expected_Z24':hex(wanted_z)})
  return {'status':'PHYSICAL_FINITE_TRIANGLE_COLOR_Z24_PASS' if not bad_color and not bad_depth else 'PHYSICAL_FINITE_TRIANGLE_COLOR_Z24_FAIL','width':w,'height':h,'stable_foreground_pixels':fg,'stable_background_pixels':bg,'exact_edge_tie_pixels':edge,'COLOR_mismatches':bad_color,'Z24_mismatches':bad_depth,'examples':examples,'X8_undefined_ignored':True,'foreground_Z24_quantization_tolerance':1,'scope':'Analytical coverage and white unit-Lambert value for fixed finite inputs, definedZ24/co-coverage; not full raw equality, API conformance, sustained rendering or FPS'}
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--capture',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();r=verify(a.capture);a.output.open('x').write(json.dumps(r,indent=2)+'\n');print(json.dumps(r,indent=2));sys.exit(0 if r['status'].endswith('_PASS') else 1)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--capture',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--matrix-window',action='store_true');a=p.parse_args();r=verify(a.capture,matrix_window=a.matrix_window);a.output.open('x').write(json.dumps(r,indent=2)+'\n');print(json.dumps(r,indent=2));sys.exit(0 if r['status'].endswith('_PASS') else 1)

@@ -33,9 +33,9 @@ rows=[];variants=[('native','cc',['-O2'],[]),('ubsan','cc',['-O1','-fsanitize=un
 if a.i486_cc:variants.append(('i486',str(a.i486_cc),['-O2','-static','-march=i486'],[str(a.qemu_i386)]))
 for label,cc,flags,runner in variants:
  exe=o/label;cmd=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-Wno-unused-function',*flags,'-I'+str(o),'-I'+str(m),'-I'+str(w/'kernel/remesa/gma500'),'-I'+str(w/'include'),str(w/'kernel/remesa/gma500/tests/test_scene_probe_handler.c'),'-o',str(exe)]
- for name,argv in [(label+'-build',cmd)]+[(label+'-'+str(c),runner+[str(exe),str(c)]) for c in range(53)]:
+ for name,argv in [(label+'-build',cmd)]+[(label+'-'+str(c),runner+[str(exe),str(c)]) for c in range(58)]:
   def limits():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,((6*1024**3 if runner else 768*1024**2),)*2)
   q=subprocess.run(argv,capture_output=True,text=True,timeout=60,preexec_fn=limits);(o/(name+'.log')).write_text(q.stdout+q.stderr);rows.append({'label':name,'argv':argv,'exit':q.returncode});(o/'COMMANDS.json').write_text(json.dumps(rows,indent=2)+'\n')
   if q.returncode or q.stderr:raise RuntimeError(name+': '+q.stderr[-1800:])
 files=[Path(__file__).resolve(),w/'kernel/remesa/gma500/tests/test_scene_probe_handler.c']+[w/'kernel/remesa/gma500'/n for n in ['remesa_scene_probe.inc','remesa_scene_probe_request.h','remesa_scene_probe_profiles.h']]+[w/'include/remesa/scene_probe_uapi.h',o/'scene_probe_types.h']
-q={'status':'CLOSED_GENERAL_SCENE_ADMISSION_CONTROLLER_MODEL_PASS','GPU_operations':0,'cases':53,'variants':len(variants),'scope':'Actual controller/envelope/profile translation; memory/crypto/source/hardware execution and lifetime dependencies modeled','sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},'commands':rows};(o/'RESULT.json').write_text(json.dumps(q,indent=2)+'\n');print(q['status'])
+q={'status':'CLOSED_GENERAL_SCENE_ADMISSION_CONTROLLER_MODEL_PASS','GPU_operations':0,'cases':58,'variants':len(variants),'scope':'Actual controller/envelope/profile translation; memory/crypto/source/hardware execution and lifetime dependencies modeled','sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},'commands':rows};(o/'RESULT.json').write_text(json.dumps(q,indent=2)+'\n');print(q['status'])

@@ -7,12 +7,12 @@ from unittest.mock import patch
 import gallium_scene_native as native
 import scene_probe as scene
 import private_probe as p
-parser=argparse.ArgumentParser();parser.add_argument('--model-output',type=Path,required=True);parser.add_argument('--catalogue',type=Path,required=True);a=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument('--model-output',type=Path,required=True);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--matrix-window',action='store_true');a=parser.parse_args()
 
 class Collector(unittest.TestCase):
  def test_lifetime_and_failures(self):
   for size in ['1280x800','640x640']:
-   source=a.model_output/(size+'--execute');raw=(source/'INVENTORY-REMAINING.bin').read_bytes()
+   source=a.model_output/(('matrix-' if a.matrix_window else '')+size+'--execute');raw=(source/'INVENTORY-REMAINING.bin').read_bytes()
    objects=[struct.unpack_from('<QQII',raw,16+i*24) for i in range(7)];byid={x[2]:x for x in objects}
    profile=next(f for f in json.loads(a.catalogue.read_text())['profiles'] if f['size']==size);fixture=Path(profile['packet_path']).parent
    for fault in [None,'child','receipt','read','guard','remaining','packet']:
@@ -25,7 +25,9 @@ class Collector(unittest.TestCase):
        return (sum(x[1] for x in objects),n,va,7,7,sum(x[1]//4096 for x in objects),0,0,0,int(bool(rid)),n//4096,0,n//4096)
       def request(self,action,rid=0):assert action in (p.UNMAP,p.UNPIN,p.DESTROY,p.CLOSE);calls.append((action,rid))
      def child(argv,**kwargs):
-      assert kwargs['pass_fds']==(99,) and argv[-1]=='--execute'
+      assert kwargs['pass_fds']==(99,) and argv[5]=='--execute'
+      assert argv[6:]==(['--matrix-window'] if a.matrix_window else [])
+      assert (plan['profile']>=9)==a.matrix_window
       for f in source.iterdir():
        if f.is_file():shutil.copyfile(f,output/f.name)
       if fault=='receipt':

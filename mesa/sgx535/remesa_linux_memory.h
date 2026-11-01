@@ -107,6 +107,9 @@ enum remesa_dispatch remesa_linux_memory_scene_lab_dispatch(void *,
  * independently qualified eight-profile kernel, never implicit fallback. */
 enum remesa_dispatch remesa_linux_memory_gallium_scene_lab_dispatch(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Separate closed clip-coordinate/MATRIX_WINDOW profiles9/10; never selects7/8. */
+enum remesa_dispatch remesa_linux_memory_gallium_matrix_scene_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 /* Diagnostic snapshot of the already returned raw144-byte kernel response;
  * no ioctl/hash/readback. Requires an entered attempt and disjoint output. */
 int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *,

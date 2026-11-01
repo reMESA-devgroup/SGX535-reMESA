@@ -52,8 +52,9 @@ static struct pipe_surface *surface(struct pipe_context *ctx,struct pipe_resourc
 {const struct pipe_surface t={.format=res->format};return ctx->create_surface(ctx,res,&t);}
 int main(int argc,char **argv)
 {
- CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<22);
- unsigned width=mode==1||mode==14?640:mode==2||mode==15?641:mode==3?1600:1280,height=mode==1||mode==14?640:mode==2||mode==15?479:mode==3?768:800;
+ CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<24);
+ bool matrix=mode==22||mode==23;
+ unsigned width=mode==1||mode==14||mode==23?640:mode==2||mode==15?641:mode==3?1600:1280,height=mode==1||mode==14||mode==23?640:mode==2||mode==15?479:mode==3?768:800;
  glsl_type_singleton_init_or_ref();struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
  struct remesa_device d={0};struct remesa_persistent_config cfg={.ops=&target_ops,.priv=&f,.context=9200,.va_start=0x20000000,.va_end=0x45000000,.byte_budget=96u*1024u*1024u,.resource_only_backend=true,.resource_limits={2048,2048,128,16u*1024u*1024u}};
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
@@ -85,7 +86,13 @@ int main(int argc,char **argv)
  const struct pipe_framebuffer_state fb={.width=width,.height=height,.nr_cbufs=1,.cbufs={{.texture=color,.format=PIPE_FORMAT_B8G8R8A8_UNORM}},.zsbuf={.texture=depth,.format=PIPE_FORMAT_Z24X8_UNORM}};
  ctx->set_framebuffer_state(ctx,&fb);CHECK(!remesa_context_error(ctx));
  struct pipe_shader_state sh={.type=PIPE_SHADER_IR_NIR,.ir.nir=linked_shader(0)};void *vs=ctx->create_vs_state(ctx,&sh);CHECK(vs);ctx->bind_vs_state(ctx,vs);sh.ir.nir=linked_shader(1);void *fs=ctx->create_fs_state(ctx,&sh);CHECK(fs);ctx->bind_fs_state(ctx,fs);
- const float raw[3][12]={{width*.25f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.75f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.25f,height*.75f,.125f,1,0,0,1,0,0,0,1,0}};
+ float raw[3][12]={{width*.25f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.75f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.25f,height*.75f,.125f,1,0,0,1,0,0,0,1,0}};
+ /* Explicit new input contract, never a CPU transform of submitted vertices.
+  * The unchanged POSITION program passes these clip coordinates to the TA. */
+ if(matrix){
+  const float clip[3][4]={{-.5f,.5f,-.75f,1},{.5f,.5f,-.75f,1},{-.5f,-.5f,-.75f,1}};
+  for(unsigned i=0;i<3;i++)memcpy(raw[i],clip[i],sizeof clip[i]);
+ }
  const struct pipe_resource vb_template={.target=PIPE_BUFFER,.format=PIPE_FORMAT_R8_UNORM,.bind=PIPE_BIND_VERTEX_BUFFER,.width0=sizeof raw,.height0=1,.depth0=1,.array_size=1};
  struct pipe_resource *vb=screen->resource_create(screen,&vb_template);CHECK(vb);ctx->buffer_subdata(ctx,vb,0,0,sizeof raw,raw);CHECK(!remesa_context_error(ctx));
  struct pipe_vertex_buffer binding={.buffer.resource=vb};vb->reference.count++;ctx->set_vertex_buffers(ctx,1,&binding);CHECK(!remesa_context_error(ctx));
@@ -93,6 +100,13 @@ int main(int argc,char **argv)
  void *el=ctx->create_vertex_elements_state(ctx,3,elements);CHECK(el);ctx->bind_vertex_elements_state(ctx,el);
  struct pipe_draw_info info={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};struct pipe_draw_start_count_bias draw={.count=3};
  struct remesa_linked_scene_request options={.state={.isp={.depth_bits_present=true,.depth_test=true,.depth_write=true,.compare=REMESA_DEPTH_LESS,.rgba_mask=15},.viewport={.framebuffer_width=width,.framebuffer_height=height,.width=width,.height=height,.depth_bits=24,.far_z=1,.path=REMESA_TA_VIEWPORT_INITIAL_ZERO}},.vertex_bank=4,.pixel_bank=3,.state_bank=4,.clear_depth=width==640?.25f:1};
+ if(matrix){
+  const struct pipe_viewport_state viewport={.scale={width*.5f,-(float)height*.5f,.5f},.translate={width*.5f,height*.5f,.5f}};
+  ctx->set_viewport_states(ctx,0,1,&viewport);CHECK(!remesa_context_error(ctx));
+  unsigned creates=f.creates,maps=f.cpu_maps;
+  CHECK(!remesa_context_window_viewport_snapshot(ctx,24,&options.state.viewport));
+  CHECK(options.state.viewport.path==REMESA_TA_VIEWPORT_MATRIX_WINDOW&&f.creates==creates&&f.cpu_maps==maps);
+ }
  struct remesa_scene_capture capture={0},before=capture;
  unsigned oldcreates=f.creates,oldmaps=f.cpu_maps;
  CHECK(remesa_context_prepare_linked_scene(ctx,&info,&draw,&options,(void *)&info)==EINVAL);
@@ -144,7 +158,7 @@ int main(int argc,char **argv)
   CHECK(!remesa_context_linked_isp_snapshot(ctx,&isp));options.state.isp=isp;
   CHECK(f.creates==creates&&f.cpu_maps==maps);
  }
- if(mode>=11){
+ if(mode>=11&&!matrix){
   struct pipe_fence_handle *fence=NULL;
   CHECK(remesa_context_submit_linked_scene(ctx,&info,&draw,&options,(void *)&info)==EINVAL);
   CHECK(remesa_context_submit_linked_scene(ctx,&info,&draw,&options,(void *)&options)==EINVAL);

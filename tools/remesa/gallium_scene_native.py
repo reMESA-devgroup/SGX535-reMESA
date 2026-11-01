@@ -34,7 +34,7 @@ def packet_matches(raw,expected,context,ids):
  if normalized!=raw:raise ValueError('bound packet differs from exact profile')
 
 def collect(device,output,plan,images,client,expected_fixture,client_sha,trace=False):
- if plan['profile'] not in (7,8):raise ValueError('bound Gallium closed profiles7/8 required')
+ if plan['profile'] not in (7,8,9,10):raise ValueError('bound Gallium closed profiles7/8 or matrix9/10 required')
  if p.sha(client.read_bytes())!=client_sha:raise ValueError('native client binary changed')
  report={'status':'PREPARING','identity':p.device_identity(device),'plan':plan,'hardware_driver_qualified':False,'requires_independent_pixel_oracle':True,'submission_path':'BOUND_GALLIUM_NIR_REAL_LINUX_MEMORY_PROVIDER','native_client_sha256':client_sha,'reference_images_uploaded_by_collector':False,'probe_ioctl_calls':0}
  def save():(output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -42,7 +42,7 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,trace=F
  try:
   start=time.monotonic()
   with (output/'native.stdout').open('xb') as out,(output/'native.stderr').open('xb') as err:
-   q=subprocess.run([str(client),str(fd),plan['size'],str(output),str(expected_fixture),'--execute'],stdout=out,stderr=err,pass_fds=(fd,),timeout=180)
+   q=subprocess.run([str(client),str(fd),plan['size'],str(output),str(expected_fixture),'--execute']+(['--matrix-window'] if plan['profile']>=9 else []),stdout=out,stderr=err,pass_fds=(fd,),timeout=180)
   report['native_client_wall_seconds']=time.monotonic()-start;report['native_client_exit']=q.returncode
   if q.returncode:raise RuntimeError('native client failed; no cleanup/retry')
   response=(output/'RESPONSE.bin').read_bytes();request=scene.PROBE.unpack(response);context=request[2];ids=list(request[3:20])
@@ -126,7 +126,7 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,trace=F
 def main():
  parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--size',choices=['1280x800','640x640'],required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--client',type=Path,required=True);parser.add_argument('--client-sha256',required=True);parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--execute',action='store_true');parser.add_argument('--trace',action='store_true');a=parser.parse_args()
  plan,images=scene.load_profile(a.catalogue,a.size,a.asset_root)
- if plan['profile'] not in (7,8):parser.error('bound Gallium7/8 catalogue required')
+ if plan['profile'] not in (7,8,9,10):parser.error('bound Gallium7/8 or matrix9/10 catalogue required')
  a.output.mkdir(parents=True,exist_ok=False)
  if not a.execute:(a.output/'PLAN.json').write_text(json.dumps(plan,indent=2)+'\n');print('PLAN_ONLY_NO_DEVICE_OPEN');return
  entry=next(f for f in json.loads(a.catalogue.read_text())['profiles'] if f['size']==a.size)

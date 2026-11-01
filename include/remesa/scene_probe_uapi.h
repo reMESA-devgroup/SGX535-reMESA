@@ -8,11 +8,12 @@
  * render ABI. No caller VA, packet, CODE, pointer or injected event accepted.
  * Responses/reserved enter zero. ioctl0 is a structured result; independent
  * physical completion/readback/guard evidence is still required. */
-#define REMESA_SCENE_PROBE_PROFILE_COUNT 8u
+#define REMESA_SCENE_PROBE_PROFILE_COUNT 10u
 /* Selectors1/2 preserve original profiles;3/4 add explicit initialization;
  *5/6 additionally finalize actual Z through the existing caller contract;
  *7/8 preserve that contract for bound Gallium/NIR inputs and their exact
- *relocated allocation graph. None are production or arbitrary-CODE admission. */
+ *relocated allocation graph;9/10 qualify separate clip-coordinate inputs with
+ *the existing MATRIX_WINDOW viewport. None are production or arbitrary-CODE admission. */
 struct remesa_scene_probe_request {
  __u32 version,profile;
  __u64 context;

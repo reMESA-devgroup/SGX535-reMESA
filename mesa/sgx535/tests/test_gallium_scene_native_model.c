@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT. Syscall model, never creates GPU pixels. */
 #define __wrap_ioctl previous_scene_model_ioctl
 #define REMESA_NATIVE_MODEL_PROFILE_MIN 7u
-#define REMESA_NATIVE_MODEL_PROFILE_MAX 8u
+#define REMESA_NATIVE_MODEL_PROFILE_MAX 10u
 #include "test_scene_native_client_model.c"
 #undef __wrap_ioctl
 static bool returned_native,teardown_started;
@@ -10,6 +10,8 @@ int __wrap_ioctl(int fd,unsigned long command,...)
 {
  va_list ap;va_start(ap,command);void *arg=va_arg(ap,void *);va_end(ap);
  if(command==DRM_IOCTL_REMESA_SCENE_PROBE){
+  const struct remesa_scene_probe_request *request=arg;
+  assert((request->profile>=9)==(getenv("REMESA_GALLIUM_MODEL_MATRIX")!=NULL));
   int result=previous_scene_model_ioctl(fd,command,arg);
   assert(!result);returned_native=true;
   if(getenv("REMESA_GALLIUM_MODEL_BAD_RECEIPT"))((struct remesa_scene_probe_request *)arg)->phase=8;
