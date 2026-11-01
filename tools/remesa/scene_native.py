@@ -65,6 +65,10 @@ def collect(device,output,plan,images,client,expected_packet,trace=False,region_
    data=memory.read(ids[i],plan['bindings'][i]['bytes']);(output/f'bo-{i}-readback.bin').write_bytes(data);report['readbacks'][str(i)]={'bytes':len(data),'sha256':p.sha(data)}
    if i in images and data!=images[i]:raise RuntimeError('real constructor READ image differs from qualified bytes')
   report['readback_wall_seconds']=time.monotonic()-start
+  report['CPU_only_readbacks']=[]
+  for i,(va,n,rid,_) in enumerate(extras):
+   data=memory.read(rid,n);(output/f'extra-{i}-readback.bin').write_bytes(data)
+   report['CPU_only_readbacks'].append({'id':rid,'bytes':len(data),'sha256':p.sha(data)})
   for i,rid in enumerate(guard_ids):
    data=memory.read(rid,4096);(output/f'guard-{i}-readback.bin').write_bytes(data)
    if data!=b'\xa5'*4096:raise RuntimeError('guard modified')

@@ -27,6 +27,7 @@ class Client(unittest.TestCase):
       def read(self,rid,n):
        calls.append(('read',rid));assert byid[rid][1]==n
        if rid in gids:return b'\xa5'*4096
+       if rid in [b[2] for b in extras]:return bytes(n)
        i=next(i for i,b in enumerate(bindings) if b[2]==rid)
        return (source/f'model-bo-{i}.bin').read_bytes() if bindings[i][3]==1 else bytes(n)
       def request(self,action,rid=0):assert action in (p.UNMAP,p.UNPIN,p.DESTROY,p.CLOSE);calls.append((action,rid))
