@@ -1,0 +1,98 @@
+From: Gabriel Gama <operatingsystemsdepression@gmail.com>
+To: dri-devel@lists.freedesktop.org
+Cc: Patrik Jakobsson <patrik.r.jakobsson@gmail.com>
+Subject: [RFC] drm/gma500: SGX535 render ownership, MMU and failure handling
+
+Hello Patrik and DRM developers,
+
+I'm developing SGX535-reMESA, an independent Mesa/Gallium rendering path
+for Intel Poulsbo/GMA 500. Before designing a production submission UAPI,
+I'd appreciate advice on the ownership and lifetime model alongside
+existing gma500 display support. This is an architecture discussion, with
+no patch series or request to merge the experimental interfaces.
+
+The test machine is a Dell Inspiron Mini 12, Atom Z520, PCI 8086:8108,
+SGX535 core 0x01130000/revision 0x00010201. Kernel work currently builds
+against antiX 5.10.240-antix.1-486-smp on 32-bit x86; it has not been
+ported or qualified against current mainline.
+
+There is historical physical evidence for a restricted 1280x800
+600-frame/600-submission glxgears run, isolated native 2D copy/fill, and
+bounded fixed-profile private-MMU jobs. Those results do not qualify the
+current general scene path. That path currently retains a 17-allocation
+graph and validates selected TA syntax, direct references and USE program
+windows offline. Complete PDS/indirect-fetch validation and ordered native
+execution remain unfinished; it is not admitted for GPU execution.
+The latest candidate module is built but uninstalled and unqualified.
+The last observed stock X11 desktop still used llvmpipe. Whole-desktop
+acceleration, GLES 2.0, desktop GL 2.1 and an installable driver remain goals.
+
+The experimental design is deliberately serialized:
+
+* GEM-backed objects are held by jobs with generation-checked private IDs.
+  A private GPU page directory maps retained backing with narrowed access;
+  CPU-only storage is excluded. Mapping/control pages and backing lifetimes
+  remain held until a verified release, or are quarantined on uncertainty.
+* Native 2D, rendering and IRQ attribution share device exclusion. The
+  existing fixed-profile executor holds an endpoint mutex and the MMU
+  writer semaphore across root binding, issue, completion, CPU visibility,
+  default-root restoration and source closure. It does not implement an
+  asynchronous queue, dma_fence/dma_resv or syncobj contract.
+* Failure does not fabricate completion or root restoration. Unplug guards
+  join protected CPU entry points and revoke admission; retained state
+  prevents reclamation/rebind where necessary. This is not proof that SGX
+  DMA has stopped. PCI save/restore and PM admission checks likewise do not
+  establish reset, S3 or runtime-PM safety.
+
+My questions, in priority order:
+
+1. Is extending gma500 within one drm_device the right starting point for
+   render support sharing its GEM/GTT/MMU, IRQ and power state? Would you
+   prefer a render component under that ownership, and what separation
+   should precede any render-node/UAPI proposal? A second driver claiming
+   the same PCI function would not solve the shared-hardware arbitration.
+
+2. For an initially single-job design, should job-held GEM references,
+   explicit per-job GPU mappings and one global exclusion domain be the
+   baseline, with dma_resv fences for object hazards and CPU access? Which
+   current DRM helpers or small driver would you recommend as a model?
+   I want root switching and cache publication to have explicit ownership
+   without treating the current private IDs or synchronous ioctl as ABI.
+
+3. Without a demonstrated SGX reset/stop sequence, is a terminal wedged
+   state with retained backing a reasonable development policy? What
+   stop/isolation proof must removal provide before translations can be
+   reclaimed, and how should active hardware detach be separated from
+   later GEM destruction? In particular, old file/VMA/fault callbacks must
+   not touch MMIO/GTT or PM state after unplug or a later rebind. Should
+   suspend be refused while work/root state is uncertain until that same
+   stop-and-restore contract is demonstrated?
+
+4. Which current DRM tree should host the first reviewable work: small
+   gma500 lifetime/admission fixes first, then submission/synchronization
+   together with real open Mesa userspace? I intend to forward-port and
+   use current GEM/PM APIs rather than propose a cross-version abstraction
+   around this 5.10 experiment. Are there specific gma500 constraints that
+   should change that order, especially before enabling runtime PM?
+
+Project and public evidence index:
+https://github.com/reMESA-devgroup/SGX535-reMESA
+
+The current development snapshot includes local, unpublished changes; the
+public repository alone does not reproduce the latest private kernel or
+physical runs. The relevant source areas are kernel/remesa/gma500/
+(remesa_gem_private_execute.inc, remesa_mmu_private.inc,
+remesa_mmu_switch.inc and the private lifetime/power guards), integrated
+for the experiment by tools/remesa/stage_twod_reservation.py. Source
+staging is a build aid, not the proposed upstream patch format.
+
+I understand that a future DRM UAPI needs corresponding real open-source
+userspace, including error handling, reviewed for a suitable upstream
+project. I can follow up with a small current-kernel diff and a focused
+lifetime/state-transition description once the integration direction is
+clear. Feedback on the ownership boundary or the most useful first diff
+would be particularly helpful.
+
+Thanks,
+Gabriel Gama
+operatingsystemsdepression@gmail.com
