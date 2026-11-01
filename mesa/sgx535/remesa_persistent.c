@@ -3571,6 +3571,54 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *device,
  return 0;
 }
 
+int remesa_persistent_linked_scene_prepare(struct remesa_device *device,
+ const struct remesa_linked_scene_request *request,struct remesa_scene_capture *out)
+{
+ if(!request||!out||(uintptr_t)request%_Alignof(struct remesa_linked_scene_request)||
+    (uintptr_t)out%_Alignof(struct remesa_scene_capture)||
+    overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ const struct remesa_linked_scene_request r=*request;
+ if(!r.linkage||(uintptr_t)r.linkage%_Alignof(struct remesa_shader_linkage)||
+    overlaps(r.linkage,sizeof(*r.linkage),out,sizeof(*out))||
+    (r.geometry.vertices&&overlaps(r.geometry.vertices,r.geometry.vertex_bytes,out,sizeof(*out)))||
+    (r.geometry.indices&&overlaps(r.geometry.indices,r.geometry.index_bytes,out,sizeof(*out))))return EINVAL;
+ if(out->owner||out->serial||out->slot||out->reserved)return EBUSY;
+ struct remesa_persistent_render_target_backing color;
+ struct remesa_persistent_depth_backing depth;
+ e=remesa_persistent_render_target_snapshot(device,r.color,r.width,r.height,r.color_pitch,&color);if(e)return e;
+ e=remesa_persistent_depth_snapshot(device,r.depth,&depth);if(e)return e;
+ if(r.color==r.depth||depth.width!=r.width||depth.height!=r.height||depth.cpp!=4)return EINVAL;
+ if(r.state.viewport.framebuffer_width!=r.width||r.state.viewport.framebuffer_height!=r.height)return EINVAL;
+ struct persistent *d=device->priv;void *objects[16]={0};struct remesa_scene_capture capture={0};
+ const uint32_t banks[2]={r.vertex_bank,r.pixel_bank};
+ /* All GPU bytes still come from their established typed owners. */
+ e=remesa_persistent_linked_program_prepare(device,r.linkage,banks,&objects[0]);if(e)goto done;
+ e=remesa_persistent_linked_geometry_prepare(device,&r.geometry,&objects[1]);if(e)goto done;
+ e=remesa_persistent_linked_pds_prepare(device,objects[0],objects[1],&objects[2]);if(e)goto done;
+ e=remesa_persistent_linked_state_prepare(device,objects[2],&r.state,r.state_bank,&objects[3]);if(e)goto done;
+ e=remesa_persistent_scene_close_prepare(device,r.width,r.height,r.state_bank,&objects[4]);if(e)goto done;
+ const struct remesa_linked_body_draw draw={objects[3],0,r.geometry.indices?r.geometry.index_count:r.geometry.vertex_count};
+ e=remesa_persistent_linked_body_prepare(device,&draw,1,objects[4],&objects[5]);if(e)goto done;
+ e=remesa_persistent_initialized_prefix_prepare(device,r.width,r.height,r.clear_depth,r.vertex_bank,r.pixel_bank,r.state_bank,&objects[6]);if(e)goto done;
+ e=remesa_persistent_linked_ta_prepare(device,objects[6],objects[5],&objects[7]);if(e)goto done;
+ e=remesa_persistent_finalized_targets_prepare(device,objects[7],r.color,r.depth,r.color_pitch,&objects[8]);if(e)goto done;
+ e=remesa_persistent_linked_background_prepare(device,objects[8],r.pixel_bank,&objects[9]);if(e)goto done;
+ e=remesa_persistent_linked_event_auxiliary_prepare(device,objects[8],r.pixel_bank,&objects[10]);if(e)goto done;
+ e=remesa_persistent_linked_region_allocate(device,objects[8],&objects[11]);if(e)goto done;
+ e=remesa_persistent_allocate_placed(device,0x2000000,REMESA_VA_SURFACE,&objects[12]);if(e)goto done;
+ e=remesa_persistent_allocate_placed(device,0x2000000,REMESA_VA_RASTER,&objects[13]);if(e)goto done;
+ e=remesa_persistent_linked_dpm_prepare(device,objects[12],objects[13],&objects[14]);if(e)goto done;
+ e=remesa_persistent_linked_event_profile_prepare(device,objects[10],&objects[15]);if(e)goto done;
+ e=remesa_persistent_scene_capture(device,objects[9],objects[15],objects[11],objects[14],&capture);
+ done:
+ for(unsigned i=16;i>0;i--)if(objects[i-1])destroy_bo(d,objects[i-1]);
+ if(d->failed)return EOWNERDEAD;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)if(d->buffers[i].live&&d->buffers[i].quarantined)return EOWNERDEAD;
+ if(e)return e;
+ *out=capture;return 0;
+}
+
 int remesa_persistent_set_native_copy(struct remesa_device *device,remesa_gpu_copy_fn fn)
 {
  if(!device||device->ops!=&device_ops||!device->priv||!fn)return EINVAL;

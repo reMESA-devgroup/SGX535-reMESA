@@ -846,6 +846,30 @@ int remesa_persistent_set_native_scene(struct remesa_device *,remesa_gpu_scene_f
  */
 int remesa_persistent_scene_capture_submit(struct remesa_device *,
  struct remesa_scene_capture,void **fence);
+/* Compose existing encoders/owners for one cold linked draw into an owned
+ * capture. COLOR/Z already belong to this device/frontend and stay owned by
+ * the caller. This is preparation only; no dispatch, CPU vertex transforms,
+ * pixel rendering, attachment/DPM clear or native-admission override.
+ * Current linked shader/geometry/profile restrictions are unchanged.
+ * Success retains all generated owners transitively in the capture and drops
+ * their temporary public references. Ordinary failure unwinds generated
+ * owners only; uncertain failures retain endpoint quarantine and require the
+ * existing recovery contract. The output token enters zero and is unchanged
+ * on failure. All source storage is immutable during the externally locked
+ * call, disjoint from output. Existing COLOR load/preservation is not admitted:
+ * actual native submission must establish the cold attachment contract. */
+struct remesa_linked_scene_request {
+ void *color,*depth;
+ uint32_t width,height,color_pitch;
+ const struct remesa_shader_linkage *linkage;
+ struct remesa_linked_geometry_input geometry;
+ struct remesa_persistent_linked_state_request state;
+ uint32_t vertex_bank,pixel_bank,state_bank;
+ float clear_depth;
+};
+int remesa_persistent_linked_scene_prepare(struct remesa_device *,
+ const struct remesa_linked_scene_request *,struct remesa_scene_capture *);
+
 
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
