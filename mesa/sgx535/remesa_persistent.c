@@ -3025,6 +3025,12 @@ int remesa_persistent_scene_footprint(const struct remesa_device *device,void *b
   e=linked_live(d,parents[i],true);if(e)return e;
   for(unsigned j=0;j<i;j++)if(parents[i]==parents[j])return EINVAL;
  }
+ struct memory *event=NULL;
+ if(aux->linked_event_profile){
+  struct remesa_persistent_linked_event_profile_backing metadata;
+  e=remesa_persistent_linked_event_profile_snapshot(device,aux,&metadata);if(e)return e;
+  event=aux;aux=event->linked_dependency;
+ }
  if(!bg->linked_background||!aux->linked_event_auxiliary||!region->linked_region||
     !region->scene_hw||!dpm->linked_dpm)return EINVAL;
  struct memory *targets=bg->linked_background->targets;
@@ -3064,6 +3070,9 @@ int remesa_persistent_scene_footprint(const struct remesa_device *device,void *b
   REMESA_ACCESS_READ,rw,rw,rw};
  for(unsigned i=0;i<sizeof(extra)/sizeof(extra[0]);i++){
   e=scene_footprint_add(d,extra[i],access[i],roles[i],&value);if(e)return e;
+ }
+ if(event){
+  e=scene_footprint_add(d,event,REMESA_ACCESS_READ,REMESA_SCENE_REF_EVENT_PDS,&value);if(e)return e;
  }
  *out=value;return 0;
 }

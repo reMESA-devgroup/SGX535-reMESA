@@ -652,7 +652,11 @@ int remesa_persistent_linked_region_snapshot(const struct remesa_device *,void *
 /* Conservative allocation-level GPU references for one coherent scene.
  * Borrows four live frontend owners, with external serialization; does NOT
  * create job holds, issue ioctls or admit execution. All three scene owners
- * must refer to the identical COLOR/Z/TA target owner. No raw VA/CODE accepted.
+ * must refer to the identical COLOR/Z/TA target owner. The event argument
+ * accepts either the previous auxiliary owner or the new fixed-profile PDS
+ * owner; the latter adds one READ reference and retains its auxiliary. An
+ * admitted physical event is still pending, so all NEEDS bits remain set.
+ * No raw VA/CODE accepted.
  * Logical and rounded extents are not measured GPU fetch lengths. The old
  * copied body BO and CPU-only DPM plan BO are deliberately not GPU references.
  * Undefined attachment/DPM contents remain undefined. Every returned result
@@ -663,7 +667,8 @@ enum remesa_scene_reference_role {
  REMESA_SCENE_REF_COLOR=1u<<2,REMESA_SCENE_REF_DEPTH=1u<<3,
  REMESA_SCENE_REF_BACKGROUND=1u<<4,REMESA_SCENE_REF_BACKGROUND_PROGRAM=1u<<5,
  REMESA_SCENE_REF_EVENT_AUXILIARY=1u<<6,REMESA_SCENE_REF_REGION=1u<<7,
- REMESA_SCENE_REF_DPM_TABLE=1u<<8,REMESA_SCENE_REF_DPM_PARAMETER=1u<<9
+ REMESA_SCENE_REF_DPM_TABLE=1u<<8,REMESA_SCENE_REF_DPM_PARAMETER=1u<<9,
+ REMESA_SCENE_REF_EVENT_PDS=1u<<10
 };
 enum remesa_scene_incomplete {
  REMESA_SCENE_NEEDS_EVENT_PDS=1u<<0,REMESA_SCENE_NEEDS_COLOR_LOAD_INIT=1u<<1,

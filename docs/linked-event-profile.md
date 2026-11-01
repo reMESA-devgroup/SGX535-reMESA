@@ -45,10 +45,10 @@ allocation, mapping, hash, readback or synchronization.
 This corrects the prior overly broad implementation boundary: lack of a general
 instruction encoder should not prevent constructing the already preserved fixed
 profile. It does not reinterpret the older DATA-only tests as event execution,
-or claim arbitrary instruction changes are safe. Scene footprint/capture still
-use their previous auxiliary-only contract and retain every incomplete flag;
-connecting the new program owner and complete raster/init/native admission is
-subsequent integration work.
+or claim arbitrary instruction changes are safe. Scene footprint/capture now also accept this program owner and retain both
+the program and auxiliary as READ references, while keeping every incomplete
+flag. See [scene-event-capture.md](scene-event-capture.md). Complete
+raster/init/native admission and physical event qualification remain pending.
 
 Evidence root: `/home/gama/sgx535-offline/linked-event-profile-20261031/v1`.
 `ORACLE.json` binds CODE84 at role0+0x4500 in the preserved physical profile and
