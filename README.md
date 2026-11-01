@@ -39,10 +39,11 @@ Here's how things have gone so far:
 - **October 21:** An OpenGL `glDrawArrays` call went through my Gallium implementation and reached the SGX535. The readback contained exactly 136 green pixels and 888 untouched pixels in a 32×32 target.
 - **October 25:** I finally got the original `glxgears` running at the Mini 12's native 1280×800 resolution.
 - **October 27:** A qualified run completed 600 frames with 600 real GPU submissions, averaging **16.1345 FPS** across six steady measurement windows.
+- **November 1:** The new Gallium/NIR scene path reached the real SGX535 at **1280×800 and 640×640**. Color and depth matched the expected results, and both jobs retired cleanly. [The test report](docs/gallium-physical-qualification.md) has the details. Still more to connect before OpenGL 2.1 is ready.
 
 Yes, that's about 16 FPS. On an Atom Z520 from 2008, I'll take it.
 
-The latest run improved FPS by **11.29%** compared with the previous qualified snapshot path, which averaged 14.4983 FPS. That improvement includes several changes to the kernel path, memory handling and X11 presentation, so I can't credit any single optimization.
+The October 27 run improved FPS by **11.29%** compared with the previous qualified snapshot path, which averaged 14.4983 FPS. That improvement includes several changes to the kernel path, memory handling and X11 presentation, so I can't credit any single optimization.
 
 I've also qualified a restricted direct read-only GEM FD/XSHM presentation path. A separate six-operation physical test verified GPU COLOR, defined Z24 depth bits, the input images and the resulting X11 pixels.
 
