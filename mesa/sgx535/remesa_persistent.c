@@ -54,7 +54,7 @@ struct memory {
  uint8_t *control_image;
  bool isp_update,scene_close,raw_geometry,shader_program,shader_pds;
  struct linked_dpm *linked_dpm;
- bool linked_event_auxiliary;
+ bool linked_event_auxiliary,linked_event_profile;
  bool linked_region;
  uint32_t event_pixel_bank;
  struct remesa_use_entry_plan state_use_entry;
@@ -2773,13 +2773,10 @@ fail:
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
  return d->failed?EOWNERDEAD:e;
 }
-int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *device,
- void *object,struct remesa_persistent_linked_event_auxiliary_backing *out)
+static int event_auxiliary_metadata(struct persistent *d,struct memory *b,bool owner,
+ struct remesa_persistent_linked_event_auxiliary_backing *out)
 {
- if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_auxiliary_backing))return EINVAL;
- int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
- struct persistent *d=device->priv;struct memory *b=object;
- e=linked_live(d,b,true);if(e)return e;
+ int e=linked_live(d,b,owner);if(e)return e;
  if(!b->linked_event_auxiliary||!b->linked_dependency)return EINVAL;
  struct remesa_persistent_linked_event_auxiliary_backing value={.owner=d->cfg.context,
   .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
@@ -2800,6 +2797,67 @@ int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device
  e=remesa_pds_structure_encode_psb_event_data(&request,value.event_data,
   value.event_data_known_mask,sizeof(value.event_data),&value.event_data_bytes);if(e)return e;
  if(value.event_data_bytes!=sizeof(value.event_data))return EPROTO;
+ *out=value;return 0;
+}
+int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *device,
+ void *object,struct remesa_persistent_linked_event_auxiliary_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_auxiliary_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ return event_auxiliary_metadata(device->priv,object,true,out);
+}
+int remesa_persistent_linked_event_profile_prepare(struct remesa_device *device,
+ void *auxiliary_object,void **out)
+{
+ if((uintptr_t)out%_Alignof(void *))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct memory *aux=auxiliary_object;
+ struct remesa_persistent_linked_event_auxiliary_backing metadata;
+ e=event_auxiliary_metadata(d,aux,true,&metadata);if(e)return e;
+ if(aux->refs==UINT32_MAX)return EBUSY;
+ const struct remesa_pds_psb_event_data_request request={
+  .source_allocation_address=metadata.targets.gpu_va,
+  .source_allocation_bytes=metadata.targets.used_bytes,
+  .source_offset=metadata.targets.color_data_offset,
+  .end_use_lower19=metadata.use_lower19[1],.transfer_use_lower19=metadata.use_lower19[0]};
+ uint8_t image[REMESA_PDS_PSB_EVENT_PROFILE_BYTES],known[REMESA_PDS_PSB_EVENT_PROFILE_BYTES];size_t n=0;
+ e=remesa_pds_structure_encode_psb_event_profile(&request,image,known,sizeof(image),&n);if(e)return e;
+ if(n!=sizeof(image))return EPROTO;
+ size_t before=d->allocated;void *object=NULL;
+ e=allocate_class(d,REMESA_PDS_PSB_EVENT_PROFILE_RESERVATION_BYTES,&object,REMESA_VA_PROGRAM);
+ if(e)return d->failed||d->allocated!=before?EOWNERDEAD:e;
+ struct memory *b=object;b->shader_pds=true;b->linked_event_profile=true;
+ b->linked_dependency=aux;aux->refs++;
+ if(b->va%32||b->va<UINT64_C(0x20000000)||b->va+b->allocated>UINT64_C(0x30000000)){e=ENOTSUP;goto fail;}
+ /* Existing immutable image publication/verification, once at preparation.
+  * Reserved400 and rounded backing are not additional CODE or fetch claims. */
+ e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+ if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+ b->readable=true;*out=b;return 0;
+fail:
+ if(b->quarantined){*out=b;return EOWNERDEAD;}
+ destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
+ return d->failed?EOWNERDEAD:e;
+}
+int remesa_persistent_linked_event_profile_snapshot(const struct remesa_device *device,
+ void *object,struct remesa_persistent_linked_event_profile_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_profile_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct memory *b=object;
+ e=linked_live(d,b,true);if(e)return e;
+ if(!b->linked_event_profile||!b->linked_dependency)return EINVAL;
+ if(b->bytes!=REMESA_PDS_PSB_EVENT_PROFILE_RESERVATION_BYTES||b->allocated<b->bytes||
+    b->va%32||b->va<UINT64_C(0x20000000)||b->va+b->allocated>UINT64_C(0x30000000))return EPROTO;
+ struct remesa_persistent_linked_event_profile_backing value={.owner=d->cfg.context,
+  .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,
+  .allocation_bytes=b->allocated,.reserved_bytes=b->bytes,
+  .used_bytes=REMESA_PDS_PSB_EVENT_PROFILE_BYTES,.data_bytes=64,.code_offset=64,.code_bytes=84,
+  .descriptor_field0c=16};
+ e=event_auxiliary_metadata(d,b->linked_dependency,false,&value.auxiliary);if(e)return e;
  *out=value;return 0;
 }
 static int dpm_storage_metadata(struct persistent *d,struct memory *b,bool owner,

@@ -1192,3 +1192,53 @@ int remesa_pds_structure_encode_psb_event_data(
  }
  memcpy(bytes,image,64);memcpy(known_mask,mask,64);*written=64;return 0;
 }
+
+int remesa_pds_structure_encode_psb_event_profile(
+ const struct remesa_pds_psb_event_data_request *request,uint8_t *bytes,
+ uint8_t *known_mask,size_t capacity,size_t *written)
+{
+ if((uintptr_t)request%_Alignof(struct remesa_pds_psb_event_data_request)||
+    (uintptr_t)written%_Alignof(size_t))return EINVAL;
+ if(!range_valid(request,sizeof(*request))||!range_valid(written,sizeof(*written))||
+    !range_valid(bytes,capacity)||!range_valid(known_mask,capacity))return EINVAL;
+ if(!disjoint(request,sizeof(*request),bytes,capacity)||
+    !disjoint(request,sizeof(*request),known_mask,capacity)||
+    !disjoint(request,sizeof(*request),written,sizeof(*written))||
+    !disjoint(bytes,capacity,known_mask,capacity)||!disjoint(bytes,capacity,written,sizeof(*written))||
+    !disjoint(known_mask,capacity,written,sizeof(*written)))return EINVAL;
+ uint8_t image[REMESA_PDS_PSB_EVENT_PROFILE_BYTES]={0},mask[REMESA_PDS_PSB_EVENT_PROFILE_BYTES]={0};
+ size_t n=0;int e=remesa_pds_structure_encode_psb_event_data(request,image,mask,64,&n);
+ if(e)return e;
+ if(capacity<sizeof(image))return ENOSPC;
+ uint32_t first,second;
+ e=remesa_pds_structure_forward_index(2,3,21,&first);if(e)return e;
+ e=remesa_pds_structure_forward_index(7,13,21,&second);if(e)return e;
+ /* Exact original constructor stores relative to the DATA64 end. These
+  * constants are a restricted CPU profile, not guessed instruction fields,
+  * generic opcodes or permission to substitute another program family. */
+ uint8_t *code=image+64;
+ store_le32(code+0x00,UINT32_C(0xcf820030));
+ store_le32(code+0x04,UINT32_C(0x87600000));
+ store_le32(code+0x08,first);
+ store_le32(code+0x0c,UINT32_C(0x070003e5));
+ store_le32(code+0x10,UINT32_C(0xaf000000));
+ store_le32(code+0x14,UINT32_C(0xcf820830));
+ store_le32(code+0x18,UINT32_C(0x87600000));
+ store_le32(code+0x1c,second);
+ store_le32(code+0x20,UINT32_C(0x07042363));
+ store_le32(code+0x24,UINT32_C(0x170086e0));
+ store_le32(code+0x28,UINT32_C(0xf7800b31));
+ store_le32(code+0x2c,UINT32_C(0xcf621031));
+ store_le32(code+0x30,UINT32_C(0xc762c070));
+ store_le32(code+0x34,UINT32_C(0xf7800b32));
+ store_le32(code+0x38,UINT32_C(0xcf641432));
+ store_le32(code+0x3c,UINT32_C(0xc764c070));
+ store_le32(code+0x40,UINT32_C(0xf7811933));
+ store_le32(code+0x44,UINT32_C(0xcf661833));
+ store_le32(code+0x48,UINT32_C(0xc766c070));
+ store_le32(code+0x4c,UINT32_C(0x070b0345));
+ store_le32(code+0x50,UINT32_C(0xaf000000));
+ memset(mask+64,0xff,84);
+ memcpy(bytes,image,sizeof(image));memcpy(known_mask,mask,sizeof(mask));
+ *written=sizeof(image);return 0;
+}

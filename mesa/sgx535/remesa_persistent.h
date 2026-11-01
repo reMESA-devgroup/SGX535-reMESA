@@ -589,6 +589,26 @@ struct remesa_persistent_linked_event_auxiliary_backing {
 };
 int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *,
  void *bo,struct remesa_persistent_linked_event_auxiliary_backing *);
+/* Owned fixed392ab event profile using the preserved original CPU recipe.
+ * No caller CODE/VA accepted: derive DATA from one live auxiliary/target
+ * graph, publish once with the existing immutable lease/verification/sync.
+ * Holds the entire graph through public owner release and uncertain disposal.
+ * This is a profile-specific program owner, NOT a general PDS ISA encoder or
+ * native execution admission. Existing scene NEEDS flags remain unchanged.
+ * Original reserve400, commit148, DATA64/CODE84, descriptor field0c16; none
+ * of these is claimed as the hardware fetch extent. Public writes and legacy
+ * color submission reject. Snapshots have no provider I/O/hash/sync.
+ */
+int remesa_persistent_linked_event_profile_prepare(struct remesa_device *,
+ void *event_auxiliary,void **bo);
+struct remesa_persistent_linked_event_profile_backing {
+ uint64_t owner,generation,gpu_va;
+ uint32_t handle,descriptor_field0c;
+ size_t allocation_bytes,reserved_bytes,used_bytes,data_bytes,code_offset,code_bytes;
+ struct remesa_persistent_linked_event_auxiliary_backing auxiliary;
+};
+int remesa_persistent_linked_event_profile_snapshot(const struct remesa_device *,
+ void *bo,struct remesa_persistent_linked_event_profile_backing *);
 /* Own a CPU DPM load plan and retain two live storage allocations. Uses only
  * the already demonstrated fixed32MiB table/parameter capacity profile.
  * Table belongs to SURFACE40000000..ffffffff, parameter to RASTER30000000..

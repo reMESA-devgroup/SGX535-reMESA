@@ -2,7 +2,8 @@
  * Original reconstruction of CPU descriptor/index construction, not an ISA
  * semantic decoder or executable shader. Evidence: psb_dri.so ELF 0x25970,
  * descriptor paths 0x25bd4..0x260d0, markers 0x2612c/0x26163 and CODE stores
- * 0x26345..0x263c4. No proprietary program is embedded here.
+ * 0x26345..0x263c4. The separate fixed psb event profile below reconstructs
+ * its original CPU stores; it is not a general event instruction encoder.
  */
 #ifndef REMESA_PDS_STRUCTURE_H
 #define REMESA_PDS_STRUCTURE_H
@@ -405,14 +406,30 @@ int remesa_pds_structure_encode_event_data(
  * leaves DATA6/7/15 unwritten: policy zero/mask0, not consumed-size evidence.
  * Both lower19 inputs must derive from owned canonical USE entry plans;
  * numeric ranges alone authenticate no mapping or code. No CODE is emitted,
- * and the still-unimplemented84-byte event body is not replaced by zeros or
- * primary/secondary instructions. Existing Xpsb profile remains unchanged.
+ * and this DATA-only API does not emit a body. The separate fixed-profile
+ * API below preserves the original CODE84; Xpsb remains unchanged.
  */
 struct remesa_pds_psb_event_data_request {
  uint64_t source_allocation_address,source_allocation_bytes,source_offset;
  uint32_t end_use_lower19,transfer_use_lower19;
 };
 int remesa_pds_structure_encode_psb_event_data(
+ const struct remesa_pds_psb_event_data_request *,uint8_t *bytes,uint8_t *known_mask,
+ size_t capacity,size_t *written);
+/* Exact fixed392ab CPU construction, not a general event ISA encoder.
+ * Reuses the DATA request above and reproduces the original392ab
+ * CODE stores, including the two code-base-relative indices. The same CODE
+ * is preserved in the physically qualified glxgears profile. Its remaining
+ * instruction/operand semantics are NOT inferred from numerical agreement.
+ * Original reservation400, committed DATA64+CODE84=148, alignment32 are
+ * separate contracts. No extra CODE or padding is emitted to fill capacity;
+ * neither148 nor400 is a measured GPU fetch extent. CODE bytes are known
+ * CPU stores; DATA6/7/15 remain policy-zero/mask0. No upload/admission follows.
+ * All output regions/request must be disjoint; errors preserve all outputs.
+ */
+#define REMESA_PDS_PSB_EVENT_PROFILE_BYTES 148u
+#define REMESA_PDS_PSB_EVENT_PROFILE_RESERVATION_BYTES 400u
+int remesa_pds_structure_encode_psb_event_profile(
  const struct remesa_pds_psb_event_data_request *,uint8_t *bytes,uint8_t *known_mask,
  size_t capacity,size_t *written);
 #endif
