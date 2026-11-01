@@ -7,7 +7,7 @@
 #include "remesa_private_session.h"
 enum {OK,OK640,CAP,DISABLED,MEMDISABLED,INVALID,ALLOC,DUPALLOC,BACKING,LOST,POWER,CORE,REV,PDS,
  VA,SIZE,GEN,LEASE,HOLD,PIN,RESERVED,QUAR,VMA,ZERO,CPU_ALIAS,STREAM,EXECUTOR,TA,CEILING,LIVE,
- RESERVE,CLAIM,PREPARE,PREPARE_HELD,HASH,EARLY_EXEC,EXEC,NO_RECEIPT,LOAN_DROP,GUARD_DROP,JOB_DROP,SOURCE_END,BACKING_END,LOST_AFTER_CLAIM,OK_INIT,OK640_INIT,CASE_COUNT};
+ RESERVE,CLAIM,PREPARE,PREPARE_HELD,HASH,EARLY_EXEC,EXEC,NO_RECEIPT,LOAN_DROP,GUARD_DROP,JOB_DROP,SOURCE_END,BACKING_END,LOST_AFTER_CLAIM,OK_INIT,OK640_INIT,OK_FINAL,OK640_FINAL,CASE_COUNT};
 static unsigned fault,checks,reads,allocs,frees,dup_calls,hashes,reserves,claims,executions,source_ends,backing_ends;
 static bool administrator=true,memory_enabled=true,powered=true;
 static struct mutex endpoint_lock;
@@ -116,7 +116,7 @@ int main(int argc,char **argv)
  CHECK(argc==2);fault=(unsigned)strtoul(argv[1],NULL,10);CHECK(fault<CASE_COUNT);
  struct drm_psb_private priv={(void*)1};struct drm_device dev={&priv};struct drm_file file={1};
  struct remesa_gem_memory memory={.dev=&dev,.file=&file,.context=77,.root={0,0xdfffffffULL}};
- struct remesa_scene_probe_request request={.version=1,.profile=fault==OK640?2:fault==OK_INIT?3:fault==OK640_INIT?4:1,.context=77,.budget_ms=1000};
+ struct remesa_scene_probe_request request={.version=1,.profile=fault==OK640?2:fault==OK_INIT?3:fault==OK640_INIT?4:fault==OK_FINAL?5:fault==OK640_FINAL?6:1,.context=77,.budget_ms=1000};
  endpoint=&memory;expected_profile=&scene_probe_profiles[request.profile-1];scene_probe_enabled=true;
  for(unsigned i=0;i<17;i++){
   request.ids[i]=32+i;memory.bo[i]=(struct backing){.live=true,.generation=1,.va={expected_profile->bindings[i].address,0},.gem={expected_profile->bindings[i].bytes},.pinned=true,.reserved=true,.initialized=true,.zero_pristine=true};
@@ -125,7 +125,7 @@ int main(int argc,char **argv)
  if(fault==CAP)administrator=false;if(fault==DISABLED)scene_probe_enabled=false;if(fault==MEMDISABLED)memory_enabled=false;
  if(fault==INVALID){
 #define BAD(field,value) do{struct remesa_scene_probe_request bad=request;bad.field=(value);CHECK(remesa_scene_probe_ioctl(&dev,&bad,&file)==-EINVAL);}while(0)
-  BAD(version,0);BAD(profile,0);BAD(profile,5);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);
+  BAD(version,0);BAD(profile,0);BAD(profile,7);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);
   BAD(ids[0],0);BAD(ids[16],32);BAD(operation,1);BAD(cookie,1);BAD(core,1);BAD(revision,1);BAD(pds_base,1);
   BAD(phase,1);BAD(ledger,1);BAD(error,1);BAD(retained,1);BAD(stages,1);BAD(reserved[0],1);BAD(reserved[1],1);
 #undef BAD
@@ -144,7 +144,7 @@ int main(int argc,char **argv)
  if(fault==CAP)CHECK(error==-EPERM&&!reads&&!allocs);
  if(fault==DISABLED||fault==MEMDISABLED)CHECK(error==-EOPNOTSUPP&&!reads&&!allocs);
  if(fault==INVALID)CHECK(error==-EINVAL&&!reads&&!allocs);
- if(fault==OK||fault==OK640||fault==OK_INIT||fault==OK640_INIT){
+ if(fault==OK||fault==OK640||fault==OK_INIT||fault==OK640_INIT||fault==OK_FINAL||fault==OK640_FINAL){
   CHECK(!error&&!request.error&&!request.retained&&request.stages==15&&request.phase==9&&request.ledger==7&&request.operation==91&&request.cookie==91);
   CHECK(!memory.private_session&&!memory.private_source_held&&!memory.jobs[0].live&&source_ends==1&&backing_ends==1&&allocs==frees);
   struct remesa_scene_trace_request *query=calloc(1,sizeof(*query));CHECK(query);

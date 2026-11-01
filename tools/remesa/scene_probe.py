@@ -15,9 +15,12 @@ def load_profile(catalogue,size,asset_root=None):
  c=json.loads(catalogue.read_text());assert not c['physical_qualification'] and c['GPU_operations']==0
  assert [x['size'] for x in c['profiles']]==['1280x800','640x640']
  index=next(i for i,x in enumerate(c['profiles']) if x['size']==size);profile=c['profiles'][index]
+ finalized=c.get('depth_finalize',False);initialized=c.get('initialization_predecessor',False)
+ if finalized and not initialized:raise ValueError('finalized profile requires initialization predecessor')
  def path(original,name):return asset_root/size/name if asset_root else Path(original)
  raw=path(profile['packet_path'],'packet.bin').read_bytes();placement=path(profile['placement_path'],'placement.bin').read_bytes()
  if len(raw)!=2264 or p.sha(raw)!=profile['packet_sha256'] or len(placement)!=776 or p.sha(placement)!=profile['placement_sha256']:raise ValueError('profile metadata changed')
+ if struct.unpack_from('<I',raw,320)[0]!=(2 if finalized else 1) or struct.unpack_from('<I',raw,396)[0]!=(1 if finalized else 0):raise ValueError('depth finalization contract mismatch')
  if struct.unpack_from('<4I',raw,16)!=(1,17,10,2) or len(profile['bindings'])!=17:raise ValueError('unexpected closed profile shape')
  bindings=[];images={}
  for i,b in enumerate(profile['bindings']):
@@ -39,7 +42,7 @@ def load_profile(catalogue,size,asset_root=None):
   for va in [min(b['va'] for b in group)-4096,max(b['va']+b['bytes'] for b in group)]:
    if lower<=va and va+4096<=upper and not any(va<b['va']+b['bytes'] and b['va']<va+4096 for b in bindings) and va not in guards:guards.append(va)
  if len(bindings)+len(guards)>32:raise ValueError('guard allocation exceeds endpoint capacity')
- return {'profile':index+1+(2 if c.get('initialization_predecessor',False) else 0),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
+ return {'profile':index+1+(4 if finalized else 2 if initialized else 0),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
 
 def receipt(packet,context,profile,ids,budget):
  q=PROBE.unpack(packet)

@@ -5,6 +5,12 @@
 /* Serialization shared by the existing Mesa producer and the native consumer.
  * Inputs MUST already be validated by their owners. No address admission,
  * float operations, MMIO, buffer initialization or execution occurs here. */
+/* Exact caller/context contribution preserved from the qualified Series5
+ * depth finalizer. The caller must first validate the complete surface and
+ * actual backing presence; this helper alone admits no state or addresses. */
+static inline remesa_scene_u32 remesa_scene_depth_finalize_word(
+ remesa_scene_u32 word,int caller_flag,int context_depth_present)
+{return word|((caller_flag&&context_depth_present)?0x004000d0u:0u);}
 static inline void remesa_scene_raster_words(remesa_scene_u32 color_410,
  remesa_scene_u32 background,remesa_scene_u32 event,remesa_scene_u32 field0c,
  const remesa_scene_u32 depth[6],remesa_scene_u32 clear_bits,

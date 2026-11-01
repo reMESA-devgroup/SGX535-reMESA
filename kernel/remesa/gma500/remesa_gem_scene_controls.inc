@@ -15,7 +15,8 @@ static int scene_control_build(struct remesa_gem_memory *s,struct retained_job *
  /* Distinct typed sections cannot overlap, even if bytes could satisfy both. */
  if(offset<=action_offset?action_offset-offset<sizeof(*c):offset-action_offset<sizeof(action.command))return -EINVAL;
  memcpy(c,(const u8 *)j->commands+offset,sizeof(*c));
- if(c->schema!=REMESA_GEM_SCENE_CONTROL_SCHEMA||c->bytes!=sizeof(*c)||c->reserved||
+ if(!((c->schema==REMESA_GEM_SCENE_CONTROL_SCHEMA&&c->depth_finalize==0)||
+      (c->schema==REMESA_GEM_SCENE_CONTROL_FINALIZED_SCHEMA&&c->depth_finalize==1))||c->bytes!=sizeof(*c)||
     c->width!=action.command.width||c->height!=action.command.height)return -EINVAL;
  if(!c->color_pitch||!c->depth_pitch||c->width>c->color_pitch||c->width>c->depth_pitch||
     (c->color_pitch&31)||(c->depth_pitch&31)||c->color_pitch>2048||c->depth_pitch>2048||
@@ -53,6 +54,8 @@ static int scene_control_build(struct remesa_gem_memory *s,struct retained_job *
   if(addresses[i]&(i==0?3:15))return -EINVAL;
  }
  depth[0]=(((c->depth_pitch>>4)-1)<<8)|(c->depth_cpp==4?0x50000:0xa0000);
+ /* All backing, role, permission and extent checks precede finalization. */
+ depth[0]=remesa_scene_depth_finalize_word(depth[0],c->depth_finalize,1);
  depth[1]=bo[1]->va.start&0xf0000000U;
  for(i=2;i<6;i++)depth[i]=bo[1]->va.start&0x0ffffff0U;
  remesa_scene_raster_words(((c->width>>4)<<16)|(c->height>>4),addresses[1],addresses[2],16,

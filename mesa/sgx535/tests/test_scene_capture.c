@@ -94,6 +94,16 @@ int main(void)
     if(!i&&raw_region)scene_capture_export(&f,&expected,&packet);
     CHECK(packet.actions.width==sizes[size][0]&&packet.controls.height==sizes[size][1]);
     CHECK(packet.controls.event_bytes==148&&packet.controls.background_bytes==68);
+    bool finalized=getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_FINALIZED_DEPTH");
+    CHECK(packet.controls.schema==(finalized?2u:1u)&&packet.controls.depth_finalize==(finalized?1u:0u));
+    struct remesa_scene_packet invalid_controls=packet;
+    invalid_controls.controls.schema=1;invalid_controls.controls.depth_finalize=1;
+    CHECK(!remesa_scene_packet_valid(&invalid_controls));
+    invalid_controls.controls.schema=2;invalid_controls.controls.depth_finalize=0;
+    CHECK(!remesa_scene_packet_valid(&invalid_controls));
+    invalid_controls.controls.depth_finalize=2;CHECK(!remesa_scene_packet_valid(&invalid_controls));
+    invalid_controls.controls.schema=3;invalid_controls.controls.depth_finalize=1;
+    CHECK(!remesa_scene_packet_valid(&invalid_controls));
     unsigned char commands[REMESA_SCENE_PACKET_COMMAND_MAX];memset(commands,0xa5,sizeof commands);
     unsigned bytes=123;struct remesa_scene_packet_sections offsets;
     CHECK(remesa_scene_packet_commands(&packet,commands,sizeof commands,&bytes,&offsets));
@@ -178,7 +188,10 @@ int main(void)
      CHECK(shader_pds_le32(control.raster+19*8+4)==clear);
      CHECK(shader_pds_le32(get(&f,zm.handle)->bytes+zm.vertex_offset+8)==clear);
      CHECK(shader_pds_le32(control.raster+3*8+4)==bm.targets.color.state.raster_410);
-     CHECK(shader_pds_le32(control.raster+10*8+4)==bm.targets.depth.initial_surface.control_480);
+     struct remesa_depth_surface_state finalized_depth;
+     CHECK(!remesa_depth_surface_finalize(&bm.targets.depth.initial_surface,bm.targets.depth_finalize,true,&finalized_depth));
+     CHECK(bm.targets.depth_finalize==(getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_FINALIZED_DEPTH")));
+     CHECK(shader_pds_le32(control.raster+10*8+4)==finalized_depth.control_480);
      for(unsigned a=0;a<5;a++){
       CHECK(shader_pds_le32(control.raster+(11+a)*8)==bm.targets.depth.initial_surface.addresses[a].reg);
       CHECK(shader_pds_le32(control.raster+(11+a)*8+4)==bm.targets.depth.initial_surface.addresses[a].word);

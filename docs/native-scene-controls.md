@@ -19,8 +19,14 @@ bank restriction. Background needs at least68 bytes, the selected fixed event
 needs its committed148 bytes, and TA needs a DWORD-aligned stream window.
 Reserved event capacity400 is not substituted for consumed object148.
 
-The current selected profile is linear BGRA8, undefined Z of cpp2 or4, no depth
-finalization, no stencil and fixed event field0c16. Clear-depth IEEE binary32
+The selected profiles use linear BGRA8, undefined Z of cpp2 or4, no stencil
+and fixed event field0c16. Schema1 preserves the original unfinalized controls
+with `depth_finalize=0`. Schema2 requires `depth_finalize=1` and applies the
+existing caller/context depth finalizer after validating actual held Z backing.
+All other schema/flag combinations are refused. This does not mark Z contents
+DEFINED or replace the existing GPU clear. The immutable target owner carries
+the caller flag into both the Mesa raster encoder and the captured metadata;
+no GPU image bytes or programs change. Clear-depth IEEE binary32
 bits are checked with integers: positive finite0..1 and negative zero are
 accepted, preserving the existing userspace producer. No kernel floating-point
 operation is introduced. COLOR/Z initialization and actual command/program
@@ -56,9 +62,10 @@ An initial strict build exposed an old overlap test's undersized destination.
 The test now uses a union large enough for both overlapping arguments, keeping
 the same required `EINVAL`; the original compile failure is preserved.
 
-The existing fixed eleven-role executor/source path is unchanged. A complete
-native consumer still needs image/program/TA-reference validation, USE bank
-ownership, proper initialization/publication, ordered source-attributed issue,
-completion/retirement and restoration. These controls alone do not clear any
-scene-incomplete or advertised-capability bit. Physical qualification and
-normal frontend/loader/X11 integration remain necessary for the complete driver.
+The existing fixed eleven-role executor/source path is unchanged. The general
+consumer now connects image/program/TA-reference validation, USE bank ownership,
+initialization/publication, source-attributed issue, retirement and restoration;
+see `mesa-kernel-scene-replay.md` and the general-scene evidence. Controls alone
+do not clear any scene-incomplete or advertised-capability bit. Complete
+physical qualification and normal frontend/loader/X11 integration remain
+necessary for the complete driver.

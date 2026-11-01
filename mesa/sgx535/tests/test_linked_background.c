@@ -103,6 +103,9 @@ static void bg_setup(struct fixture *f,struct remesa_device *d,unsigned ctx,unsi
  void *children[11])
 {
  targets_setup(f,d,ctx,w,h,children);
+ if(getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_FINALIZED_DEPTH"))
+  CHECK(!remesa_persistent_finalized_targets_prepare(d,children[7],children[8],children[9],(w+31u)&~31u,&children[10]));
+ else
  CHECK(!remesa_persistent_linked_targets_prepare(d,children[7],children[8],children[9],(w+31u)&~31u,&children[10]));
 }
 static void bg_drop_children(struct remesa_device *d,void *children[11])

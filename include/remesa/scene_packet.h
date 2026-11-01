@@ -20,7 +20,7 @@ struct remesa_scene_packet_actions {remesa_scene_word schema,bytes,width,height,
 struct remesa_scene_packet_controls {
  remesa_scene_word schema,bytes,width,height,color_pitch,depth_pitch,depth_cpp,clear_depth_bits;
  remesa_scene_word color_id,depth_id,ta_id,ta_offset,ta_bytes;
- remesa_scene_word background_id,background_offset,background_bytes,event_id,event_offset,event_bytes,reserved;
+ remesa_scene_word background_id,background_offset,background_bytes,event_id,event_offset,event_bytes,depth_finalize;
 };
 struct remesa_scene_packet_use {remesa_scene_word id,byte_offset,program_bytes,bank,data_master,reserved;};
 struct remesa_scene_packet_window {remesa_scene_word index_id,index_offset,index_bytes,vertex_id,vertex_offset,vertex_bytes,vertex_count,reserved;};
@@ -44,7 +44,8 @@ static inline int remesa_scene_packet_valid(const struct remesa_scene_packet *p)
  if(!p||!p->owner||!p->serial||p->version!=1||!p->binding_count||p->binding_count>32||
     !p->use_count||p->use_count>55||!p->window_count||p->window_count>17||
     p->actions.schema!=1||p->actions.bytes!=32||p->actions.reserved||
-    p->controls.schema!=1||p->controls.bytes!=80||p->controls.reserved||
+    !((p->controls.schema==1&&p->controls.depth_finalize==0)||
+      (p->controls.schema==2&&p->controls.depth_finalize==1))||p->controls.bytes!=80||
     p->actions.width!=p->controls.width||p->actions.height!=p->controls.height)return 0;
  for(i=0;i<32;i++){
   if(i>=p->binding_count){if(p->bindings[i].id||p->bindings[i].access)return 0;continue;}

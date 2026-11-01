@@ -200,7 +200,7 @@ int remesa_depth_surface_finalize(const struct remesa_depth_surface_state *state
  if(!depth_surface_state_valid(state))return EINVAL;
  if(context_depth_present&&!state->address_count)return ENODATA;
  struct remesa_depth_surface_state result=*state;
- if(caller_flag&&context_depth_present)result.control_480|=UINT32_C(0x004000d0);
+ result.control_480=remesa_scene_depth_finalize_word(result.control_480,caller_flag,context_depth_present);
  memcpy(out,&result,sizeof(result));return 0;
 }
 int remesa_depth_clear_geometry_encode(const struct remesa_depth_clear_request *request,

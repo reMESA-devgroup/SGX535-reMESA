@@ -7,9 +7,10 @@ import argparse,hashlib,json,os,resource,shutil,struct,subprocess
 from pathlib import Path
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--producer',type=Path,required=True);p.add_argument('--kernel-tests',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--initialized',action='store_true');a=p.parse_args()
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--producer',type=Path,required=True);p.add_argument('--kernel-tests',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--initialized',action='store_true');p.add_argument('--finalized',action='store_true');a=p.parse_args()
  w=Path(__file__).resolve().parents[2];o=a.output.resolve();o.mkdir(parents=True,exist_ok=False)
- env=dict(os.environ);env.pop('REMESA_CAPTURE_EXPORT_DIR',None);env.pop('REMESA_CAPTURE_FINITE_VERTICES',None);env.pop('REMESA_CAPTURE_INITIALIZED_PREFIX',None)
+ env=dict(os.environ);env.pop('REMESA_CAPTURE_EXPORT_DIR',None);env.pop('REMESA_CAPTURE_FINITE_VERTICES',None);env.pop('REMESA_CAPTURE_INITIALIZED_PREFIX',None);env.pop('REMESA_CAPTURE_FINALIZED_DEPTH',None)
+ if a.finalized:assert a.initialized,'finalized qualification requires the preserved initialization predecessor'
  qemu=Path('/home/gama/sgx535-offline/phase8-single-color-hypothesis-20261006T034310Z/tests/qemu-root/usr/bin/qemu-i386');rows=[]
  def run(label,argv,extra=None,refusal=False):
   e=dict(env);e.update(extra or {})
@@ -24,6 +25,7 @@ def main():
   root=o/profile;root.mkdir();extra={'REMESA_CAPTURE_EXPORT_DIR':str(root)}
   if profile=='finite-inputs':extra['REMESA_CAPTURE_FINITE_VERTICES']='1'
   if a.initialized:extra['REMESA_CAPTURE_INITIALIZED_PREFIX']='1'
+  if a.finalized:extra['REMESA_CAPTURE_FINALIZED_DEPTH']='1'
   run(profile+'-export',[str(a.producer.resolve())],extra)
   for size in ['1280x800','640x640','641x479']:
    for variant,runner in variants:
@@ -54,6 +56,6 @@ def main():
   for variant,runner in variants:run(fault+'-'+variant,runner+[str(a.kernel_tests.resolve()/(variant+'-test_gem_scene_actions')),'--replay',str(dst)],refusal=True)
  paths=[w/'tools/remesa/test_scene_replay.py',w/'tools/remesa/scene_fixture.h',w/'include/remesa/scene_initial.h',w/'include/remesa/ta_references.h',w/'mesa/sgx535/tests/scene_capture_export.inc',w/'mesa/sgx535/tests/test_scene_capture.c',w/'mesa/sgx535/tests/test_linked_background.c',w/'kernel/remesa/gma500/tests/scene_replay_model.inc',w/'kernel/remesa/gma500/tests/test_gem_scene_actions.c',w/'kernel/remesa/gma500/tests/test_gem_private.c']
  sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
- report={'status':'ACTUAL_MESA_IMAGES_THROUGH_GENERAL_KERNEL_SCENE_MODEL_PASS','GPU_operations':0,'successful_replays':18,'deep_refusals':12 if a.initialized else 6,'initialization_predecessor':a.initialized,'exports':2,'scope':'Actual original encoders/image bytes, real memory lease/write/job/closure/executor/retirement; MMU/source/backend hardware callbacks modeled, no physical GPU qualification','sources':{str(p):sha(p) for p in paths},'binaries':{str(p):sha(p) for p in [a.producer.resolve()]+[a.kernel_tests.resolve()/(v+'-test_gem_scene_actions') for v,_ in variants]},'artifacts':{str(p):sha(p) for p in sorted(o.rglob('*')) if p.is_file() and p.suffix=='.bin'},'commands':rows}
+ report={'status':'ACTUAL_MESA_IMAGES_THROUGH_GENERAL_KERNEL_SCENE_MODEL_PASS','GPU_operations':0,'successful_replays':18,'deep_refusals':12 if a.initialized else 6,'initialization_predecessor':a.initialized,'depth_finalize':a.finalized,'exports':2,'scope':'Actual original encoders/image bytes, real memory lease/write/job/closure/executor/retirement; MMU/source/backend hardware callbacks modeled, no physical GPU qualification','sources':{str(p):sha(p) for p in paths},'binaries':{str(p):sha(p) for p in [a.producer.resolve()]+[a.kernel_tests.resolve()/(v+'-test_gem_scene_actions') for v,_ in variants]},'artifacts':{str(p):sha(p) for p in sorted(o.rglob('*')) if p.is_file() and p.suffix=='.bin'},'commands':rows}
  (o/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'])
 if __name__=='__main__':main()

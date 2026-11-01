@@ -39,7 +39,7 @@ struct linked_ta {
  uint8_t commands[68+28*REMESA_LINKED_BODY_MAX_DRAWS];
 };
 struct linked_dpm {struct memory *table,*parameter;};
-struct linked_targets {struct memory *ta,*color,*depth;uint32_t pitch;};
+struct linked_targets {struct memory *ta,*color,*depth;uint32_t pitch;bool depth_finalize;};
 struct linked_background {
  struct memory *program,*targets;
  struct remesa_use_entry_plan entry;
@@ -2625,8 +2625,8 @@ static int linked_targets_metadata(struct persistent *d,struct memory *ta,
  value.used_bytes=72;value.color_data_offset=0;value.ta_control_offset=16;
  *out=value;return 0;
 }
-int remesa_persistent_linked_targets_prepare(struct remesa_device *device,void *ta_object,
- void *color_object,void *depth_object,uint32_t pitch,void **out)
+static int linked_targets_prepare(struct remesa_device *device,void *ta_object,
+ void *color_object,void *depth_object,uint32_t pitch,bool finalize,void **out)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
@@ -2638,7 +2638,7 @@ int remesa_persistent_linked_targets_prepare(struct remesa_device *device,void *
  const struct remesa_raster_object_reference commands={ta->va,ta->allocated,0,m.commands.command_bytes};
  e=remesa_ta_control_encode(&commands,image+16);if(e)return e;
  struct linked_targets *owned=malloc(sizeof(*owned));if(!owned)return ENOMEM;
- *owned=(struct linked_targets){ta,color,depth,pitch};void *object=NULL;size_t before=d->allocated;
+ *owned=(struct linked_targets){ta,color,depth,pitch,finalize};void *object=NULL;size_t before=d->allocated;
  e=allocate_class(d,sizeof(image),&object,REMESA_VA_DEFAULT);
  if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
  struct memory *b=object;b->linked_targets=owned;ta->refs++;color->refs++;depth->refs++;
@@ -2651,6 +2651,12 @@ fail:
  if(b->quarantined){*out=b;return EOWNERDEAD;}
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
 }
+int remesa_persistent_linked_targets_prepare(struct remesa_device *device,void *ta,
+ void *color,void *depth,uint32_t pitch,void **out)
+{return linked_targets_prepare(device,ta,color,depth,pitch,false,out);}
+int remesa_persistent_finalized_targets_prepare(struct remesa_device *device,void *ta,
+ void *color,void *depth,uint32_t pitch,void **out)
+{return linked_targets_prepare(device,ta,color,depth,pitch,true,out);}
 int remesa_persistent_linked_targets_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_linked_targets_backing *out)
 {
@@ -2662,7 +2668,8 @@ int remesa_persistent_linked_targets_snapshot(const struct remesa_device *device
  struct remesa_persistent_linked_targets_backing value;
  e=linked_targets_metadata(d,t->ta,t->color,t->depth,t->pitch,false,&value);if(e)return e;
  value.owner=d->cfg.context;value.generation=b->token.generation;value.gpu_va=b->va;
- value.handle=b->handle;value.allocation_bytes=b->allocated;*out=value;return 0;
+ value.handle=b->handle;value.allocation_bytes=b->allocated;value.depth_finalize=t->depth_finalize;
+ *out=value;return 0;
 }
 
 static int background_targets_metadata(struct persistent *d,struct memory *targets,bool owner,
@@ -2673,7 +2680,7 @@ static int background_targets_metadata(struct persistent *d,struct memory *targe
  const struct linked_targets *t=targets->linked_targets;
  e=linked_targets_metadata(d,t->ta,t->color,t->depth,t->pitch,false,out);if(e)return e;
  out->owner=d->cfg.context;out->generation=targets->token.generation;out->gpu_va=targets->va;
- out->handle=targets->handle;out->allocation_bytes=targets->allocated;return 0;
+ out->handle=targets->handle;out->allocation_bytes=targets->allocated;out->depth_finalize=t->depth_finalize;return 0;
 }
 int remesa_persistent_linked_background_prepare(struct remesa_device *device,void *targets_object,
  uint32_t bank,void **out)
@@ -3216,7 +3223,8 @@ int remesa_persistent_scene_controls_snapshot(const struct remesa_device *device
   .color={value.width,value.height,tm->color.state.stride_bytes/4,tm->color.gpu_va,tm->color.state.image_bytes},
   .has_depth=true,.depth={.depth={tm->depth.width,tm->depth.height,tm->depth.pitch_pixels,tm->depth.cpp,
    REMESA_DEPTH_SURFACE_UNDEFINED,tm->depth.gpu_va,tm->depth.allocation_bytes},
-   .color_width=value.width,.color_height=value.height,.clear_depth=prefix->zclear_prefix->clear_depth},
+   .color_width=value.width,.color_height=value.height,.clear_depth=prefix->zclear_prefix->clear_depth,
+   .caller_finalize_flag=tm->depth_finalize},
   .background={bm.gpu_va,bm.allocation_bytes,0,bm.object_bytes},
   .event={em.gpu_va,em.allocation_bytes,0,em.used_bytes},.event_field0c=em.descriptor_field0c};
  e=remesa_raster_control_encode(&request,value.raster);if(e)return e;
@@ -3451,10 +3459,10 @@ int remesa_persistent_scene_packet_snapshot(const struct remesa_device *device,
   dpm->linked_dpm->table->handle,dpm->linked_dpm->parameter->handle,0};
  const struct remesa_persistent_linked_targets_backing *tm=&bm.targets;
  uint32_t depth_bits;memcpy(&depth_bits,&prefix->zclear_prefix->clear_depth,4);
- p.controls=(struct remesa_scene_packet_controls){1,80,controls.width,controls.height,
+ p.controls=(struct remesa_scene_packet_controls){tm->depth_finalize?2:1,80,controls.width,controls.height,
   tm->color.state.stride_bytes/4,tm->depth.pitch_pixels,tm->depth.cpp,depth_bits,
   tm->color.handle,tm->depth.handle,tm->commands.handle,0,tm->commands.command_bytes,
-  bm.handle,0,bm.object_bytes,em.handle,0,em.used_bytes,0};
+  bm.handle,0,bm.object_bytes,em.handle,0,em.used_bytes,tm->depth_finalize?1:0};
  for(unsigned i=0;i<p.use_count;i++){
   if(use.entries[i].byte_offset>UINT32_MAX||use.entries[i].program_bytes>UINT32_MAX)return ERANGE;
   p.uses[i]=(struct remesa_scene_packet_use){use.entries[i].handle,use.entries[i].byte_offset,

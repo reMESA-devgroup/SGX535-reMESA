@@ -540,9 +540,14 @@ int remesa_persistent_linked_ta_snapshot(const struct remesa_device *,void *bo,
  */
 int remesa_persistent_linked_targets_prepare(struct remesa_device *,void *ta,
  void *color,void *depth,uint32_t color_pitch_pixels,void **bo);
+/* Immutable caller finalization; uses the existing raster depth finalizer.
+ * Does not initialize backing or mark its contents DEFINED. */
+int remesa_persistent_finalized_targets_prepare(struct remesa_device *,void *ta,
+ void *color,void *depth,uint32_t color_pitch_pixels,void **bo);
 struct remesa_persistent_linked_targets_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle,color_access,depth_access;
+ bool depth_finalize;
  size_t allocation_bytes,used_bytes,color_data_offset,ta_control_offset;
  struct remesa_persistent_linked_ta_backing commands;
  struct remesa_persistent_render_target_backing color;

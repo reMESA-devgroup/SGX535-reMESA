@@ -3,15 +3,17 @@
 #define REMESA_GEM_SCENE_CONTROLS_H
 #include "remesa_gem_scene_actions.h"
 #define REMESA_GEM_SCENE_CONTROL_SCHEMA 1u
+#define REMESA_GEM_SCENE_CONTROL_FINALIZED_SCHEMA 2u
 /* Kernel-only immutable job section, not an ioctl ABI. All IDs must belong
  * to this job. Byte counts are committed object extents, not spare capacity.
- * Selected profile: linear BGRA8, undefined Z, no finalization/stencil,
+ * Selected profile: linear BGRA8, undefined Z, no stencil; schema1
+ * requires depth_finalize=0, schema2 requires depth_finalize=1 and actual Z,
  * fixed event field0c=16. clear_depth_bits is validated IEEE binary32 DATA. */
 struct remesa_gem_scene_control_command {
  u32 schema,bytes,width,height,color_pitch,depth_pitch,depth_cpp,clear_depth_bits;
  u32 color_id,depth_id,ta_id,ta_offset,ta_bytes;
  u32 background_id,background_offset,background_bytes;
- u32 event_id,event_offset,event_bytes,reserved;
+ u32 event_id,event_offset,event_bytes,depth_finalize;
 };
 struct remesa_gem_scene_controls {
  struct remesa_memory_ticket ticket;

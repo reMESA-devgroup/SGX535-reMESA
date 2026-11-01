@@ -253,7 +253,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_ta_control_encode(&ta,ta_bytes)&&!memcmp(ta_bytes,controls.ta,56));
  struct remesa_gem_scene_control_command *copy=(void *)((u8 *)j->commands+control_offset),copy_saved=*copy;
  control_saved=controls;
- for(unsigned negative=0;negative<12;negative++){
+ for(unsigned negative=0;negative<16;negative++){
   *copy=copy_saved;
   if(negative==0)copy->clear_depth_bits=0x7fc00000;
   if(negative==1)copy->color_pitch=width-1;
@@ -267,8 +267,22 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
   if(negative==9)copy->clear_depth_bits=0x3f800001;
   if(negative==10)copy->depth_cpp=3;
   if(negative==11)copy->color_pitch=2048;
+  if(negative==12)copy->depth_finalize=1; /* legacy cannot finalize */
+  if(negative==13)copy->schema=2; /* finalized must be explicit */
+  if(negative==14){copy->schema=2;copy->depth_finalize=2;}
+  if(negative==15){copy->schema=3;copy->depth_finalize=1;}
   CHECK(remesa_gem_scene_controls_prepare(s,ticket,4,control_offset,&controls)<0&&!memcmp(&controls,&control_saved,sizeof controls));
  }
+ /* Reconstruct the exact same finalized words as the established Mesa
+  * finalizer, for both supported Z pitches/formats without image mutation. */
+ for(unsigned cpp=2;cpp<=4;cpp+=2){
+  *copy=copy_saved;copy->schema=2;copy->depth_finalize=1;copy->depth_cpp=cpp;
+  raster.depth.depth.cpp=cpp;raster.depth.caller_finalize_flag=true;
+  CHECK(!remesa_gem_scene_controls_prepare(s,ticket,4,control_offset,&controls));
+  CHECK(!remesa_raster_control_encode(&raster,raster_bytes)&&!memcmp(raster_bytes,controls.raster,208));
+ }
+ raster.depth.caller_finalize_flag=false;
+ controls=control_saved;
  const u32 clear_cases[]={0,0x80000000U,1,0x3f800000};
  for(unsigned n=0;n<4;n++){
   *copy=copy_saved;copy->clear_depth_bits=clear_cases[n];copy->depth_cpp=(n&1)?2:4;
