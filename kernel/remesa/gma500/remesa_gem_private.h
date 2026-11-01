@@ -2,7 +2,11 @@
 #ifndef REMESA_GEM_PRIVATE_H
 #define REMESA_GEM_PRIVATE_H
 #include "remesa_gem_memory.h"
+#include "remesa_gem_job_limits.h"
 #include "remesa_mmu_private.h"
+#if REMESA_GEM_JOB_BINDINGS > REMESA_MMU_AUDIT_BINDINGS
+#error retained job capacity exceeds private MMU auditor
+#endif
 struct remesa_twod_reservation;
 /* CPU_ONLY keeps the GEM/job hold but creates no GPU PTE; cached must be0.
  * READ/WRITE/RW retain the existing MMU access bits1/2/3. */
@@ -21,7 +25,7 @@ struct remesa_gem_private {
  struct remesa_memory_ticket ticket;
  struct remesa_mmu_private *owner;
  struct remesa_twod_reservation *guard;
- struct remesa_gem_private_rule rules[16];
+ struct remesa_gem_private_rule rules[REMESA_GEM_JOB_BINDINGS];
  bool live,host_published,execution_attempted,execution_started,execution_retired;
 };
 /* Exact job IDs/order required; rules narrow private PTE access/cache policy.

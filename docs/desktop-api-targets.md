@@ -59,3 +59,9 @@ The event's general ISA semantics remain distinct from reuse of its already
 preserved fixed CPU construction. Keep LAB diagnostics separate from production
 rendering and retain every required address/lifetime/coherency/fence/retirement
 and failure check throughout that integration.
+
+The retained job/private-MMU capacity now covers the current17-allocation
+scene with a shared32-resource software bound; see
+[native-job-capacity.md](native-job-capacity.md). Offline models and a complete
+module build passed. This capacity change is not native scene execution or
+physical deployment qualification.

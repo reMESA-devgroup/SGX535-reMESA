@@ -25,10 +25,10 @@ int remesa_gem_private_prepare(struct remesa_gem_memory *s,
  struct remesa_memory_ticket ticket,const struct remesa_gem_private_rule *rules,
  unsigned count,struct remesa_twod_reservation *guard,struct remesa_gem_private *loan)
 {
- struct remesa_mmu_allowed_binding bindings[16],swap;
- struct remesa_gem_private_rule saved_rules[16];
+ struct remesa_mmu_allowed_binding bindings[REMESA_GEM_JOB_BINDINGS],swap;
+ struct remesa_gem_private_rule saved_rules[REMESA_GEM_JOB_BINDINGS];
  struct retained_job *j;struct backing *b;unsigned i,k,gpu_count=0;int error=-ENOENT;
- if(!s||!rules||!guard||!loan||!count||count>16)return -EINVAL;
+ if(!s||!rules||!guard||!loan||!count||count>REMESA_GEM_JOB_BINDINGS)return -EINVAL;
  if(loan->memory||loan->owner||loan->guard||loan->live||loan->ticket.context||
     loan->ticket.operation||loan->ticket.slot||loan->ticket.generation)return -EBUSY;
  mutex_lock(&s->lock);j=ticket_job(s,ticket);if(!j)goto done;
@@ -104,9 +104,9 @@ int remesa_gem_private_validate_locked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count)
 {
  struct remesa_gem_memory *s;struct retained_job *j;struct backing *b;
- struct remesa_mmu_allowed_binding expected[16],swap;unsigned i,k,gpu_count=0;
+ struct remesa_mmu_allowed_binding expected[REMESA_GEM_JOB_BINDINGS],swap;unsigned i,k,gpu_count=0;
  if(!loan||!loan->live||!loan->memory||!loan->owner||!loan->guard||!views||
-    !count||count>16)return -EINVAL;
+    !count||count>REMESA_GEM_JOB_BINDINGS)return -EINVAL;
  s=loan->memory;
  if(!s->pd||!s->pd->driver||!s->dev||!s->dev->dev_private)return -ENODEV;
 #ifdef __KERNEL__

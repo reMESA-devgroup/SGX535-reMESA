@@ -7,10 +7,11 @@
 #include "../remesa_twod_reservation.h"
 struct private_test_sem {unsigned held;};
 struct psb_mmu_driver {unsigned identity;struct private_test_sem sem;};
-struct remesa_mmu_private {unsigned count,blocked,root_active;struct remesa_mmu_allowed_binding bindings[16];};
+struct remesa_mmu_private {unsigned count,blocked,root_active;struct remesa_mmu_allowed_binding bindings[REMESA_GEM_JOB_BINDINGS];};
 static struct psb_mmu_driver driver;
 static struct remesa_gem_memory *expected_memory;
 static unsigned prepares,releases,mode;
+static unsigned capacity_gpu_count; /* Optional wide-closure fixture; zero preserves old cases. */
 static struct remesa_twod_reservation *expected_guard;
 int remesa_twod_mmu_guard_acquire(struct drm_psb_private *p,
  struct remesa_twod_reservation *r,const void *owner)
@@ -31,7 +32,7 @@ int remesa_twod_mmu_guard_release(struct drm_psb_private *p,
 int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
  const struct remesa_mmu_allowed_binding *b,u32 n,struct remesa_mmu_private **out)
 {
- CHECK(d==&driver&&n==(mode==7?2u:3u)&&!*out&&expected_memory->lock.held);prepares++;
+ CHECK(d==&driver&&n==(capacity_gpu_count?capacity_gpu_count:(mode==7?2u:3u))&&!*out&&expected_memory->lock.held);prepares++;
  struct retained_job *j=&expected_memory->jobs[0];
  CHECK(j->attached&&j->state==REMESA_JOB_PREPARED&&expected_memory->executor_context);
  CHECK(expected_guard->mmu_owner==expected_memory->executor_context);
@@ -44,7 +45,7 @@ int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
    struct backing *bo=&expected_memory->bo[j->ids[k]&31];
    if(bo->va.start==b[i].address){
     CHECK(bo->pages==b[i].pages&&bo->holds==1&&bo->inserted==b[i].page_count);
-    CHECK(b[i].access==k+1&&b[i].cached==(k!=0));found++;
+    CHECK(b[i].access==k%3+1&&b[i].cached==(k!=0));found++;
    }
   }
   CHECK(found==1);

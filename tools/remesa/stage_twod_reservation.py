@@ -33,6 +33,26 @@ def replace_once(source, old, new):
 
 
 
+def job_capacity_sources(source, header):
+    """Expand kernel-only complete job holds; frozen native inputs stay intact."""
+    replacements = {'cpu_views[16]': ('cpu_views[REMESA_GEM_JOB_BINDINGS]', 1),
+                    'ids[16]': ('ids[REMESA_GEM_JOB_BINDINGS]', 1),
+                    'count>16': ('count>REMESA_GEM_JOB_BINDINGS', 1),
+                    'uses[16]': ('uses[REMESA_GEM_JOB_BINDINGS]', 5),
+                    'added[16]': ('added[REMESA_GEM_JOB_BINDINGS]', 1)}
+    for old, (new, count) in replacements.items():
+        if source.count(old) != count:
+            raise ValueError('retained job capacity anchor missing/ambiguous: ' + old)
+        source = source.replace(old, new)
+    source = replace_once(source, '#define OBJECTS 32\n',
+                          '#define OBJECTS 32\n'
+                          '#if REMESA_GEM_JOB_BINDINGS > OBJECTS\n'
+                          '#error retained job capacity exceeds backing slots\n#endif\n')
+    header = replace_once(header, '#define REMESA_GEM_MEMORY_H\n',
+                          '#define REMESA_GEM_MEMORY_H\n#include "remesa_gem_job_limits.h"\n')
+    return source, header
+
+
 def private_mmu_header_source(header):
     return replace_once(header, '\tstruct drm_device *dev;\n};',
         '\tstruct drm_device *dev;\n'
@@ -631,9 +651,10 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         '#ifdef REMESA_TWOD_COPY_IOCTL\n'
         '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_COPY, remesa_twod_copy_ioctl, DRM_ROOT_ONLY),\n'
         '#endif\n')
+    gem, memory_header = job_capacity_sources(gem, (native / 'remesa_gem_memory.h').read_text())
     result = {'psb_drv.h': header, 'accel_2d.c': accel,
             'gma500_fixed_backend.c': fixed, 'mmu.c': mmu,
-            'remesa_gem_memory.c': gem, 'psb_drv.c': driver}
+            'remesa_gem_memory.c': gem, 'remesa_gem_memory.h': memory_header, 'psb_drv.c': driver}
     if lab:
         result['Makefile'] = (native / 'Makefile').read_text() + '\n# Explicit isolated 2D LAB candidate; runtime gate defaults N.\nccflags-y += -DREMESA_TWOD_LAB_IOCTL=1\n'
         if vendor:
@@ -776,7 +797,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
-                  ['remesa_twod_reservation.h', 'remesa_twod_reservation.inc',
+                  ['remesa_gem_job_limits.h', 'remesa_twod_reservation.h', 'remesa_twod_reservation.inc',
                    'remesa_twod_irq.h', 'remesa_twod_irq.inc']}
     for name in ['remesa_twod_native.h', 'remesa_twod_native.inc',
                  'remesa_mmu_default_root.h', 'remesa_mmu_default_root.inc',
