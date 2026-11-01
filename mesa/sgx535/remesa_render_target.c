@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 #include "remesa_render_target.h"
+#include "remesa/scene_control_words.h"
 #include <errno.h>
 #include <stddef.h>
 #include <string.h>
@@ -327,21 +328,18 @@ int remesa_raster_control_encode(const struct remesa_raster_control_request *req
  e=raster_reference(&r.event,UINT64_C(0x20000000),UINT64_C(0x30000000),4,&event);if(e)return e;
  uint8_t depth[REMESA_DEPTH_PREFIX_BYTES]={0};
  if(r.has_depth){e=remesa_depth_prefix_encode(&r.depth,depth);if(e)return e;}
- static const uint32_t regs[26]={0x400,0x404,0x40c,0x410,0x414,0x418,0x41c,0x420,
-  0x424,0x42c,0x480,0xcb0,0x484,0x488,0x48c,0x490,0x494,0x4c4,0x4bc,0x4b8,
-  0x4c8,0x4dc,0x800,0xa5c,0xa60,0xa64};
  uint32_t clear_bits;memcpy(&clear_bits,&r.depth.clear_depth,sizeof(clear_bits));
  /* Constants are the observed CPU register-control writes of2ac41..2b106,
   * not shader instructions or an inferred architectural naming of bits. */
- uint32_t values[26]={0xffff80,0,0,color.raster_410,0x100,1,0x0da24260,0,0xfbf4,0,
-  0xf0000,0,0,0,0,0,0xff,((background>>4)&0x00ffffff)|0x02000000,
-  0x200|r.depth.clear_stencil,clear_bits,0x88,0,0,event,(r.event_field0c>>2)&0x3f,0x4fff};
+ uint32_t depth_values[6]={0xf0000,0,0,0,0,0},words[52];
  if(r.has_depth)for(unsigned i=0;i<6;i++) {
   const uint8_t *v=depth+i*8+4;
-  values[10+i]=(uint32_t)v[0]|((uint32_t)v[1]<<8)|((uint32_t)v[2]<<16)|((uint32_t)v[3]<<24);
+  depth_values[i]=(uint32_t)v[0]|((uint32_t)v[1]<<8)|((uint32_t)v[2]<<16)|((uint32_t)v[3]<<24);
  }
+ remesa_scene_raster_words(color.raster_410,background,event,r.event_field0c,
+  depth_values,clear_bits,r.depth.clear_stencil,words);
  uint8_t bytes[REMESA_RASTER_CONTROL_BYTES];
- for(unsigned i=0;i<26;i++){put32(bytes+i*8,regs[i]);put32(bytes+i*8+4,values[i]);}
+ for(unsigned i=0;i<52;i++)put32(bytes+i*4,words[i]);
  memcpy(out,bytes,sizeof(bytes));return 0;
 }
 
@@ -359,8 +357,7 @@ int remesa_ta_control_encode(const struct remesa_raster_object_reference *reques
  uint64_t va=r.bo_gpu_va+r.byte_offset;if(va&3)return EINVAL;
  /* Original CPU writes2b2b5..2b30f and full32-bit relocation2b312..2b36b.
   * These are interface controls, not GPU shader instruction templates. */
- const uint32_t words[14]={0x204,0,0x218,0x400000,0x23c,0x82,
-  0x240,0x358637bd,0x244,0x358637bd,0x250,0x88,0x238,(uint32_t)va};
+ uint32_t words[14];remesa_scene_ta_words((uint32_t)va,words);
  uint8_t bytes[REMESA_TA_CONTROL_BYTES];
  for(unsigned i=0;i<14;i++)put32(bytes+i*4,words[i]);
  memcpy(out,bytes,sizeof(bytes));return 0;

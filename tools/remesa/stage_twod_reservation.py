@@ -99,7 +99,10 @@ def scene_action_components(root, native):
         source = replace_once(source, old, new)
     header = (root / 'tools/remesa/lab_scene_actions.h').read_text()
     header = replace_once(header, '"../psb-dri-re/frozen_kernel_contract.h"', '"frozen_kernel_contract.h"')
-    return {'remesa_scene_actions.c': source.encode(), 'remesa_scene_actions.h': header.encode(),
+    controls = (root / 'include/remesa/scene_control_words.h').read_text()
+    controls = replace_once(controls, '"scene_layout.h"', '"remesa_scene_layout.h"')
+    return {'remesa_scene_control_words.h': controls.encode(),
+            'remesa_scene_actions.c': source.encode(), 'remesa_scene_actions.h': header.encode(),
             'remesa_scene_layout.h': (root / 'include/remesa/scene_layout.h').read_bytes(),
             'remesa_scene_dpm.h': (root / 'include/remesa/scene_dpm.h').read_bytes()}
 
@@ -751,7 +754,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_private_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
@@ -865,6 +868,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
                      'remesa_gem_private_execute.inc', 'remesa_gem_scene_actions.h', 'remesa_gem_scene_actions.inc',
+                     'remesa_gem_scene_controls.h', 'remesa_gem_scene_controls.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',

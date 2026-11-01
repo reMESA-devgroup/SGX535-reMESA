@@ -76,3 +76,9 @@ from actual retained IDs, and Mesa can retain undefined REGION storage without
 the legacy CPU initialization; see [native-scene-actions.md](native-scene-actions.md).
 Complete image/control validation and ordered native execution are still
 required before this general scene path can be physically qualified.
+
+Raster/TA controls can now also be reconstructed from held kernel IDs and
+checked against the matching action plan; see
+[native-scene-controls.md](native-scene-controls.md). Mesa and kernel share
+the original word serialization. This does not yet establish complete
+image/program admission, source-attributed execution or GPU qualification.

@@ -11,7 +11,7 @@ struct remesa_mmu_private {unsigned count,blocked,root_active;struct remesa_mmu_
 static struct psb_mmu_driver driver;
 static struct remesa_gem_memory *expected_memory;
 static unsigned prepares,releases,mode;
-static bool dpm_model;
+static bool dpm_model,scene_output_roles;
 static unsigned scene_readonly_role,scene_uncached_role;
 static unsigned capacity_gpu_count; /* Optional wide-closure fixture; zero preserves old cases. */
 static struct remesa_twod_reservation *expected_guard;
@@ -47,7 +47,7 @@ int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
    struct backing *bo=&expected_memory->bo[j->ids[k]&31];
    if(bo->va.start==b[i].address){
     CHECK(bo->pages==b[i].pages&&bo->holds==1&&bo->inserted==b[i].page_count);
-    CHECK(b[i].access==(dpm_model?(k&&k<=3&&k!=scene_readonly_role?3u:1u):k%3+1)&&b[i].cached==(k!=0&&(!dpm_model||k!=scene_uncached_role)));found++;
+    CHECK(b[i].access==(dpm_model?(k&&k<=(scene_output_roles?5u:3u)&&k!=scene_readonly_role?3u:1u):k%3+1)&&b[i].cached==(k!=0&&(!dpm_model||k!=scene_uncached_role)));found++;
    }
   }
   CHECK(found==1);

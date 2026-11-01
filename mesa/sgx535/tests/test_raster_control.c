@@ -57,7 +57,8 @@ int main(void)
   CHECK(remesa_raster_control_encode(&bad,b)==e&&!memcmp(b,saved,sizeof(b)));
  }
  CHECK(remesa_raster_control_encode((void *)b,b)==EINVAL);
- CHECK(remesa_raster_control_encode(&r,(void *)&r)==EINVAL);
+ union {struct remesa_raster_control_request request;uint8_t bytes[208];} alias={.request=r};
+ CHECK(remesa_raster_control_encode(&alias.request,alias.bytes)==EINVAL);
  CHECK(remesa_raster_control_encode((void *)(UINTPTR_MAX-1),b)==EINVAL);
  printf("PASS full raster26 pairs:8 original x86 constructor/relocation/commit oracles, opt-in depth-only finalizer, equivalent no-depth negative, bounds/metadata/alias/transaction guards; CPU ONLY (%u checks)\n",checks);
  return 0;
