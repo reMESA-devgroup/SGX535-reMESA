@@ -53,6 +53,35 @@ def job_capacity_sources(source, header):
     return source, header
 
 
+def dpm_origin_source(source):
+    """Track only provable fresh zero contents; never infer GPU visibility."""
+    edits = [
+        ('bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;',
+         'bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;\n bool zero_pristine;'),
+        ('unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];',
+         'unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];u32 dpm_mask;'),
+        ('b->live=false;b->initialized=false;b->lease_borrowed=false;',
+         'b->live=false;b->initialized=false;b->lease_borrowed=false;b->zero_pristine=false;'),
+        ('b->initialized=true;b->ta_cpu_cached=true;b->ta_cpu_dirty=true;',
+         'b->initialized=true;b->zero_pristine=true;b->ta_cpu_cached=true;b->ta_cpu_dirty=true;'),
+        ('b->pages=NULL;b->pinned=false;b->lease_borrowed=false;',
+         'b->pages=NULL;b->pinned=false;b->lease_borrowed=false;b->zero_pristine=false;'),
+        ('b->lease=true;b->write=r->flags;return 0;',
+         'b->lease=true;b->write=r->flags;if(b->write)b->zero_pristine=false;return 0;'),
+        ('j->command_bytes=bytes;j->count=count;j->live=true;',
+         'j->command_bytes=bytes;j->count=count;j->dpm_mask=0;j->live=true;'),
+        ('if(capacity<j->count)return -ENOSPC;\n e=verify_job_bindings',
+         'if(capacity<j->count)return -ENOSPC;\n if(j->dpm_mask)return -EACCES;\n e=verify_job_bindings'),
+        ('out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};',
+         'b->zero_pristine=false;\n  out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};'),
+        ('j->state=REMESA_JOB_ISSUED;\n /* Possible GPU writes',
+         'for(slot=0;slot<j->count;slot++)s->bo[j->ids[slot]&31].zero_pristine=false;\n j->state=REMESA_JOB_ISSUED;\n /* Possible GPU writes'),
+    ]
+    for old, new in edits:
+        source = replace_once(source, old, new)
+    return source
+
+
 def private_mmu_header_source(header):
     return replace_once(header, '\tstruct drm_device *dev;\n};',
         '\tstruct drm_device *dev;\n'
@@ -652,6 +681,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         '\tDRM_IOCTL_DEF_DRV(REMESA_TWOD_COPY, remesa_twod_copy_ioctl, DRM_ROOT_ONLY),\n'
         '#endif\n')
     gem, memory_header = job_capacity_sources(gem, (native / 'remesa_gem_memory.h').read_text())
+    gem = dpm_origin_source(gem) + '\n#include "remesa_gem_dpm.inc"\n'
     result = {'psb_drv.h': header, 'accel_2d.c': accel,
             'gma500_fixed_backend.c': fixed, 'mmu.c': mmu,
             'remesa_gem_memory.c': gem, 'remesa_gem_memory.h': memory_header, 'psb_drv.c': driver}
@@ -797,7 +827,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
     root = Path(__file__).resolve().parents[2]
     additions = root / 'kernel/remesa/gma500'
     components = {name: (additions / name).read_bytes() for name in
-                  ['remesa_gem_job_limits.h', 'remesa_twod_reservation.h', 'remesa_twod_reservation.inc',
+                  ['remesa_gem_dpm.h', 'remesa_gem_dpm.inc', 'remesa_gem_job_limits.h', 'remesa_twod_reservation.h', 'remesa_twod_reservation.inc',
                    'remesa_twod_irq.h', 'remesa_twod_irq.inc']}
     for name in ['remesa_twod_native.h', 'remesa_twod_native.inc',
                  'remesa_mmu_default_root.h', 'remesa_mmu_default_root.inc',

@@ -11,6 +11,7 @@ struct remesa_mmu_private {unsigned count,blocked,root_active;struct remesa_mmu_
 static struct psb_mmu_driver driver;
 static struct remesa_gem_memory *expected_memory;
 static unsigned prepares,releases,mode;
+static bool dpm_model;
 static unsigned capacity_gpu_count; /* Optional wide-closure fixture; zero preserves old cases. */
 static struct remesa_twod_reservation *expected_guard;
 int remesa_twod_mmu_guard_acquire(struct drm_psb_private *p,
@@ -37,7 +38,7 @@ int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
  CHECK(j->attached&&j->state==REMESA_JOB_PREPARED&&expected_memory->executor_context);
  CHECK(expected_guard->mmu_owner==expected_memory->executor_context);
  for(unsigned i=0;i<n;i++){
-  CHECK(b[i].address==(u64)0x40000000+i*0x01000000);
+  if(!dpm_model)CHECK(b[i].address==(u64)0x40000000+i*0x01000000);
   CHECK(b[i].page_count&&b[i].pages&&b[i].pages[0]);
   if(i)CHECK(b[i-1].address+(u64)b[i-1].page_count*4096<=b[i].address);
   unsigned found=0;
@@ -45,7 +46,7 @@ int remesa_mmu_private_prepare(struct psb_mmu_driver *d,
    struct backing *bo=&expected_memory->bo[j->ids[k]&31];
    if(bo->va.start==b[i].address){
     CHECK(bo->pages==b[i].pages&&bo->holds==1&&bo->inserted==b[i].page_count);
-    CHECK(b[i].access==k%3+1&&b[i].cached==(k!=0));found++;
+    CHECK(b[i].access==(dpm_model?(k?3u:1u):k%3+1)&&b[i].cached==(k!=0));found++;
    }
   }
   CHECK(found==1);

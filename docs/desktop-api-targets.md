@@ -65,3 +65,8 @@ scene with a shared32-resource software bound; see
 [native-job-capacity.md](native-job-capacity.md). Offline models and a complete
 module build passed. This capacity change is not native scene execution or
 physical deployment qualification.
+
+Cold DPM initialization now has a kernel zero-origin claim and selected views
+that avoid mapping the two32MiB pools; see [cold-dpm-origin.md](cold-dpm-origin.md).
+This preserves required publication and does not establish native scene execution
+or physical qualification. The trusted general-scene consumer remains next.

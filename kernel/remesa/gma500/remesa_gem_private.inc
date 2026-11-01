@@ -157,6 +157,7 @@ int remesa_gem_private_publish_locked(struct remesa_gem_private *loan,
   /* CPU dirty lines are unsafe even for a GPU write-only destination.
    * Job holds exclude userspace leases and backing/topology changes. The
    * trusted caller additionally excludes access through its borrowed views. */
+  if(loan->rules[i].access&REMESA_MMU_GPU_WRITE)b->zero_pristine=false;
   drm_clflush_pages(b->pages,b->inserted);
  }
  dma_wmb();loan->host_published=true;

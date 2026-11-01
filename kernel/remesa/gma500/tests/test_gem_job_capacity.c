@@ -72,6 +72,9 @@ static void capacity_case(unsigned count,bool cpu_only,bool quarantine)
  fail_vmap_call=0;
  CHECK(remesa_gem_job_snapshot(s,ticket,&snapshot,views,count)==(int)count);
  CHECK(!remesa_gem_job_check_snapshot(s,&snapshot,views,count));
+ CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,count,count==32?~(u32)0:((u32)1<<count)-1)==(int)count);
+ CHECK(!remesa_gem_job_check_snapshot(s,&snapshot,views,count));
+ CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,count,0)==-EBUSY);
  for(unsigned i=0;i<count;i++)CHECK(views[i].binding.id==uses[i].id&&views[i].cpu&&views[i].cpu==j->cpu_views[i]);
  void *last=views[count-1].cpu;views[count-1].cpu=(void*)1;
  CHECK(remesa_gem_job_check_snapshot(s,&snapshot,views,count)==-EACCES);views[count-1].cpu=last;
