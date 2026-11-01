@@ -53,17 +53,35 @@ retains the original12 constructor regressions. These are CPU models/GPU0.
 The first scene-provider compile failure used an incorrect test callback name;
 it is preserved, and the test now uses the actual existing `device.ops->wait`.
 
-The actual i486 provider/fence client has now completed one1280x800 physical
-submission on the unchanged qualified kernel. `PRE_RECOVERY_AUDIT.json` checks
-the raw identity/completion/retirement receipt, whole capture namespace and
-executed controls, all23 INFO records, unchanged12 GPU READ images and2 CPU-only
-buffers,4 guards, source closure, seven controls N and complete memory cleanup.
-The unchanged analytical oracle finds zero COLOR/Z24 mismatches across1024000
-pixels. Reference images were compared after execution, never uploaded by the
-collector. The native client returned only after the ordinary device fence wait
-and destruction, and verified that submission had consumed its capture.
-Stock return was requested once with the original GRUB already restored;
-network observation is pending. This remains explicitly separate from a final
-recovery-verified physical receipt. Existing
-kernel COLOR/Z24 passes remain valid. Normal Gallium dispatch/resource state,
+The actual i486 provider/fence client completed physical1280x800 and640x640
+submissions in independent fresh recoverable boots on the unchanged qualified
+kernel. Both `v1/PHYSICAL_RESULT.json` and `v2-640/PHYSICAL_RESULT.json` verify
+SGX535 core01130000/rev00010201, source-attributed completion/retirement,
+whole capture namespace and executed controls,23 INFO records, unchanged12
+GPU READ images and2 CPU-only buffers,4 guards, source closure, seven controls N,
+complete memory cleanup and subsequent stock recovery with the original GRUB.
+The unchanged analytical oracle finds zero COLOR/Z24 mismatches at both sizes.
+The640 oracle permits320 exact edge ties only with coherent COLOR/Z coverage;
+Z24 allows one quantization unit and undefined X8 is ignored. Reference images
+were compared after execution, never uploaded by the collector. The real native
+client returned only after the ordinary device fence wait/destruction and
+verification that submission consumed its capture. Same binary and kernel,
+closed selectors5/6; no simulated native backend in those physical receipts.
+
+| Size | CPU publication flush | Observed raster completion | Full cold submit/fence |
+| --- | --- | --- | --- |
+|1280x800|55.850119 ms|16.400409 ms|185.528271 ms|
+|640x640|52.094893 ms|6.183189 ms|163.320210 ms|
+
+These isolated cold LAB times include host work and observation; they are not
+GPU-only hardware counters, continuous rendering or GLXGEARS FPS. Existing
+physical GLXGEARS remains preserved and was not remeasured.
+
+The subsequent [driver scene builder](driver-scene-builder.md) composes these
+existing owners from frontend attachments inside the library, with39 offline
+ownership/failure cases and nine exact input-equivalence captures. That new
+wrapper was not part of the physically executed binary from3bc7b59; do not
+attribute a physical wrapper/API qualification to byte equivalence alone.
+
+Normal Gallium dispatch/resource state,
 full OpenGL/GLES behavior, desktop integration and installation are still open.

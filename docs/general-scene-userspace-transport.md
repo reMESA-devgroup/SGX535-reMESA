@@ -1,7 +1,9 @@
 # Real Mesa owners through the Linux resource endpoint
 
 The subsequent [provider/fence integration](scene-provider-fence.md) now carries
-this real owner graph through the normal device fence lifecycle. Historical
+this real owner graph through the normal device fence lifecycle.
+That complete C route now passed physical COLOR/Z24 and stock recovery at both
+1280x800 and640x640 on the same binary/kernel. Historical
 network-pending notes below describe the earlier direct-transport checkpoint.
 The unexecuted earlier payload remains preserved.
 
