@@ -2,6 +2,8 @@
 
 > **Historical adapter notes.** Later restricted original GLXGears hardware results are documented in the [October 27 physical status](../../docs/phase9/PHYSICAL-GLX-STATUS-20261027.md). Statements below about unsupported execution describe this earlier path/checkpoint; they are not a current project-wide hardware status or general OpenGL conformance claim.
 
+The [bound Gallium/NIR physical qualification](../../docs/gallium-physical-qualification.md) records the newer1280x800/640x640 frontend-to-GPU path and its limits.
+
 The [execution-contract update](../../docs/phase9/PDS-EXECUTION-CONTRACT-20261018.md)
 adds original CPU metadata6 packing, typed logical task inputs and VS export
 routes used by candidate generation. Gallium validates the integrated contract;
