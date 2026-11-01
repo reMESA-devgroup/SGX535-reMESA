@@ -92,3 +92,9 @@ The actual TA input now has a selected-grammar parser and retained-reference
 resolution, including typed userspace graph binding; see
 [native-scene-ta-references.md](native-scene-ta-references.md). PDS/USE contents,
 indirect fetch bounds and ordered general native execution remain incomplete.
+
+Selected state-upload references now bind actual PDS known fields and CODE to
+read-only source DATA and the held count-specific USE auxiliary; see
+[native-scene-state-upload.md](native-scene-state-upload.md). Vertex/fragment,
+background/event and broader indirect closure still require validation before
+general native execution can be qualified.

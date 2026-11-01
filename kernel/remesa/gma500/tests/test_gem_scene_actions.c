@@ -5,9 +5,21 @@
 #include "../remesa_gem_scene_controls.h"
 #include "../remesa_gem_scene_use.h"
 #include "../remesa_gem_scene_ta.h"
+#include "../remesa_gem_scene_states.h"
 #include "remesa_render_target.h"
 #include "remesa_ta_index.h"
 #include "remesa_scene_layout.h"
+static void state_word(u8 *p,u32 word)
+{for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
+/* Modeled inputs only. Separate tests compare validators against unchanged
+ * actual Mesa encoders and independent preserved state-PDS carriers. */
+static void state_fixture(u8 *p,u32 source,unsigned count,u32 fixup,u8 *aux)
+{
+ memset(p,0xa5,60);state_word(p,source);state_word(p+4,0x80000000u|((count-1)<<21)|(count-1));
+ state_word(p+8,0x200000u|fixup);state_word(p+48,0x07030223);state_word(p+52,0x07042345);state_word(p+56,0xaf000000);
+ state_word(aux,0xa0000000);state_word(aux+4,0x28a10001u|((count-1)<<12));
+ state_word(aux+8,0xa0200000u|(count<<7));state_word(aux+12,0xfb274000);
+}
 static u32 scene_storage(struct remesa_gem_memory *s,u64 size,u64 address)
 {
  struct remesa_memory_request r={.version=1,.action=REMESA_MEM_CREATE,.context=77,.bytes=size};
@@ -29,6 +41,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  struct remesa_gem_scene_controls controls,control_saved,control_bad;
  struct remesa_gem_scene_use use,use_saved,use_bad;
  struct remesa_gem_scene_ta ta_refs,ta_saved;
+ struct remesa_gem_scene_states states,states_saved;
  struct {u32 prefix;struct remesa_gem_scene_action_command scene;
   struct remesa_gem_scene_control_command controls;
   struct remesa_gem_scene_use_command use;struct remesa_gem_scene_use_entry entries[REMESA_SCENE_USE_MAX];u32 tail;} command={0};
@@ -55,10 +68,11 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
   .color_id=ids[4],.depth_id=ids[5],.ta_id=ids[6],.ta_offset=4,.ta_bytes=68,
   .background_id=ids[7],.background_offset=16,.background_bytes=68,
   .event_id=ids[8],.event_offset=32,.event_bytes=148};
- command.use=(struct remesa_gem_scene_use_command){1,sizeof(command.use)+3*sizeof(command.entries[0]),3,0};
- command.entries[0]=(struct remesa_gem_scene_use_entry){ids[9],0,16,4,0,0};
- command.entries[1]=(struct remesa_gem_scene_use_entry){ids[9],32,8,3,1,0};
- command.entries[2]=(struct remesa_gem_scene_use_entry){ids[10],16,16,4,0,0};
+ command.use=(struct remesa_gem_scene_use_command){1,sizeof(command.use)+4*sizeof(command.entries[0]),4,0};
+ command.entries[0]=(struct remesa_gem_scene_use_entry){ids[9],32,16,4,0,0};
+ command.entries[1]=(struct remesa_gem_scene_use_entry){ids[9],16,8,3,1,0};
+ command.entries[2]=(struct remesa_gem_scene_use_entry){ids[10],64,16,4,0,0};
+ command.entries[3]=(struct remesa_gem_scene_use_entry){ids[13],16,16,4,0,0};
  CHECK(!remesa_gem_job_prepare(s,uses,17,&command,sizeof(command),&ticket));struct retained_job *j=ticket_job(s,ticket);
  command.scene.width=0; /* Only the copied kernel section is authoritative. */
  command.entries[0].bank=99;
@@ -121,7 +135,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_scene_controls_prepare(s,ticket,4,control_offset,&controls)&&!memcmp(&controls,&control_saved,sizeof controls));
  memset(&use,0xa5,sizeof use);use_saved=use;
  CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset+1,&use)==-EINVAL&&!memcmp(&use,&use_saved,sizeof use));
- CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==3&&use.bank_mask==24);
+ CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==4&&use.bank_mask==24);
  CHECK(vmap_calls==maps_before&&flushes==flush_before&&test_zeroed_pages==zero_before);
  use_saved=use;
  struct remesa_gem_scene_use_command *use_copy=(void *)((u8 *)j->commands+use_offset),use_header=*use_copy;
@@ -140,7 +154,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  }
  entries[0]=entry_saved;
  use_copy->entry_count=REMESA_SCENE_USE_MAX;use_copy->bytes=sizeof(*use_copy)+use_copy->entry_count*sizeof(*entries);
- for(unsigned i=3;i<REMESA_SCENE_USE_MAX;i++)entries[i]=entry_saved;
+ for(unsigned i=4;i<REMESA_SCENE_USE_MAX;i++)entries[i]=entry_saved;
  CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==REMESA_SCENE_USE_MAX);
  use_copy->entry_count++;use_copy->bytes+=sizeof(*entries);use_bad=use;
  CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)==-EINVAL&&!memcmp(&use,&use_bad,sizeof use));
@@ -150,17 +164,22 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,0x1ffc1)==17&&vmap_calls==maps_before+12);
  CHECK(!views[1].cpu&&!views[2].cpu&&!views[3].cpu);
  u8 *stream=(u8 *)views[6].cpu+4,stream_saved[68];
- CHECK(!remesa_ta_state_reference_encode(uses[9].va+320,11,false,stream));
+ CHECK(!remesa_ta_state_reference_encode(uses[9].va+352,11,false,stream));
  struct remesa_ta_index_request index={.index_bo_gpu_va=uses[9].va,.index_bo_bytes=4096,.index_byte_offset=144,
   .pds_bo_gpu_va=uses[9].va,.pds_bo_bytes=4096,.pds_byte_offset=64,.pds_object_bytes=64,
   .index_count=3,.pds_data_dwords=12,.descriptor_a_field10=4,.descriptor_b_field38=4};
  CHECK(!remesa_ta_index_triangles_encode(&index,stream+8));
- CHECK(!remesa_ta_state_reference_encode(uses[10].va+256,14,false,stream+28));
+ CHECK(!remesa_ta_state_reference_encode(uses[10].va+96,14,false,stream+28));
  index.index_bo_gpu_va=uses[11].va;index.index_byte_offset=128;index.pds_bo_gpu_va=uses[12].va;
  index.pds_byte_offset=0;index.descriptor_a_field10=12;index.descriptor_b_field38=32;
  CHECK(!remesa_ta_index_compiled_position_color_triangles_encode(&index,stream+36));
  struct remesa_ta_scene_close_request end={uses[13].va,4096,256,60};
  CHECK(!remesa_ta_scene_close_encode(&end,stream+56));memcpy(stream_saved,stream,68);
+ u8 *prefix=views[9].cpu,*draw=views[10].cpu,*close=views[13].cpu;
+ state_fixture(prefix+352,uses[9].va+304,11,use.lower19[0],prefix+32);state_word(prefix+304,0x54c5);
+ state_fixture(draw+96,uses[10].va,14,use.lower19[2],draw+64);state_word(draw,0xf41);
+ state_fixture(close+256,uses[13].va,2,use.lower19[3],close+16);state_word(close,0x2000);
+ state_word(close+4,(((width+15)>>4)<<16)|((height+15)>>4));
  struct remesa_gem_private_rule rules[17];
  scene_readonly_role=fault>=2&&fault<=4?(fault==2?3:fault==3?1:2):fault==6?4:fault==7?5:0;
  scene_uncached_role=fault==5?3:fault==8?6:fault==10?9:0;scene_write_role=fault==9?9:0;
@@ -176,9 +195,19 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use));
  CHECK(!remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs));
  CHECK(ta_refs.draw_count==1&&ta_refs.reference_count==7&&ta_refs.ta_id==ids[6]&&ta_refs.ta_bytes==68);
- CHECK(ta_refs.references[0].id==ids[9]&&ta_refs.references[0].byte_offset==320&&
+ CHECK(ta_refs.references[0].id==ids[9]&&ta_refs.references[0].byte_offset==352&&
   ta_refs.references[4].id==ids[11]&&ta_refs.references[4].minimum_bytes==6&&ta_refs.references[6].id==ids[13]);
  ta_saved=ta_refs;
+ CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)&&states.count==3);
+ CHECK(states.uploads[0].source_id==ids[9]&&states.uploads[0].source_offset==304&&states.uploads[0].source_bytes==44&&
+  states.uploads[0].use_id==ids[9]&&states.uploads[0].use_offset==32&&states.uploads[1].source_bytes==56&&states.uploads[2].source_bytes==8);
+ states_saved=states;
+ prefix[400]^=1;CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL&&!memcmp(&states,&states_saved,sizeof states));prefix[400]^=1;
+ state_word(prefix+352,uses[4].va);CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EACCES&&!memcmp(&states,&states_saved,sizeof states));state_word(prefix+352,uses[9].va+304);
+ state_word(prefix+360,0x27ffff);CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-ENOENT&&!memcmp(&states,&states_saved,sizeof states));state_word(prefix+360,0x200000u|use.lower19[0]);
+ prefix[32]^=1;CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL&&!memcmp(&states,&states_saved,sizeof states));prefix[32]^=1;
+ close[4]^=1;CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL&&!memcmp(&states,&states_saved,sizeof states));close[4]^=1;
+ prefix[364]^=1;CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)&&!memcmp(&states,&states_saved,sizeof states));prefix[364]^=1;
  stream[67]=0;CHECK(remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs)==-EINVAL&&!memcmp(&ta_refs,&ta_saved,sizeof ta_refs));memcpy(stream,stream_saved,68);
  u32 forbidden=0x40000000u|(uses[4].va>>4);memcpy(stream,&forbidden,4);
  CHECK(remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs)==-EACCES&&!memcmp(&ta_refs,&ta_saved,sizeof ta_refs));memcpy(stream,stream_saved,68);
@@ -202,6 +231,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls));
  CHECK(!remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use));
  CHECK(!remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs)&&!memcmp(&ta_refs,&ta_saved,sizeof ta_refs));
+ CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)&&!memcmp(&states,&states_saved,sizeof states));
  unlock:mutex_unlock(&s->lock);CHECK(remesa_gem_job_issue(s,ticket)==-EOPNOTSUPP);CHECK(!remesa_gem_private_release(&loan));
  dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;scene_readonly_role=scene_uncached_role=scene_write_role=0;
  cleanup:CHECK(!remesa_gem_job_cancel(s,ticket));CHECK(!remesa_gem_memory_close(s));
