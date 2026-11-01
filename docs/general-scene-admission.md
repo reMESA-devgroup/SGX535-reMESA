@@ -60,3 +60,25 @@ Physical qualification of this new seventeen-resource entry remains pending.
 Hashes and readbacks here authenticate a one-shot LAB experiment. They do not
 run in FAST frames. General frontend API coverage, complete desktop integration
 and a validated installable driver remain required after this qualification.
+
+## First physical admission result
+
+The first new-entry test on Mini12 SGX535 rev121 completed its native event
+lifecycle at 1280x800 and released the source, private root and GEM job. The
+structured result was operation/cookie 1, phase 9, ledger 7, stages 15, no error
+or retained state. However, both complete COLOR and Z readbacks were zero.
+This is a failed output qualification, not a rendered frame or an FPS result.
+All twelve READ allocations and four guards were intact, cleanup completed,
+and the machine returned to the verified stock boot with the original GRUB
+configuration. Evidence, raw request/response and outputs are preserved under
+`/home/gama/sgx535-offline/general-scene-admission-20261101/v1`;
+`PHYSICAL_RESULT.json` and `VERIFY_PHYSICAL.py` make the failure explicit.
+The 198 ms ioctl wall time includes CPU publication, execution, synchronization
+and retirement; it is not a GPU-only measurement.
+
+The optional `--region-prefix` collector diagnostic adds at most 4 KiB of
+post-retirement REGION readback, with its own timing. The closed REGION mapping
+must be at most 1 MiB. It never maps or reads the 32 MiB DPM pools. This isolates
+TA output from later raster/output issues without changing the programs,
+placement, native module or safety gates. Object INFO responses already checked
+by the LAB collector are now also saved; this adds no extra INFO calls.

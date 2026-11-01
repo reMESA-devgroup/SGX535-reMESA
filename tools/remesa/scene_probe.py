@@ -29,6 +29,8 @@ def load_profile(catalogue,size,asset_root=None):
    images[i]=data
  ids=[b['captured_handle'] for b in profile['bindings']]
  color,depth=struct.unpack_from('<II',raw,352);color=ids.index(color);depth=ids.index(depth)
+ region=ids.index(struct.unpack_from('<I',raw,304)[0])
+ if bindings[region]['access']!=3 or bindings[region]['bytes']>1048576:raise ValueError('REGION diagnostic mapping exceeds closed bound')
  guards=[]
  for lower,upper in [(0x20000000,0x28000000),(0x30000000,0x40000000),(0x40000000,0xe0000000)]:
   group=[b for b in bindings if lower<=b['va']<upper]
@@ -36,7 +38,7 @@ def load_profile(catalogue,size,asset_root=None):
   for va in [min(b['va'] for b in group)-4096,max(b['va']+b['bytes'] for b in group)]:
    if lower<=va and va+4096<=upper and not any(va<b['va']+b['bytes'] and b['va']<va+4096 for b in bindings) and va not in guards:guards.append(va)
  if len(bindings)+len(guards)>32:raise ValueError('guard allocation exceeds endpoint capacity')
- return {'profile':index+1,'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'guard_va':guards},images
+ return {'profile':index+1,'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
 
 def receipt(packet,context,profile,ids,budget):
  q=PROBE.unpack(packet)
@@ -45,7 +47,7 @@ def receipt(packet,context,profile,ids,budget):
  if (not r['operation'] or r['cookie']!=r['operation'] or r['core']!=0x01130000 or r['revision']!=0x10201 or r['pds_base']!=0x20000000 or r['phase']!=9 or r['ledger']!=7 or r['error'] or r['retained'] or r['stages']!=15):raise RuntimeError('incomplete scene lifecycle receipt: '+json.dumps(r))
  return r
 
-def collect(device,output,plan,images,budget):
+def collect(device,output,plan,images,budget,region_prefix=False):
  report={'status':'PREPARING','identity':p.device_identity(device),'plan':plan,'probe_ioctl_calls':0,'hardware_driver_qualified':False,'requires_independent_pixel_oracle':True}
  def save():(output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
  save();fd=os.open(device,os.O_RDWR|os.O_CLOEXEC);memory=p.Memory(fd,0)
@@ -75,8 +77,9 @@ def collect(device,output,plan,images,budget):
   if any(info[i] for i in (6,7,8)):raise RuntimeError('endpoint retains leases/jobs/quarantine')
   report['provider_info']=list(info)
   expected=[(o['id'],b['va'],b['bytes']) for o,b in zip(objects[:17],plan['bindings'])]+[(g['id'],g['va'],4096) for g in guards]
+  report['object_info']=[]
   for rid,va,n in expected:
-   info=memory.info(rid)
+   info=memory.info(rid);report['object_info'].append({'id':rid,'info':list(info)})
    if info[1:3]!=(n,va) or any(info[i] for i in (6,7,8,11)) or info[9]!=1 or info[10]!=n//4096 or info[12]!=n//4096:raise RuntimeError('restored mapping/ownership mismatch')
   complete=True;start=time.monotonic();readbacks={}
   selected=sorted(set(images)|{plan['color_index'],plan['depth_index']})
@@ -88,7 +91,12 @@ def collect(device,output,plan,images,budget):
   for i,g in enumerate(guards):
    data=memory.read(g['id'],4096);(output/('guard-'+str(i)+'-readback.bin')).write_bytes(data)
    if data!=b'\xa5'*4096:raise RuntimeError('unmapped-private guard changed')
-  report['guards_intact']=True;report['status']='RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING'
+  report['guards_intact']=True
+  if region_prefix:
+   start=time.monotonic();i=plan['region_index'];n=min(4096,plan['bindings'][i]['bytes'])
+   data=memory.read(ids[i],n);(output/'region-prefix-readback.bin').write_bytes(data)
+   report['region_prefix']={'index':i,'bytes':len(data),'nonzero_bytes':sum(x!=0 for x in data),'sha256':p.sha(data),'wall_seconds':time.monotonic()-start}
+  report['status']='RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING'
  except BaseException as e:report['status']='FAILED';report['error']=str(e);raise
  finally:
   if opened and not memory.poisoned and (not attempted or complete):
@@ -106,9 +114,9 @@ def collect(device,output,plan,images,budget):
  return report
 
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--size',choices=['1280x800','640x640'],default='1280x800');parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--budget-ms',type=int,default=1000);parser.add_argument('--execute',action='store_true');a=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--size',choices=['1280x800','640x640'],default='1280x800');parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--budget-ms',type=int,default=1000);parser.add_argument('--execute',action='store_true');parser.add_argument('--region-prefix',action='store_true',help='LAB-only bounded post-retirement REGION prefix; never reads full DPM pools');a=parser.parse_args()
  if not 1<=a.budget_ms<=10000:parser.error('budget must be1..10000ms')
  plan,images=load_profile(a.catalogue,a.size,a.asset_root);a.output.mkdir(parents=True,exist_ok=False)
  if not a.execute:(a.output/'PLAN.json').write_text(json.dumps({'status':'OFFLINE_PLAN_ONLY','GPU_operations':0,'plan':plan},indent=2)+'\n');return
- collect(a.device,a.output,plan,images,a.budget_ms)
+ collect(a.device,a.output,plan,images,a.budget_ms,a.region_prefix)
 if __name__=='__main__':main()
