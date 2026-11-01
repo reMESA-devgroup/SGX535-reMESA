@@ -125,3 +125,10 @@ auxiliaries; the complete selected background USE8 is checked as well. See
 preserved DATA64/CODE84 construction and historical CODE oracle. Remaining
 shader/ISP/unknown-field contracts and the ordered general executor still
 precede physical qualification and normal OpenGL integration.
+
+Selected prefix and main vertex/fragment USE bodies now have exact byte
+validation in their retained windows; see
+[native-scene-use-bodies.md](native-scene-use-bodies.md). This covers existing
+POSITION16/green8 and white-Lambert64/COLOR0-MOVE8 profiles without changing
+encoders. The gears/MVP parameterized profile, general shader compilation and
+full APIs remain separate requirements; no execution admission is enabled.

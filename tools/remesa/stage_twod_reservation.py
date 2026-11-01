@@ -115,7 +115,9 @@ def scene_action_components(root, native):
     auxiliary = replace_once(auxiliary, '"ta_references.h"', '"remesa_ta_references.h"')
     event = (root / 'include/remesa/event_fetch.h').read_text()
     event = replace_once(event, '"ta_references.h"', '"remesa_ta_references.h"')
-    return {'remesa_scene_auxiliary.h': auxiliary.encode(), 'remesa_event_fetch.h': event.encode(), 'remesa_background_fetch.h': background.encode(), 'remesa_fragment_fetch.h': fragment.encode(), 'remesa_vertex_fetch.h': vertex.encode(), 'remesa_state_upload.h': upload.encode(), 'remesa_ta_references.h': references.encode(), 'remesa_scene_control_words.h': controls.encode(),
+    bodies = (root / 'include/remesa/scene_use_bodies.h').read_text()
+    bodies = replace_once(bodies, '"scene_auxiliary.h"', '"remesa_scene_auxiliary.h"')
+    return {'remesa_scene_use_bodies.h': bodies.encode(), 'remesa_scene_auxiliary.h': auxiliary.encode(), 'remesa_event_fetch.h': event.encode(), 'remesa_background_fetch.h': background.encode(), 'remesa_fragment_fetch.h': fragment.encode(), 'remesa_vertex_fetch.h': vertex.encode(), 'remesa_state_upload.h': upload.encode(), 'remesa_ta_references.h': references.encode(), 'remesa_scene_control_words.h': controls.encode(),
             'remesa_scene_actions.c': source.encode(), 'remesa_scene_actions.h': header.encode(),
             'remesa_scene_layout.h': (root / 'include/remesa/scene_layout.h').read_bytes(),
             'remesa_scene_dpm.h': (root / 'include/remesa/scene_dpm.h').read_bytes()}

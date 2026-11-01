@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After state-upload checker. */
 #include "remesa_gem_scene_vertices.h"
 #include "remesa_vertex_fetch.h"
+#include "remesa_scene_use_bodies.h"
 static bool vertex_section_overlap(u32 a,u32 an,u32 b,u32 bn)
 {return a<=b?b-a<an:a-b<bn;}
 /* Keep this transactional result off the prerequisite validators' stack.
@@ -49,6 +50,8 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
    if(entry.data_master!=REMESA_USE_VERTEX||entry.program_bytes!=use_bytes)continue;
    for(u=0;u<count&&views[u].binding.id!=entry.id;u++);
    if(u==count)return -ENOENT;
+   if(!views[u].cpu)return -EACCES;
+   error=remesa_scene_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes,draw?1:0);if(error)return -error;
    if(entry.id==w.vertex_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.vertex_offset,w.vertex_bytes))return -EINVAL;
    if(entry.id==w.index_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.index_offset,w.index_bytes))return -EINVAL;
    use_id=entry.id;use_offset=entry.byte_offset;break;

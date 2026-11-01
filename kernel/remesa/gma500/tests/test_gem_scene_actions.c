@@ -243,6 +243,12 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  state_word(target,(((pitch>>1)-1)<<16)|0x8000);state_word(target+4,uses[4].va);state_word(target+8,0);state_word(target+12,((height-1)<<12)|(pitch-1));
  state_word(transfer,0x84208180);state_word(transfer+4,0xfb200004);state_word(transfer+8,0x81200080);state_word(transfer+12,0xfb240044);
  state_word(end_aux,0);state_word(end_aux+4,0xf8348000);
+ const u32 compiled_body[16]={0xa0000000,0x28a13001,0xa0400208,0x10a02001,0x01000001,0xfa100000,0x60a00200,0x28a12001,
+  0x01010100,0xfa100000,0x50800230,0x18a13201,0x50800234,0x18a13001,0xa0200000,0xfb275000};
+ state_word(prefix,compiled_body[0]);state_word(prefix+4,compiled_body[1]);state_word(prefix+8,compiled_body[14]);state_word(prefix+12,compiled_body[15]);
+ state_word(prefix+16,0xff00);state_word(prefix+20,0xfca7f181);
+ for(unsigned k=0;k<16;k++)state_word((u8 *)views[14].cpu+k*4,compiled_body[k]);
+ state_word((u8 *)views[14].cpu+64,0xa0000000);state_word((u8 *)views[14].cpu+68,0x28851001);
  struct remesa_gem_private_rule rules[17];
  scene_readonly_role=fault>=2&&fault<=4?(fault==2?3:fault==3?1:2):fault==6?4:fault==7?5:0;
  scene_uncached_role=fault==5?3:fault==8?6:fault==10?9:0;scene_write_role=fault==9?9:(fault==11||fault==12)?15:0;
@@ -277,6 +283,17 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(fragments.draws[0].primary_id==ids[9]&&fragments.draws[0].primary_offset==224&&fragments.draws[0].primary_bytes==56&&fragments.draws[0].use_id==ids[9]&&fragments.draws[0].use_offset==16&&
   fragments.draws[1].primary_id==ids[12]&&fragments.draws[1].primary_bytes==60&&fragments.draws[1].use_id==ids[14]&&fragments.draws[1].use_offset==64);
  fragments_saved=fragments;
+ for(unsigned k=0;k<16;k++){
+  prefix[k]^=1;CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-EINVAL&&!memcmp(&vertices,&vertices_saved,sizeof vertices));prefix[k]^=1;
+ }
+ for(unsigned k=0;k<64;k++){
+  ((u8 *)views[14].cpu)[k]^=1;CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-EINVAL&&!memcmp(&vertices,&vertices_saved,sizeof vertices));((u8 *)views[14].cpu)[k]^=1;
+ }
+ for(unsigned k=0;k<8;k++){
+  prefix[16+k]^=1;CHECK(remesa_gem_scene_fragments_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments)==-EINVAL&&!memcmp(&fragments,&fragments_saved,sizeof fragments));prefix[16+k]^=1;
+  ((u8 *)views[14].cpu)[64+k]^=1;CHECK(remesa_gem_scene_fragments_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments)==-EINVAL&&!memcmp(&fragments,&fragments_saved,sizeof fragments));((u8 *)views[14].cpu)[64+k]^=1;
+ }
+
  if(fault==12){
   state_word(bg+8,0x0c000000u|((uses[15].va>>4)&0xffffff));
   CHECK(remesa_gem_scene_background_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments,&background)==-EACCES);goto unlock;

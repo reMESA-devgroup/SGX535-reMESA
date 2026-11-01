@@ -46,7 +46,7 @@ Overlaps with active indices, PDS or matching USE storage reject.
 
 The task must resolve to a held vertex-master USE entry with committed16 bytes
 for prefix or64 for the current compiled profile, not its reserved capacity144.
-This check binds that window but does not validate the USE shader body itself.
+The selected body bytes are now also checked by [native-scene-use-bodies.md](native-scene-use-bodies.md); general shader/runtime qualification remains separate.
 Caller-provided TA/state scratch is updated during validation; only the final
 VERTEX output is transactional. No allocation, default-PD walk, extra flush,
 sync/wait, pixel readback/hash or MMIO is added. No capability or incomplete

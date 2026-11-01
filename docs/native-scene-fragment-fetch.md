@@ -4,7 +4,8 @@ The selected native scene validator now follows the group40 reference triple
 in each validated prefix/draw state upload into the held primary and secondary
 fragment PDS objects. It validates the existing encoder's known fields and CODE,
 then binds the task to a retained pixel-master USE window. It does not execute
-the scene or certify the USE shader body.
+the scene or certify general shader runtime semantics. Selected USE body bytes
+are now checked by [native-scene-use-bodies.md](native-scene-use-bodies.md).
 
 ## Selected construction contract
 

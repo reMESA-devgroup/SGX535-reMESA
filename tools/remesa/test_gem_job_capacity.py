@@ -78,6 +78,7 @@ def main():
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_fragments.h','remesa_gem_scene_fragments.inc']]+[w/'include/remesa/fragment_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_background.h','remesa_gem_scene_background.inc']]+[w/'include/remesa/background_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_event.h','remesa_gem_scene_event.inc']]+[w/'include/remesa/event_fetch.h',w/'include/remesa/scene_auxiliary.h']
+ files += [w/'include/remesa/scene_use_bodies.h']
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
  def run(label,cmd,ceiling):
   def limit():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,(ceiling,ceiling))

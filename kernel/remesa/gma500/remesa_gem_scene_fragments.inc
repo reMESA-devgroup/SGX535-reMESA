@@ -21,7 +21,7 @@ static __attribute__((__noinline__)) int scene_fragments_build_checked(struct re
  struct remesa_gem_scene_states *states,struct remesa_gem_scene_vertices *vertices,
  struct remesa_gem_scene_fragments *out)
 {
- struct remesa_gem_scene_fragments value={0};struct retained_job *j;unsigned draw,s,p,q,e;int error;
+ struct remesa_gem_scene_fragments value={0};struct retained_job *j;unsigned draw,s,p,q,e,u;int error;
  if(!out)return -EINVAL;
  j=ticket_job(loan->memory,loan->ticket);value.expected_pds_window=0x20000000u;
  for(draw=0;draw<vertices->count;draw++){
@@ -40,6 +40,9 @@ static __attribute__((__noinline__)) int scene_fragments_build_checked(struct re
    if(entry.data_master!=REMESA_USE_PIXEL||entry.program_bytes!=8)continue;
    if((entry.id==views[p].binding.id&&vertex_section_overlap(entry.byte_offset,8,po,binding.primary_bytes))||
       (entry.id==views[q].binding.id&&vertex_section_overlap(entry.byte_offset,8,qo,4)))return -EINVAL;
+   for(u=0;u<count&&views[u].binding.id!=entry.id;u++);
+   if(u==count||!views[u].cpu)return -EACCES;
+   error=remesa_scene_fragment_body((const u8 *)views[u].cpu+entry.byte_offset,8,draw?1:0);if(error)return -error;
    use_id=entry.id;use_offset=entry.byte_offset;break;
   }
   if(!use_id)return -ENOENT;
