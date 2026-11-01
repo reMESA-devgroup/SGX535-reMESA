@@ -780,6 +780,18 @@ struct remesa_persistent_scene_ta {
 };
 int remesa_persistent_scene_ta_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_ta *);
+/* Exact committed geometry windows for prefix + each draw in the frozen TA.
+ * Metadata only: no provider I/O, index scan, shader validation or admission.
+ * Frontend index validation does not replace the native actual-input check. */
+struct remesa_persistent_scene_vertices {
+ uint64_t owner,serial;uint32_t draw_count,window_count,incomplete;
+ struct {
+  uint64_t index_generation,vertex_generation;
+  uint32_t index_handle,index_offset,index_bytes,vertex_handle,vertex_offset,vertex_bytes,vertex_count;
+ } windows[REMESA_TA_REFERENCE_MAX_DRAWS+1u];
+};
+int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_vertices *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

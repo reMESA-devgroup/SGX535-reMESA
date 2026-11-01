@@ -98,3 +98,8 @@ read-only source DATA and the held count-specific USE auxiliary; see
 [native-scene-state-upload.md](native-scene-state-upload.md). Vertex/fragment,
 background/event and broader indirect closure still require validation before
 general native execution can be qualified.
+
+Actual vertex PDS/index inputs now have committed-range and index-limit
+validation, with matching frozen userspace geometry windows; see
+[native-scene-vertex-fetch.md](native-scene-vertex-fetch.md). This binds the
+selected USE window but does not certify its shader body or full scene closure.

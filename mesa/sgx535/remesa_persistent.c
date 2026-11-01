@@ -3354,6 +3354,42 @@ int remesa_persistent_scene_ta_snapshot(const struct remesa_device *device,
  if(counts.references!=value.reference_count||counts.draws!=c->footprint.draw_count)return ESTALE;
  value.draw_count=counts.draws;*out=value;return 0;
 }
+int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_persistent_scene_vertices *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_vertices))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ struct remesa_persistent_scene_ta ta;
+ e=remesa_persistent_scene_ta_snapshot(device,token,&ta);if(e)return e;
+ struct memory *commands=c->parents[0]->linked_background->targets->linked_targets->ta;
+ struct remesa_persistent_scene_vertices value={.owner=token.owner,.serial=token.serial,
+  .draw_count=ta.draw_count,.window_count=ta.draw_count+1,.incomplete=c->footprint.incomplete};
+ for(unsigned draw=0;draw<value.window_count;draw++){
+  unsigned ir=draw*3+1,pr=draw*3+2;struct memory *vertex=NULL;size_t offset,bytes;uint32_t records;
+  if(!draw){
+   vertex=commands->linked_ta->prefix;
+   offset=vertex->zclear_prefix->vertex_offset;bytes=vertex->zclear_prefix->vertex_referenced_bytes;
+   if(bytes%16||bytes/16>UINT32_MAX)return ERANGE;
+   records=bytes/16;
+  }else{
+   struct memory *pds=NULL;
+   for(unsigned i=0;i<c->count;i++)if(c->held[i]->handle==ta.references[pr].handle){pds=c->held[i];break;}
+   if(!pds||!pds->linked_pds)return ESTALE;
+   vertex=pds->linked_pds->geometry;
+   if(!vertex->linked_geometry)return ESTALE;
+   offset=0;bytes=vertex->linked_geometry->vertex_bytes;records=vertex->linked_geometry->vertex_count;
+  }
+  e=linked_live(d,vertex,false);if(e)return e;
+  if(offset>UINT32_MAX||bytes>UINT32_MAX||!records||offset>vertex->bytes||bytes>vertex->bytes-offset)return ERANGE;
+  value.windows[draw].index_handle=ta.references[ir].handle;value.windows[draw].index_generation=ta.references[ir].generation;
+  value.windows[draw].index_offset=ta.references[ir].byte_offset;value.windows[draw].index_bytes=ta.references[ir].object_bytes;
+  value.windows[draw].vertex_handle=vertex->handle;value.windows[draw].vertex_generation=vertex->token.generation;
+  value.windows[draw].vertex_offset=offset;value.windows[draw].vertex_bytes=bytes;value.windows[draw].vertex_count=records;
+ }
+ *out=value;return 0;
+}
 int remesa_persistent_scene_capture_release(struct remesa_device *device,
  struct remesa_scene_capture token)
 {

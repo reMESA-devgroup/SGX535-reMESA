@@ -44,7 +44,7 @@ def main():
  original=(n/'remesa_gem_memory.c').read_text();header=(n/'remesa_gem_memory.h').read_text()
  core,expanded=job_capacity_sources(original,header)
  core=dpm_origin_source(core)+'\n#include "remesa_gem_dpm.inc"\n'
- if a.scene_actions:core+='\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n'
+ if a.scene_actions:core+='\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n'
  # Reject absent/duplicate anchors instead of silently widening the wrong source.
  for old in ['cpu_views[16]','ids[16]','count>16','uses[16]','added[16]']:
   for bad in [original.replace(old,old.replace('16','15'),1),original+'\n/* '+old+' */\n']:
@@ -74,6 +74,7 @@ def main():
  files += [w/'mesa/sgx535'/name for name in ['remesa_program_registers.c','remesa_program_registers.h']]+[w/'include/remesa/scene_use_limits.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_ta.h','remesa_gem_scene_ta.inc']]+[w/'include/remesa/ta_references.h',w/'mesa/sgx535/remesa_ta_index.c',w/'mesa/sgx535/remesa_ta_index.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_states.h','remesa_gem_scene_states.inc']]+[w/'include/remesa/state_upload.h']
+ files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_vertices.h','remesa_gem_scene_vertices.inc']]+[w/'include/remesa/vertex_fetch.h']
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
  def run(label,cmd,ceiling):
   def limit():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,(ceiling,ceiling))
