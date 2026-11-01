@@ -110,7 +110,7 @@ I make an effort to distinguish CPU tests, offline validation, application integ
 
 <img src="assets/pipocarunningright.gif" align="right" width="105" alt="Pipoca running right">
 
-My main compatibility target is **desktop OpenGL 2.1**.
+The next compatibility targets are **acceleration of the whole X11 desktop**, **OpenGL ES 2.0**, and **desktop OpenGL 2.1**. These remain development targets; the physically validated glxgears path does not establish complete API or desktop support. Performance and stability work comes before the Minecraft milestone.
 
 I'm also researching OpenGL 3.0, although I don't want to promise support for something I haven't properly verified yet.
 
