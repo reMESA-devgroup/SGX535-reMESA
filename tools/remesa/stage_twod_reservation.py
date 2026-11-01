@@ -107,6 +107,46 @@ def scene_action_components(root, native):
             'remesa_scene_dpm.h': (root / 'include/remesa/scene_dpm.h').read_bytes()}
 
 
+def scene_use_components(root):
+    """Build the existing integer USE planner with kernel-compatible type names.
+    No arithmetic or program bytes change. The lone C99 loop declaration is
+    moved before the loop for older kernel compilers.
+    """
+    import re
+    header = (root / 'mesa/sgx535/remesa_program_registers.h').read_text()
+    source = (root / 'mesa/sgx535/remesa_program_registers.c').read_text()
+    types = '''#ifdef __KERNEL__
+#include <linux/types.h>
+typedef u32 remesa_reg_u32;
+typedef u64 remesa_reg_u64;
+typedef unsigned long remesa_reg_uptr;
+#else
+#include <stdint.h>
+typedef uint32_t remesa_reg_u32;
+typedef uint64_t remesa_reg_u64;
+typedef uintptr_t remesa_reg_uptr;
+#endif
+#define REMESA_REG_U32_C(x) x##U
+#define REMESA_REG_U64_C(x) x##ULL
+#define REMESA_REG_U32_MAX (~(remesa_reg_u32)0)
+#define REMESA_REG_UPTR_MAX (~(remesa_reg_uptr)0)'''
+    header = replace_once(header, '#include <stdint.h>', '@REMESA_TYPES@')
+    source = replace_once(source, '#include <errno.h>\n#include <stddef.h>',
+        '#ifdef __KERNEL__\n#include <linux/errno.h>\n#include <linux/stddef.h>\n#define ENOTSUP EOPNOTSUPP\n#else\n#include <errno.h>\n#include <stddef.h>\n#endif')
+    for old, new in [('uint32_t', 'remesa_reg_u32'), ('uint64_t', 'remesa_reg_u64'),
+                     ('uintptr_t', 'remesa_reg_uptr'), ('UINT32_C', 'REMESA_REG_U32_C'),
+                     ('UINT64_C', 'REMESA_REG_U64_C'), ('UINT32_MAX', 'REMESA_REG_U32_MAX'),
+                     ('UINTPTR_MAX', 'REMESA_REG_UPTR_MAX')]:
+        header = re.sub(r'\b' + old + r'\b', new, header)
+        source = re.sub(r'\b' + old + r'\b', new, source)
+    header = replace_once(header, '@REMESA_TYPES@', types)
+    source = replace_once(source, ' for (unsigned i = 0; i < 2; ++i) {',
+        ' unsigned i;\n for (i = 0; i < 2; ++i) {')
+    return {'remesa_program_registers.h': header.encode(),
+            'remesa_program_registers.c': source.encode(),
+            'remesa_scene_use_limits.h': (root / 'include/remesa/scene_use_limits.h').read_bytes()}
+
+
 def private_mmu_header_source(header):
     return replace_once(header, '\tstruct drm_device *dev;\n};',
         '\tstruct drm_device *dev;\n'
@@ -754,7 +794,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_private_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
@@ -862,13 +902,15 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
         components[name] = (additions / name).read_bytes()
     if private:
         components.update(scene_action_components(root, native))
-        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o\n'
+        components.update(scene_use_components(root))
+        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o remesa_program_registers.o\n'
         for name in ['remesa_mmu_confinement.h', 'remesa_mmu_confinement.inc',
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
                      'remesa_gem_private_execute.inc', 'remesa_gem_scene_actions.h', 'remesa_gem_scene_actions.inc',
                      'remesa_gem_scene_controls.h', 'remesa_gem_scene_controls.inc',
+                     'remesa_gem_scene_use.h', 'remesa_gem_scene_use.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',

@@ -3,6 +3,7 @@
 #include "test_gem_private.c"
 #include "../remesa_gem_scene_actions.h"
 #include "../remesa_gem_scene_controls.h"
+#include "../remesa_gem_scene_use.h"
 #include "remesa_render_target.h"
 #include "remesa_scene_layout.h"
 static u32 scene_storage(struct remesa_gem_memory *s,u64 size,u64 address)
@@ -24,9 +25,12 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  struct remesa_gem_private loan={0};struct remesa_scene_layout layout;
  struct remesa_gem_scene_actions plan,saved,bad;
  struct remesa_gem_scene_controls controls,control_saved,control_bad;
+ struct remesa_gem_scene_use use,use_saved,use_bad;
  struct {u32 prefix;struct remesa_gem_scene_action_command scene;
-  struct remesa_gem_scene_control_command controls;u32 tail;} command={0};
+  struct remesa_gem_scene_control_command controls;
+  struct remesa_gem_scene_use_command use;struct remesa_gem_scene_use_entry entries[REMESA_SCENE_USE_MAX];u32 tail;} command={0};
  const unsigned control_offset=(u8 *)&command.controls-(u8 *)&command;
+ const unsigned use_offset=(u8 *)&command.use-(u8 *)&command;
  u32 pitch=(width+31)&~31u;
  CHECK(!remesa_scene_layout_build(width,height,0,&layout));
  CHECK(!remesa_gem_memory_open(&dev,&file,77,&s));expected_memory=s;expected_guard=&guard;
@@ -48,8 +52,13 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
   .color_id=ids[4],.depth_id=ids[5],.ta_id=ids[6],.ta_offset=4,.ta_bytes=80,
   .background_id=ids[7],.background_offset=16,.background_bytes=68,
   .event_id=ids[8],.event_offset=32,.event_bytes=148};
+ command.use=(struct remesa_gem_scene_use_command){1,sizeof(command.use)+3*sizeof(command.entries[0]),3,0};
+ command.entries[0]=(struct remesa_gem_scene_use_entry){ids[9],0,16,4,0,0};
+ command.entries[1]=(struct remesa_gem_scene_use_entry){ids[9],32,8,3,1,0};
+ command.entries[2]=(struct remesa_gem_scene_use_entry){ids[10],16,16,4,0,0};
  CHECK(!remesa_gem_job_prepare(s,uses,17,&command,sizeof(command),&ticket));struct retained_job *j=ticket_job(s,ticket);
  command.scene.width=0; /* Only the copied kernel section is authoritative. */
+ command.entries[0].bank=99;
  memset(&plan,0xa5,sizeof plan);saved=plan;
  CHECK(remesa_gem_scene_actions_prepare(s,ticket,4,&plan)==-EACCES&&!memcmp(&plan,&saved,sizeof plan)&&!j->region_mask);
  CHECK(!remesa_gem_job_claim_zero_dpm(s,ticket,ids[1],ids[2]));
@@ -107,20 +116,52 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  }
  *copy=copy_saved;
  CHECK(!remesa_gem_scene_controls_prepare(s,ticket,4,control_offset,&controls)&&!memcmp(&controls,&control_saved,sizeof controls));
+ memset(&use,0xa5,sizeof use);use_saved=use;
+ CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset+1,&use)==-EINVAL&&!memcmp(&use,&use_saved,sizeof use));
+ CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==3&&use.bank_mask==24);
+ CHECK(vmap_calls==maps_before&&flushes==flush_before&&test_zeroed_pages==zero_before);
+ use_saved=use;
+ struct remesa_gem_scene_use_command *use_copy=(void *)((u8 *)j->commands+use_offset),use_header=*use_copy;
+ struct remesa_gem_scene_use_entry *entries=(void *)(use_copy+1),entry_saved=entries[0];
+ for(unsigned negative=0;negative<8;negative++){
+  entries[0]=entry_saved;
+  if(negative==0)entries[0].bank=16;
+  if(negative==1)entries[0].data_master=3;
+  if(negative==2)entries[0].id=ids[3];
+  if(negative==3)entries[0].byte_offset=1;
+  if(negative==4)entries[0].program_bytes=4097;
+  if(negative==5)entries[0].data_master=1; /* Same bank4 cannot retain VS and PX. */
+  if(negative==6)entries[0].reserved=1;
+  if(negative==7)entries[0].id+=32; /* Stale generation, not the next live BO. */
+  CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)<0&&!memcmp(&use,&use_saved,sizeof use));
+ }
+ entries[0]=entry_saved;
+ use_copy->entry_count=REMESA_SCENE_USE_MAX;use_copy->bytes=sizeof(*use_copy)+use_copy->entry_count*sizeof(*entries);
+ for(unsigned i=3;i<REMESA_SCENE_USE_MAX;i++)entries[i]=entry_saved;
+ CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==REMESA_SCENE_USE_MAX);
+ use_copy->entry_count++;use_copy->bytes+=sizeof(*entries);use_bad=use;
+ CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)==-EINVAL&&!memcmp(&use,&use_bad,sizeof use));
+ *use_copy=use_header;
+ CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&!memcmp(&use,&use_saved,sizeof use));
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,9)==-EACCES);
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,0x1ffc1)==17&&vmap_calls==maps_before+12);
  CHECK(!views[1].cpu&&!views[2].cpu&&!views[3].cpu);
  struct remesa_gem_private_rule rules[17];
  scene_readonly_role=fault>=2&&fault<=4?(fault==2?3:fault==3?1:2):fault==6?4:fault==7?5:0;
- scene_uncached_role=fault==5?3:fault==8?6:0;
- for(unsigned i=0;i<17;i++)rules[i]=(struct remesa_gem_private_rule){ids[i],i&&i<=5&&i!=scene_readonly_role?3:1,i!=0&&i!=scene_uncached_role};
+ scene_uncached_role=fault==5?3:fault==8?6:fault==10?9:0;scene_write_role=fault==9?9:0;
+ for(unsigned i=0;i<17;i++)rules[i]=(struct remesa_gem_private_rule){ids[i],(i&&i<=5&&i!=scene_readonly_role)||(scene_write_role&&i==scene_write_role)?3:1,i!=0&&i!=scene_uncached_role};
  dpm_model=true;scene_output_roles=true;capacity_gpu_count=17;mode=0;
  CHECK(!remesa_gem_private_prepare(s,ticket,rules,17,&guard,&loan));
  mutex_lock(&s->lock);
  if(fault>=2&&fault<=5){CHECK(remesa_gem_scene_actions_check_locked(&loan,views,17,&plan)==-EACCES);goto unlock;}
  CHECK(!remesa_gem_scene_actions_check_locked(&loan,views,17,&plan));
- if(fault>=6){CHECK(remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls)==-EACCES);goto unlock;}
+ if(fault>=6&&fault<=8){CHECK(remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls)==-EACCES);goto unlock;}
  CHECK(!remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls));
+ if(fault>=9){CHECK(remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use)==-EACCES);goto unlock;}
+ CHECK(!remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use));
+ use_bad=use;use_bad.lower19[0]^=1;CHECK(remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use_bad)==-EACCES);
+ use_bad=use;use_bad.banks[4].word^=1;CHECK(remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use_bad)==-EACCES);
+ use_bad=use;use_bad.control_offset+=4;CHECK(remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use_bad)==-EACCES);
  control_bad=controls;control_bad.raster[39]=0x3f800000;CHECK(remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&control_bad)==-EACCES);
  control_bad=controls;control_bad.ta[13]+=4;CHECK(remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&control_bad)==-EACCES);
  control_bad=controls;control_bad.action_offset+=4;CHECK(remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&control_bad)==-EACCES);
@@ -132,14 +173,15 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_private_publish_locked(&loan,views,17));
  CHECK(!s->bo[ids[3]&31].zero_pristine&&!remesa_gem_scene_actions_check_locked(&loan,views,17,&plan));
  CHECK(!remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls));
+ CHECK(!remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use));
  unlock:mutex_unlock(&s->lock);CHECK(remesa_gem_job_issue(s,ticket)==-EOPNOTSUPP);CHECK(!remesa_gem_private_release(&loan));
- dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;scene_readonly_role=scene_uncached_role=0;
+ dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;scene_readonly_role=scene_uncached_role=scene_write_role=0;
  cleanup:CHECK(!remesa_gem_job_cancel(s,ticket));CHECK(!remesa_gem_memory_close(s));
  CHECK(!gems&&!pins&&!ptes&&!claimed&&!power);expected_memory=NULL;expected_guard=NULL;
 }
 int main(void)
 {
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
- for(unsigned fault=1;fault<=8;fault++)action_case(640,640,fault);
+ for(unsigned fault=1;fault<=10;fault++)action_case(640,640,fault);
  puts("PASS bound scene actions+controls:17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
 }

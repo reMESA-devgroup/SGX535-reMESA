@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #define PAGE_BYTES 4096u
+_Static_assert(REMESA_SCENE_USE_ENTRIES<=REMESA_SCENE_USE_MAX,"native USE reference capacity");
 struct linked_program {
  struct remesa_shader_linkage linkage;
  size_t offset[2],bytes[2],reserved[2];
@@ -3195,6 +3196,72 @@ int remesa_persistent_scene_controls_snapshot(const struct remesa_device *device
  e=remesa_ta_control_encode(&stream,value.ta);if(e)return e;
  memcpy(value.ta_scene,rm.ta_scene,sizeof(value.ta_scene));
  memcpy(value.raster_scene,rm.raster_scene,sizeof(value.raster_scene));
+ *out=value;return 0;
+}
+static int scene_use_add(struct persistent *d,const struct scene_capture *capture,
+ struct remesa_persistent_scene_use *out,struct memory *b,size_t offset,size_t bytes,
+ const struct remesa_use_entry_plan *entry)
+{
+ int e=linked_live(d,b,false);if(e)return e;
+ unsigned i;
+ for(i=0;i<capture->count&&capture->held[i]!=b;i++);
+ if(i==capture->count)return ESTALE;
+ for(i=0;i<capture->footprint.allocation_count;i++)if(capture->footprint.allocations[i].handle==b->handle)break;
+ if(i==capture->footprint.allocation_count||capture->footprint.allocations[i].generation!=b->token.generation||
+    capture->footprint.allocations[i].access!=REMESA_ACCESS_READ)return EACCES;
+ uint64_t base;enum remesa_use_data_master master;
+ e=remesa_use_base_unpack_address(entry->register_word,&base,&master);if(e)return e;
+ struct remesa_use_entry_request request={b->va,b->allocated,offset,bytes,entry->bank,master};
+ struct remesa_use_entry_plan checked;
+ e=remesa_use_entry_prepare(&request,&checked);if(e)return e;
+ uint32_t fixup;e=remesa_use_entry_preview_fixup(&checked,&fixup);if(e)return e;
+ if(checked.base_address!=entry->base_address||checked.entry_address!=entry->entry_address||
+    checked.program_end!=entry->program_end||checked.entry_byte_offset!=entry->entry_byte_offset||
+    checked.register_offset!=entry->register_offset||checked.register_word!=entry->register_word)return ESTALE;
+ if((out->bank_mask&(1u<<entry->bank))&&
+    (out->banks[entry->bank].offset!=entry->register_offset||out->banks[entry->bank].word!=entry->register_word))return EBUSY;
+ if(out->entry_count==REMESA_SCENE_USE_ENTRIES)return E2BIG;
+ unsigned n=out->entry_count++;
+ out->entries[n].generation=b->token.generation;out->entries[n].handle=b->handle;
+ out->entries[n].bank=entry->bank;out->entries[n].data_master=master;out->entries[n].lower19=fixup;
+ out->entries[n].byte_offset=offset;out->entries[n].program_bytes=bytes;
+ out->bank_mask|=1u<<entry->bank;
+ out->banks[entry->bank].offset=entry->register_offset;out->banks[entry->bank].word=entry->register_word;
+ return 0;
+}
+int remesa_persistent_scene_use_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_persistent_scene_use *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_use))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(!c->parents[1]->linked_event_profile)return ENOTSUP;
+ struct remesa_persistent_scene_use value={.owner=token.owner,.serial=token.serial,
+  .incomplete=c->footprint.incomplete};
+ for(unsigned i=0;i<c->count;i++){
+  struct memory *b=c->held[i];
+  if(b->zclear_prefix)for(unsigned k=0;k<3;k++){
+   const struct remesa_persistent_zclear_prefix_backing *p=b->zclear_prefix;
+   e=scene_use_add(d,c,&value,b,p->use_offset[k],p->use_bytes[k],&p->entries[k]);if(e)return e;
+  }
+  if(b->scene_close||b->state_kind==REMESA_PERSISTENT_STATE_LINKED_DRAW){
+   e=scene_use_add(d,c,&value,b,b->state_use_offset,16,&b->state_use_entry);if(e)return e;
+  }
+  if(b->linked_program)for(unsigned k=0;k<2;k++){
+   const struct linked_program *p=b->linked_program;
+   e=scene_use_add(d,c,&value,b,p->offset[k],p->bytes[k],&p->entry[k]);if(e)return e;
+  }
+  if(b->linked_background){
+   e=scene_use_add(d,c,&value,b->linked_background->program,0,8,&b->linked_background->entry);if(e)return e;
+  }
+  if(b->linked_event_auxiliary)for(unsigned k=0;k<2;k++){
+   struct remesa_use_entry_plan entry;uint32_t fixup;
+   e=zclear_entry(b,k?32:0,k?8:16,b->event_pixel_bank,REMESA_USE_PIXEL,&entry,&fixup);if(e)return e;
+   e=scene_use_add(d,c,&value,b,k?32:0,k?8:16,&entry);if(e)return e;
+  }
+ }
+ if(!value.entry_count||!value.bank_mask)return ENODATA;
  *out=value;return 0;
 }
 int remesa_persistent_scene_capture_release(struct remesa_device *device,

@@ -9,6 +9,7 @@
 #include "remesa_pds.h"
 #include "remesa_ta_scene.h"
 #include "remesa/scene_dpm.h"
+#include "remesa/scene_use_limits.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -747,6 +748,23 @@ struct remesa_persistent_scene_controls {
 };
 int remesa_persistent_scene_controls_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_controls *);
+/* Complete USE entry windows of this frozen graph, not program-byte validation
+ * or a hardware bank lease. Preserve exact producer lengths, not reservations.
+ * The bound is prefix3 + close1 + at most3 per draw + background1 + event2.
+ * No allocation/provider I/O, execution admission or capability change. */
+#define REMESA_SCENE_USE_ENTRIES (3u+1u+REMESA_LINKED_BODY_MAX_DRAWS*3u+1u+2u)
+struct remesa_persistent_scene_use {
+ uint64_t owner,serial;
+ uint32_t entry_count,bank_mask,incomplete;
+ struct {uint32_t offset,word;} banks[16];
+ struct {
+  uint64_t generation;
+  uint32_t handle,bank,data_master,lower19;
+  size_t byte_offset,program_bytes;
+ } entries[REMESA_SCENE_USE_ENTRIES];
+};
+int remesa_persistent_scene_use_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_use *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

@@ -82,3 +82,8 @@ checked against the matching action plan; see
 [native-scene-controls.md](native-scene-controls.md). Mesa and kernel share
 the original word serialization. This does not yet establish complete
 image/program admission, source-attributed execution or GPU qualification.
+
+Frozen captures now expose the complete owned USE entry windows and bank
+settings, with corresponding held-ID/window validation in the kernel; see
+[native-scene-use.md](native-scene-use.md). This is numeric ownership metadata,
+not validation of instruction contents or permission to execute the scene.
