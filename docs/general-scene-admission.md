@@ -124,3 +124,41 @@ never reads or aliases the 32 MiB DPM pools. All files remain LAB evidence;
 neither successful trace collection nor status events alone approve pixels.
 Host timestamps include dispatch, polling and CPU overhead; they are not a
 hardware GPU execution counter.
+
+## Physical saved-trace result
+
+The trace-enabled candidate was tested once on SGX535 rev121 at 1280x800.
+The raw samples were STATUS1 `0x2000` and then `0x40001`, with STATUS2 zero;
+the native lifecycle reached phase 9 / ledger 7 / stages 15 and retired.
+The complete 122880-byte REGION contains 23780 nonzero bytes (8511 words),
+starting at byte offset 26624. Therefore the earlier zero first-4-KiB observation
+was insufficient to diagnose an entirely empty REGION. The GPU did write the
+actual retained REGION backing. COLOR and Z are still completely zero, so
+rendering remains unqualified. Twelve READ inputs, four guards and 21 mapping
+INFO records passed their independent checks. Stock recovery completed.
+
+Measured host times: CPU publication flush 59.421 ms, TA completion observed
+1.495 ms after TA dispatch began, raster completion observed 14.732 ms after
+raster dispatch began, complete execute ioctl 215.918 ms. These are host timing
+intervals with dispatch/poll overhead, not GPU-only counters or valid-frame FPS.
+Full small-REGION LAB readback took 57.070 ms. None of these diagnostics run in
+the existing glxgears FAST path.
+
+Evidence and verifier:
+`/home/gama/sgx535-offline/general-scene-trace-20261101/PHYSICAL_RESULT.json`,
+`VERIFY_PHYSICAL.py`, raw query/request/response and readbacks under
+`hardware/physical/capture`.
+
+A concrete predecessor difference was also identified in the preserved physical
+input, separately pinned in `INITIAL_PREDECESSOR_COMPARISON.json`. Its first TA
+primitive uploads initialization DATA11 beginning `54c5,07f00100,02000000` with
+zero fragment links. The new general stream instead begins with the distinct
+CPU Z-clear DATA11 constructor `54c5,01e00100,0e000000` with fragment links.
+The existing clear VS16 and state-upload USE16 are byte-identical to the
+physical role1 programs at offsets 0x40/0x60 and 0x80. Initialization and Z-clear
+must not be conflated or substituted for one another. The old initialization
+record is already preserved in `tools/psb-dri-re/frozen_triangle_image.py`,
+`frozen_kernel_initial.inc` and the phase7 closure documentation. Reuse those
+components and the existing encoders to qualify an explicit initialization,
+Z-clear, draw and close sequence. This missing predecessor is a concrete
+integration hypothesis; it is not yet a physically confirmed root cause.
