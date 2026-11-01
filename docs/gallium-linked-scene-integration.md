@@ -77,15 +77,21 @@ recorded separately in
 `/home/gama/sgx535-offline/provider-scene-capacity-20261101/FINAL_RESULT.json`.
 Those results do not physically qualify this newer Gallium integration.
 
-## Next execution boundary
+## Physical follow-up and remaining execution boundary
 
-The next physical client must use this bound-context submission path with the
-real Linux memory provider and independently collect the complete allocation
-inventory, including CPU-only owners. Existing closed native profiles cannot
-be assumed to accept the relocated addresses. Qualify the exact new input
-closure before execution; do not relax a hash/profile gate merely to pass it.
-Check identity, issue/completion, retirement, COLOR/Z readback, READ integrity,
-guards and cleanup, then restore stock/N/N using the established recovery path.
+The integrated bound-context path has subsequently passed physical COLOR/Z24,
+retirement, input/guard integrity and recovery qualification at both primary
+sizes. See [gallium-physical-qualification.md](gallium-physical-qualification.md).
+The requirements below describe the qualification boundary that was preserved;
+they are not a request to repeat the completed tests or reimplement encoders.
+
+The physical client used this bound-context path with the real Linux memory
+provider and collected the complete allocation inventory, including CPU-only
+owners. Exact closed profiles 7/8 were appended for the relocated addresses;
+all six previous profiles were preserved. The independently checked boundary
+includes identity, issue/completion, retirement, COLOR/Z readback, READ/non-GPU
+integrity, guards, cleanup and stock/N/N recovery. Image/address gates were
+preserved throughout.
 
 Ordinary GL state translation, dynamic production admission, repeated sessions,
 load/preserve semantics, API coverage, desktop presentation and installation

@@ -57,8 +57,9 @@ Neither mode enables that endpoint.
 The old adapter continues to select 5/6. The new eight-profile table preserves
 all six earlier packets, bindings, addresses and digests bit-for-bit; it adds
 the exact relocated Gallium graph without bypassing image/address validation.
-The eight-profile kernel/adapter has offline qualification recorded below;
-its new frontend execution still needs a recoverable physical qualification.
+The eight-profile kernel/adapter has offline qualification recorded below.
+Subsequent physical qualification of this frontend at both sizes is recorded
+in [gallium-physical-qualification.md](gallium-physical-qualification.md).
 
 `tools/remesa/gallium_scene_native.py` is the separate supervisor for this
 lifetime. It verifies the pinned executable, normalizes the entire packet's
@@ -103,5 +104,5 @@ kernel validators in three resolutions and three variants;
 `SUPERVISOR_TESTS.json` covers 14 success/failure scenarios;
 `kbuild/RESULT.json` records the full module build without new warnings;
 `boot/INITRD_BUILD.json` and `boot/INIT_CHAIN_TEST_RESULTS.json` record the
-candidate identity chain and seven-N checks. These are offline results.
-The candidate has not yet been deployed or booted by this qualification.
+candidate identity chain and seven-N checks. Those receipts are offline
+results that predate the separate physical qualification above.
