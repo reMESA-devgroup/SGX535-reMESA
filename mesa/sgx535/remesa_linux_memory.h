@@ -7,6 +7,7 @@
 #include "remesa/twod_fill_uapi.h"
 #include "remesa_retained_transport.h"
 #include "remesa/private_session_lab_uapi.h"
+#include "remesa/scene_probe_uapi.h"
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
  * installations do not provide this resource service. Archived experimental
@@ -63,6 +64,19 @@ int remesa_linux_memory_private_lab_submit(struct remesa_linux_memory *,
  uint32_t budget_ms,struct remesa_private_session_lab_request *);
 int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *,
  struct remesa_private_session_lab_request *);
+/* One closed general-scene LAB attempt on this exact resource endpoint.
+ * Packet must be a retained real scene_capture snapshot owned by this context;
+ * the caller keeps it and its owners until acknowledged return. Only the six
+ * existing kernel profiles are selected; this does not admit ordinary GL.
+ * Performs one ioctl, no INFO/hash/readback/retry. Kernel validates actual held
+ * images, addresses, permissions, source ownership and complete retirement.
+ * Raw response is returned after any entered ioctl. Every entered failure or
+ * malformed receipt poisons ALL endpoint resources; only INFO/forget are safe.
+ * External serialization, disjoint aligned packet/output and no CPU leases.
+ * At most one entered attempt per endpoint; kernel also enforces once/boot. */
+int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *,
+ const struct remesa_scene_packet *,uint32_t profile,uint32_t budget_ms,
+ struct remesa_scene_probe_request *);
 /* Synchronous typed native copy on this exact owned fd/context. Caller starts
  * version/context/response fields at zero; local owned IDs/mappings and leases
  * are checked before one ioctl. No INFO, hashes, CPU maps/readbacks or retry.

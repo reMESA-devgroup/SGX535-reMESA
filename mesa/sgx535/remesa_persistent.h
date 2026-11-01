@@ -746,7 +746,8 @@ int remesa_persistent_scene_capture_snapshot(const struct remesa_device *,
  * one frozen captured graph, including after all public owners are released.
  * Requires a fixed event PDS owner; auxiliary-only captures return ENOTSUP.
  * Clear depth comes from the retained Z-clear prefix, stencil is0 and the
- * original depth finalization predicate isfalse. Z remains UNDEFINED.
+ * depth finalization predicate comes from the immutable target owner.
+ * Z contents remain UNDEFINED until actual GPU initialization.
  * These are CPU command groups for a future authenticated native consumer,
  * never GPU CODE/BOs, MMIO writes, initialization or execution admission.
  * All incomplete bits remain; no allocation/provider I/O/hash/sync occurs.

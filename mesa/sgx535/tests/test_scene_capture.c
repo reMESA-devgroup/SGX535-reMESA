@@ -184,6 +184,11 @@ int main(void)
      CHECK(!remesa_persistent_linked_region_snapshot(&d,p[2],&rm));
      CHECK(!remesa_persistent_zclear_prefix_snapshot(&d,c[6],&zm));
      CHECK(zm.clear_depth==REMESA_LINKED_TEST_CLEAR_DEPTH(4100+v));
+     struct remesa_persistent_linked_ta_backing actual_ta;
+     CHECK(!remesa_persistent_linked_ta_snapshot(&d,c[7],&actual_ta));
+     CHECK(actual_ta.draw_offset==(zm.initial_pds_offset?56u:28u));
+     CHECK(bm.targets.commands.draw_offset==actual_ta.draw_offset);
+     CHECK(bm.targets.commands.command_bytes==actual_ta.command_bytes&&bm.targets.commands.close_offset==actual_ta.close_offset);
      uint32_t clear;memcpy(&clear,&zm.clear_depth,4);
      CHECK(shader_pds_le32(control.raster+19*8+4)==clear);
      CHECK(shader_pds_le32(get(&f,zm.handle)->bytes+zm.vertex_offset+8)==clear);

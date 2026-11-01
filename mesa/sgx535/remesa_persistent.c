@@ -2602,7 +2602,7 @@ static int linked_targets_metadata(struct persistent *d,struct memory *ta,
   .generation=ta->token.generation,.gpu_va=ta->va,.handle=ta->handle,
   .width=prefix->width,.height=prefix->height,.draw_count=ta->linked_ta->body->linked_body->draw_count,
   .read_allocation_count=count,.allocation_bytes=ta->allocated,.command_bytes=ta->linked_ta->bytes,
-  .draw_offset=28,.close_offset=ta->linked_ta->bytes-12};
+  .draw_offset=prefix->initial_pds_offset?56:28,.close_offset=ta->linked_ta->bytes-12};
  for(unsigned i=0;i<count;i++){
   value.commands.reads[i].generation=reads[i]->token.generation;
   value.commands.reads[i].gpu_va=reads[i]->va;value.commands.reads[i].handle=reads[i]->handle;
