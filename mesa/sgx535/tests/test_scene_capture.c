@@ -23,6 +23,8 @@ static void unchanged(struct remesa_device *d,struct remesa_scene_capture c,int 
  CHECK(remesa_persistent_scene_ta_snapshot(d,c,&ta)==error&&!memcmp(&ta,&ta_saved,sizeof ta));
  struct remesa_persistent_scene_vertices vertices,vertices_saved;memset(&vertices,0xa5,sizeof vertices);vertices_saved=vertices;
  CHECK(remesa_persistent_scene_vertices_snapshot(d,c,&vertices)==error&&!memcmp(&vertices,&vertices_saved,sizeof vertices));
+ struct remesa_scene_packet packet,snapshot;memset(&packet,0xa5,sizeof packet);snapshot=packet;
+ CHECK(remesa_persistent_scene_packet_snapshot(d,c,&packet)==error&&!memcmp(&packet,&snapshot,sizeof packet));
  controls_error(d,c,error);
  CHECK(remesa_persistent_scene_capture_release(d,c)==error);
 }
@@ -83,6 +85,26 @@ int main(void)
   for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++){
    CHECK(!remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&tokens[i]));
    CHECK(tokens[i].owner==4100+v&&tokens[i].serial==i+1&&!tokens[i].reserved&&tokens[i].slot==i);
+   struct remesa_scene_packet packet;memset(&packet,0xa5,sizeof packet);
+   if(event_profile){
+    CHECK(!remesa_persistent_scene_packet_snapshot(&d,tokens[i],&packet));
+    CHECK(remesa_scene_packet_valid(&packet)&&packet.owner==tokens[i].owner&&packet.serial==tokens[i].serial);
+    CHECK(packet.binding_count==17&&packet.use_count==10&&packet.window_count==2);
+    CHECK(packet.actions.width==sizes[size][0]&&packet.controls.height==sizes[size][1]);
+    CHECK(packet.controls.event_bytes==148&&packet.controls.background_bytes==68);
+    unsigned char commands[REMESA_SCENE_PACKET_COMMAND_MAX];memset(commands,0xa5,sizeof commands);
+    unsigned bytes=123;struct remesa_scene_packet_sections offsets;
+    CHECK(remesa_scene_packet_commands(&packet,commands,sizeof commands,&bytes,&offsets));
+    CHECK(bytes==448&&offsets.actions==0&&offsets.controls==32&&offsets.use==112&&offsets.vertices==368);
+    CHECK(!memcmp(commands,&packet.actions,32)&&!memcmp(commands+32,&packet.controls,80));
+    struct remesa_scene_packet corrupt=packet;corrupt.bindings[1].id=corrupt.bindings[0].id;
+    unsigned before_bytes=bytes;unsigned char before[sizeof commands];memcpy(before,commands,sizeof before);
+    CHECK(!remesa_scene_packet_commands(&corrupt,commands,sizeof commands,&bytes,&offsets)&&bytes==before_bytes&&!memcmp(before,commands,sizeof before));
+    corrupt=packet;corrupt.uses[10].id=1;CHECK(!remesa_scene_packet_valid(&corrupt));
+    corrupt=packet;corrupt.windows[0].vertex_id=0;CHECK(!remesa_scene_packet_valid(&corrupt));
+    CHECK(!remesa_scene_packet_commands(&packet,commands,447,&bytes,&offsets)&&!memcmp(before,commands,sizeof before));
+   }else{struct remesa_scene_packet before=packet;CHECK(remesa_persistent_scene_packet_snapshot(&d,tokens[i],&packet)==ENOTSUP&&!memcmp(&packet,&before,sizeof before));}
+
    CHECK(!remesa_persistent_scene_capture_snapshot(&d,tokens[i],&r)&&!memcmp(&r,&expected,sizeof r));
    CHECK(!remesa_persistent_scene_ta_snapshot(&d,tokens[i],&ta));
    CHECK(!remesa_persistent_scene_vertices_snapshot(&d,tokens[i],&vertices));

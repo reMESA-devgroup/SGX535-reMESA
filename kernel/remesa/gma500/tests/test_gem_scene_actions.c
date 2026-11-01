@@ -180,8 +180,18 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
   bad_sections=sections;bad_sections.use++;
   CHECK(remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&bad_sections,prepare_rules,&guard,context)==-EINVAL);
   CHECK(!context->memory&&claimed==before_claimed);
+  packet_cache_model=true;
+  struct remesa_scene_packet packet={.owner=77,.serial=1,.version=1,.binding_count=17,.use_count=10,.window_count=2};
+  for(unsigned i=0;i<17;i++){packet.bindings[i].id=ids[i];packet.bindings[i].access=prepare_rules[i].access;}
+  memcpy(&packet.actions,&command.scene,32);memcpy(&packet.controls,&command.controls,80);
+  memcpy(packet.uses,command.entries,10*24);memcpy(packet.windows,command.windows,2*32);
+  CHECK(remesa_scene_packet_valid(&packet));
+  packet.owner=78;CHECK(remesa_gem_scene_packet_prepare(s,&packet,&guard,context)==-EACCES&&!context->memory);packet.owner=77;
+  u32 saved_id=packet.bindings[16].id;packet.bindings[16].id=packet.bindings[15].id;
+  CHECK(remesa_gem_scene_packet_prepare(s,&packet,&guard,context)==-EINVAL&&!context->memory);packet.bindings[16].id=saved_id;
   for(unsigned iteration=0;iteration<2;iteration++){
-   CHECK(!remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&sections,prepare_rules,&guard,context));
+   CHECK(!remesa_gem_scene_packet_prepare(s,&packet,&guard,context));
+   CHECK(context->sections.actions==0&&context->sections.controls==32&&context->sections.use==112&&context->sections.vertices==368&&context->snapshot.command_bytes==448);
    CHECK(context->state==REMESA_SCENE_JOB_PREPARED&&context->count==17&&context->loan.live&&!context->loan.host_published);
    CHECK(context->actions.load_count==29&&context->actions.ta_count==31&&context->actions.raster_count==20&&context->use.entry_count==10);
    CHECK(!context->views[1].cpu&&!context->views[2].cpu&&!context->views[3].cpu&&!context->views[4].cpu&&!context->views[5].cpu&&context->views[9].cpu);
@@ -204,7 +214,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    else CHECK(!remesa_gem_scene_job_cancel(context)&&!context->memory&&claimed==before_claimed);
   }
   CHECK(test_zeroed_pages==before_zero);free(context);
-  dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;
+  packet_cache_model=false;dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;
   CHECK(!remesa_gem_memory_close(s));CHECK(!gems&&!pins&&!ptes&&!claimed&&!power);expected_memory=NULL;expected_guard=NULL;return;
  }
  CHECK(!remesa_gem_job_prepare(s,uses,17,&command,sizeof(command),&ticket));struct retained_job *j=ticket_job(s,ticket);

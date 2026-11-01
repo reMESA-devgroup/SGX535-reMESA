@@ -11,6 +11,7 @@
 #include "remesa/scene_dpm.h"
 #include "remesa/scene_use_limits.h"
 #include "remesa/ta_references.h"
+#include "remesa/scene_packet.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -792,6 +793,11 @@ struct remesa_persistent_scene_vertices {
 };
 int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_vertices *);
+/* Capture-to-native immutable metadata, derived from this frozen graph.
+ * No provider IO, new owner, admission override, CODE encoding or dispatch.
+ * Caller retains capture through the complete real native job lifecycle. */
+int remesa_persistent_scene_packet_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_scene_packet *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

@@ -71,3 +71,9 @@ transaction, followed by fresh bounded recoverable physical qualification.
 Existing one-shot scripts must not be rearmed against a new boot/candidate.
 Normal OpenGL 2.1/GLES 2 dispatch and full resource/API behavior, desktop
 integration, supported installation and hardware validation remain incomplete.
+
+
+The subsequent [capture packet bridge](general-scene-packet.md) now derives the
+immutable native metadata from existing frozen userspace owners and resolves
+its IDs into real kernel job preparation. Its live transport/admission entry
+and physical qualification remain outstanding; the encoders are reused.

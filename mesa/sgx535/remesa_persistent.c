@@ -3390,6 +3390,54 @@ int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *device
  }
  *out=value;return 0;
 }
+int remesa_persistent_scene_packet_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_scene_packet *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_scene_packet))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ struct remesa_persistent_scene_controls controls;
+ struct remesa_persistent_scene_use use;
+ struct remesa_persistent_scene_vertices vertices;
+ e=remesa_persistent_scene_controls_snapshot(device,token,&controls);if(e)return e;
+ e=remesa_persistent_scene_use_snapshot(device,token,&use);if(e)return e;
+ e=remesa_persistent_scene_vertices_snapshot(device,token,&vertices);if(e)return e;
+ if(c->footprint.allocation_count>32||use.entry_count>55||vertices.window_count>17)return E2BIG;
+ struct memory *bg=c->parents[0],*event=c->parents[1],*region=c->parents[2],*dpm=c->parents[3];
+ struct remesa_persistent_linked_background_backing bm;
+ struct remesa_persistent_linked_event_profile_backing em;
+ struct remesa_persistent_linked_region_backing rm;
+ e=background_metadata(d,bg,false,&bm);if(e)return e;
+ e=event_profile_metadata(d,event,false,&em);if(e)return e;
+ e=region_metadata(d,region,false,&rm);if(e)return e;
+ struct memory *targets=bg->linked_background->targets;
+ struct memory *prefix=targets->linked_targets->ta->linked_ta->prefix;
+ struct remesa_scene_packet p={.owner=token.owner,.serial=token.serial,.version=1,
+  .binding_count=c->footprint.allocation_count,.use_count=use.entry_count,.window_count=vertices.window_count};
+ for(unsigned i=0;i<p.binding_count;i++){
+  p.bindings[i].id=c->footprint.allocations[i].handle;p.bindings[i].access=c->footprint.allocations[i].access;
+ }
+ p.actions=(struct remesa_scene_packet_actions){1,32,controls.width,controls.height,rm.region.handle,
+  dpm->linked_dpm->table->handle,dpm->linked_dpm->parameter->handle,0};
+ const struct remesa_persistent_linked_targets_backing *tm=&bm.targets;
+ uint32_t depth_bits;memcpy(&depth_bits,&prefix->zclear_prefix->clear_depth,4);
+ p.controls=(struct remesa_scene_packet_controls){1,80,controls.width,controls.height,
+  tm->color.state.stride_bytes/4,tm->depth.pitch_pixels,tm->depth.cpp,depth_bits,
+  tm->color.handle,tm->depth.handle,tm->commands.handle,0,tm->commands.command_bytes,
+  bm.handle,0,bm.object_bytes,em.handle,0,em.used_bytes,0};
+ for(unsigned i=0;i<p.use_count;i++){
+  if(use.entries[i].byte_offset>UINT32_MAX||use.entries[i].program_bytes>UINT32_MAX)return ERANGE;
+  p.uses[i]=(struct remesa_scene_packet_use){use.entries[i].handle,use.entries[i].byte_offset,
+   use.entries[i].program_bytes,use.entries[i].bank,use.entries[i].data_master,0};
+ }
+ for(unsigned i=0;i<p.window_count;i++)p.windows[i]=(struct remesa_scene_packet_window){
+  vertices.windows[i].index_handle,vertices.windows[i].index_offset,vertices.windows[i].index_bytes,
+  vertices.windows[i].vertex_handle,vertices.windows[i].vertex_offset,vertices.windows[i].vertex_bytes,
+  vertices.windows[i].vertex_count,0};
+ if(!remesa_scene_packet_valid(&p))return EPROTO;
+ *out=p;return 0;
+}
 int remesa_persistent_scene_capture_release(struct remesa_device *device,
  struct remesa_scene_capture token)
 {

@@ -42,6 +42,12 @@ int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *);
 /* Cancel only unissued/unbound preparation. Failure retains the context and
  * holds; never infer retirement/root restoration or release source state. */
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *);
+struct remesa_scene_packet;
+/* Resolve packet IDs to this endpoint's actual backing, then use the existing
+ * preparers. Caller owns the same DRM/backing-session/guard lifetimes as prepare;
+ * complete input and hardware admission remain required before execute. */
+int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *,const struct remesa_scene_packet *,
+ struct remesa_twod_reservation *,struct remesa_gem_scene_job *);
 /* Endpoint mutex, default mappings still active; no MMU writer held. */
 int remesa_gem_scene_job_check_snapshot_locked(struct remesa_gem_scene_job *);
 struct sgx535_gma500_fixed_backend;struct remesa_stream_observation;

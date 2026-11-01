@@ -133,3 +133,12 @@ transaction in item4, including selected-view prewriter authentication and
 separate successful job retirement. The entry in item1 still needs capture
 serialization/provider dispatch. No new physical result or normal API/desktop
 qualification follows from this CPU-only transaction coverage.
+
+
+## Capture-to-preparation metadata connected
+
+The [capture packet bridge](general-scene-packet.md) now connects the existing
+frozen graph's dimensions/IDs/committed ranges to native GEM preparation. The
+remaining part of item1 is its live transport/admission and capture ownership
+through actual execution, followed by physical qualification. Source-only
+producer tests and kernel models do not provide that hardware evidence.
