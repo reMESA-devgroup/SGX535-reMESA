@@ -10,7 +10,8 @@ _Static_assert(sizeof(struct remesa_memory_request)==4152,"fixed native/i386 mem
 struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poison;};
 struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];
  uint64_t private_session,private_sequence,private_operation;
- uint32_t private_maximum,private_pds_id;bool private_attempted,private_active,private_poison,scene_attempted;};
+ uint32_t private_maximum,private_pds_id;bool private_attempted,private_active,private_poison,scene_attempted;
+ struct remesa_scene_probe_request scene_response;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -232,6 +233,7 @@ int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
  r.version=1;r.profile=profile;r.context=d->context;r.budget_ms=budget;before=r;
  d->scene_attempted=true;
  int e=ioctl(d->fd,DRM_IOCTL_REMESA_SCENE_PROBE,&r);
+ d->scene_response=r;
  *out=r; /* Preserve raw evidence, including unsuccessful/malformed responses. */
  if(e||memcmp(&r,&before,offsetof(struct remesa_scene_probe_request,operation))||
     r.reserved[0]||r.reserved[1]||!r.operation||r.cookie!=r.operation||
@@ -239,6 +241,34 @@ int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
     r.phase!=9||r.ledger!=7||r.error||r.retained||r.stages!=15)
   return private_lab_uncertain(d);
  return 0;
+}
+enum remesa_dispatch remesa_linux_memory_scene_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{
+ struct remesa_linux_memory *d=opaque;
+ if(!d||!submit||!out||(uintptr_t)submit%_Alignof(struct remesa_gpu_scene_submit)||
+    (uintptr_t)out%_Alignof(struct remesa_gpu_scene_receipt)||
+    !submit->packet||!submit->operation||submit->context!=d->context||
+    scene_host_overlap(out,sizeof(*out),d,sizeof(*d))||
+    scene_host_overlap(out,sizeof(*out),submit,sizeof(*submit))||
+    scene_host_overlap(out,sizeof(*out),submit->packet,sizeof(*submit->packet)))return REMESA_NOT_ISSUED;
+ if(d->private_poison)return REMESA_ISSUANCE_AMBIGUOUS;
+ if(d->scene_attempted)return REMESA_NOT_ISSUED;
+ unsigned profile=submit->packet->controls.width==1280?5:6;
+ struct remesa_scene_probe_request response;
+ int error=remesa_linux_memory_scene_lab_submit(d,submit->packet,profile,1000,&response);
+ if(error)return d->private_poison?REMESA_ISSUANCE_AMBIGUOUS:REMESA_NOT_ISSUED;
+ const struct remesa_gpu_scene_receipt r={.context=submit->context,.operation=submit->operation,
+  .retired=true,.published=true,.acknowledged=true};
+ *out=r;return REMESA_ISSUED;
+}
+int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *d,
+ struct remesa_scene_probe_request *out)
+{
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_scene_probe_request)||
+    scene_host_overlap(out,sizeof(*out),d,sizeof(*d)))return EINVAL;
+ if(!d->scene_attempted)return ENODATA;
+ *out=d->scene_response;return 0;
 }
 static int private_lab_output_valid(const struct remesa_private_session_lab_request *out)
 {

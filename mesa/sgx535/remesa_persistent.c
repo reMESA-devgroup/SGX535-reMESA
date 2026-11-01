@@ -16,6 +16,7 @@
 #include <string.h>
 #define PAGE_BYTES 4096u
 _Static_assert(REMESA_SCENE_USE_ENTRIES<=REMESA_SCENE_USE_MAX,"native USE reference capacity");
+_Static_assert(REMESA_PROVIDER_MAX_USES>=REMESA_PERSISTENT_BUFFERS,"provider must hold the complete captured allocation graph");
 _Static_assert(REMESA_LINKED_BODY_MAX_DRAWS==REMESA_TA_REFERENCE_MAX_DRAWS,"TA reference capacity");
 struct linked_program {
  struct remesa_shader_linkage linkage;
@@ -82,7 +83,8 @@ struct memory {
 struct submission {
  struct remesa_fence fence;struct memory *target;
  struct remesa_draw_packet packet;uint64_t operation;
- bool live,detached,released;int error;
+ bool live,detached,released,scene,scene_verified;int error;
+ struct remesa_scene_packet scene_packet;
 };
 struct shader_upload {
  struct shader_upload *next;
@@ -123,7 +125,7 @@ struct scene_capture {
  struct remesa_persistent_scene_footprint footprint;
  struct memory *held[REMESA_PERSISTENT_BUFFERS];
  struct memory *parents[4]; /* background,event,region,DPM; held above */
- unsigned count;uint64_t serial;bool live;
+ unsigned count;uint64_t serial;bool live,submitted;
 };
 struct persistent {
  struct remesa_persistent_config cfg;size_t allocated;
@@ -140,6 +142,7 @@ struct persistent {
  struct scene_capture scenes[REMESA_PROVIDER_MAX_JOBS];
  remesa_gpu_copy_fn native_copy;
  remesa_gpu_fill_fn native_fill;
+ remesa_gpu_scene_fn native_scene;
  int (*release_provider)(void *);void *release_priv;int release_error;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
@@ -621,6 +624,17 @@ static void unmap_bo(void *data,void *object,bool write)
 static enum remesa_dispatch dispatch(void *data,const struct remesa_job *job)
 {
  struct persistent *d=data;struct submission *j=d->dispatching;
+ if(j&&j->scene){
+  if(!d->native_scene||job->count!=j->scene_packet.binding_count)return REMESA_NOT_ISSUED;
+  j->operation=job->operation;
+  const struct remesa_gpu_scene_submit scene={job->context,job->operation,&j->scene_packet};
+  struct remesa_gpu_scene_receipt r={0};
+  enum remesa_dispatch result=d->native_scene(d->cfg.priv,&scene,&r);
+  if(result==REMESA_NOT_ISSUED)return result;
+  if(result!=REMESA_ISSUED||r.context!=job->context||r.operation!=job->operation||
+     !r.retired||!r.published||!r.acknowledged||r.failed)return REMESA_ISSUANCE_AMBIGUOUS;
+  j->scene_verified=true;return REMESA_ISSUED;
+ }
  if(!j || job->count!=1 || !token_equal(job->uses[0].token,j->target->token)) return REMESA_NOT_ISSUED;
  j->operation=job->operation;
  struct remesa_gpu_submit s={job->context,job->operation,j->target->va,j->target->bytes,j->target->handle,&j->packet};
@@ -631,6 +645,11 @@ static int release(void *data,const struct remesa_job *job)
  struct persistent *d=data;
  /* Visibility is separate from retirement, and the mapping remains pinned. */
  if(job->state!=REMESA_FENCE_PUBLISHED) return REMESA_BUSY;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++){
+  const struct submission *j=&d->jobs[i];
+  if(j->live&&j->scene&&j->operation==job->operation)
+   return j->scene_verified&&job->context==d->cfg.context?REMESA_OK:REMESA_BUSY;
+ }
  int e=d->cfg.ops->release(d->cfg.priv,job->context,job->operation);
  return e==EAGAIN?REMESA_RETRY:e?REMESA_BUSY:REMESA_OK;
 }
@@ -3481,6 +3500,7 @@ int remesa_persistent_scene_capture_release(struct remesa_device *device,
  if(!device||device->ops!=&device_ops||!device->priv)return EINVAL;
  struct persistent *d=device->priv;struct scene_capture *c=NULL;
  int e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(c->submitted)return EBUSY;
  struct memory *held[REMESA_PERSISTENT_BUFFERS];unsigned count=c->count;
  memcpy(held,c->held,count*sizeof(*held));
  for(unsigned i=0;i<count;i++)held[i]->scene_holds--;
@@ -3488,6 +3508,67 @@ int remesa_persistent_scene_capture_release(struct remesa_device *device,
  for(unsigned i=0;i<count;i++)drop_memory(d,held[i]);
  for(unsigned i=0;i<count;i++)if(held[i]->quarantined)return EOWNERDEAD;
  return d->failed?EOWNERDEAD:0;
+}
+
+int remesa_persistent_set_native_scene(struct remesa_device *device,remesa_gpu_scene_fn fn)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!fn)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(d->native_scene||d->registry.next_generation!=1||d->provider.next_operation!=1||
+    d->scene_serial||d->shader_generation||d->allocated||d->shaders)return EBUSY;
+ d->native_scene=fn;return 0;
+}
+static int scene_submit_fault(struct persistent *d,struct submission *j)
+{
+ (void)remesa_provider_fault(&d->provider,j->fence,d->cfg.context,j->operation);
+ /* A failed private-root operation poisons the entire address-space owner,
+  * including CPU-only graph storage and currently unused buffers. */
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)if(d->buffers[i].live)quarantine(d,&d->buffers[i]);
+ d->failed=true;j->error=EOWNERDEAD;return EOWNERDEAD;
+}
+int remesa_persistent_scene_capture_submit(struct remesa_device *device,
+ struct remesa_scene_capture token,void **out)
+{
+ if((uintptr_t)out%_Alignof(void *))return EINVAL;
+ int e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(!d->native_scene)return EOPNOTSUPP;
+ struct scene_capture *c=NULL;e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(c->submitted)return EBUSY;
+ struct submission *j=NULL;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++){
+  if(d->jobs[i].live&&!d->jobs[i].released)return EBUSY;
+  if(!j&&!d->jobs[i].live)j=&d->jobs[i];
+ }
+ if(!j)return EBUSY;
+ struct remesa_scene_packet packet;
+ e=remesa_persistent_scene_packet_snapshot(device,token,&packet);if(e)return e;
+ struct remesa_use uses[REMESA_PERSISTENT_BUFFERS]={0};
+ struct memory *bound[REMESA_PERSISTENT_BUFFERS]={0};
+ if(packet.binding_count!=c->footprint.allocation_count||packet.binding_count>REMESA_PROVIDER_MAX_USES)return EPROTO;
+ for(unsigned i=0;i<packet.binding_count;i++){
+  struct memory *b=NULL;const uint32_t id=packet.bindings[i].id;
+  for(unsigned k=0;k<c->count;k++)if(c->held[k]->handle==id){b=c->held[k];break;}
+  if(!b||b->token.generation!=c->footprint.allocations[i].generation)return ESTALE;
+  bound[i]=b;uses[i]=(struct remesa_use){b->token,0,b->allocated,packet.bindings[i].access};
+ }
+ *j=(struct submission){.live=true,.scene=true,.scene_packet=packet};c->submitted=true;
+ d->dispatching=j;int s=remesa_provider_submit(&d->provider,uses,packet.binding_count,&j->fence);d->dispatching=NULL;
+ if(s!=REMESA_OK&&s!=REMESA_AMBIGUOUS){c->submitted=false;memset(j,0,sizeof(*j));return status(s);}
+ *out=j;
+ if(s==REMESA_AMBIGUOUS||!j->scene_verified)return scene_submit_fault(d,j);
+ if(remesa_provider_complete(&d->provider,j->fence,d->cfg.context,j->operation,1)!=REMESA_OK||
+    remesa_provider_publish(&d->provider,j->fence,d->cfg.context,j->operation)!=REMESA_OK||
+    remesa_provider_release(&d->provider,j->fence)!=REMESA_OK)return scene_submit_fault(d,j);
+ for(unsigned i=0;i<packet.binding_count;i++)if(uses[i].access&REMESA_ACCESS_WRITE)
+  bound[i]->readable=true;
+ j->released=true;c->submitted=false;
+ e=remesa_persistent_scene_capture_release(device,token);
+ if(e){d->failed=true;j->error=EOWNERDEAD;return EOWNERDEAD;}
+ return 0;
 }
 
 int remesa_persistent_set_native_copy(struct remesa_device *device,remesa_gpu_copy_fn fn)

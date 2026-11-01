@@ -8,7 +8,9 @@
 #ifndef REMESA_PROVIDER_H
 #define REMESA_PROVIDER_H
 #include "remesa/registry.h"
-#define REMESA_PROVIDER_MAX_USES 16
+/* Host job storage bound, matching the retained32-slot allocation graph.
+ * This grants no kernel/native admission or new graphics capability. */
+#define REMESA_PROVIDER_MAX_USES 32
 #define REMESA_PROVIDER_MAX_JOBS 8
 enum remesa_access { REMESA_ACCESS_READ = 1, REMESA_ACCESS_WRITE = 2 };
 enum remesa_dispatch { REMESA_NOT_ISSUED, REMESA_ISSUED, REMESA_ISSUANCE_AMBIGUOUS };

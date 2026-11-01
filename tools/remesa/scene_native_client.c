@@ -84,7 +84,7 @@ int main(int argc,char **argv)
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};
  cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};
  cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
- OK(remesa_persistent_open(&device,&cfg));void *c[11]={0},*bg=NULL,*aux=NULL,*region=NULL,*table=NULL,*parameter=NULL,*dpm=NULL,*event=NULL;
+ OK(remesa_persistent_open(&device,&cfg));OK(remesa_persistent_set_native_scene(&device,remesa_linux_memory_scene_lab_dispatch));void *c[11]={0},*bg=NULL,*aux=NULL,*region=NULL,*table=NULL,*parameter=NULL,*dpm=NULL,*event=NULL;
  struct remesa_shader_program vs=vertex(2),fs=fragment(1);struct remesa_shader_linkage link;OK(remesa_shader_linkage_prepare(&vs,&fs,&link));const uint32_t banks[2]={4,3};
  const float vertices[3][12]={{width*.25f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.75f,height*.25f,.125f,1,0,0,1,0,0,0,1,0},{width*.25f,height*.75f,.125f,1,0,0,1,0,0,0,1,0}};
  const struct remesa_linked_geometry_input input={.vertices=vertices,.vertex_bytes=sizeof vertices,.vertex_count=3};
@@ -125,9 +125,11 @@ int main(int argc,char **argv)
  assert(count==4);output(dir,"GUARD_IDS.bin",guard_ids,sizeof guard_ids);output(dir,"GUARD_VA.bin",guard_va,sizeof guard_va);
  struct remesa_memory_info info;OK(remesa_linux_memory_info(memory,0,&info));assert(info.objects==23&&info.pinned_objects==23&&!info.leases&&!info.held_jobs&&!info.quarantined);output(dir,"INFO-BEFORE.bin",&info,sizeof info);
  struct remesa_scene_probe_request request={.version=1,.profile=profile,.context=packet.owner,.budget_ms=1000},response={0};for(unsigned i=0;i<17;i++)request.ids[i]=packet.bindings[i].id;output(dir,"REQUEST.bin",&request,sizeof request);
- times[1]=ns();int error=remesa_linux_memory_scene_lab_submit(memory,&packet,profile,1000,&response);times[2]=ns();output(dir,"RESPONSE.bin",&response,sizeof response);output(dir,"TIMES.bin",times,sizeof times);
+ times[1]=ns();void *fence=NULL;int error=remesa_persistent_scene_capture_submit(&device,capture,&fence);times[2]=ns();int response_error=remesa_linux_memory_scene_lab_response(memory,&response);output(dir,"RESPONSE.bin",&response,sizeof response);output(dir,"TIMES.bin",times,sizeof times);
+ if(response_error){fprintf(stderr,"no entered kernel response%d; no teardown/retry\n",response_error);return 1;}
  if(error){fprintf(stderr,"entered scene result%d; no teardown/retry\n",error);return 1;}
- OK(remesa_persistent_scene_capture_release(&device,capture));
+ assert(fence);OK(device.ops->wait(device.priv,fence,0,true));device.ops->destroy_fence(device.priv,fence);
+ assert(remesa_persistent_scene_capture_release(&device,capture)==ESTALE);
  /* No GEM teardown: the supervising parent still owns the borrowed fd and
   * reads the real retired allocations, then explicitly releases all of them. */
  return 0;

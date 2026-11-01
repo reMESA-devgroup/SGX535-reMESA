@@ -27,6 +27,22 @@ struct remesa_gpu_receipt {
  uint64_t context,operation;
  bool retired,published,failed; /* publication is independent of retirement */
 };
+/* Synchronous native scene seam, not an ioctl ABI. The provider must consume
+ * complete native admission, isolation, initialization, completion, CPU
+ * publication and kernel acknowledgement before returning ISSUED. Receipts
+ * identify the supplied host operation in this context. NOT_ISSUED guarantees
+ * no hardware access; any uncertainty is AMBIGUOUS. No reentry/async success.
+ * The frozen packet stays owned until the complete callback returns. */
+struct remesa_gpu_scene_submit {
+ uint64_t context,operation;
+ const struct remesa_scene_packet *packet;
+};
+struct remesa_gpu_scene_receipt {
+ uint64_t context,operation;
+ bool retired,published,acknowledged,failed;
+};
+typedef enum remesa_dispatch (*remesa_gpu_scene_fn)(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 struct remesa_persistent_ops {
  int (*create)(void *,size_t,uint32_t *);
  int (*pin)(void *,uint32_t);
@@ -732,8 +748,9 @@ int remesa_persistent_scene_footprint(const struct remesa_device *,void *backgro
  * backend admission gates retain their existing errors. Up to eight
  * captures may coexist, including shared graphs. Release cancels an UNISSUED
  * capture only; it is never GPU completion/retirement or uncertain-job teardown.
- * A future submission API must transfer these holds into its authenticated
- * native lifecycle; it cannot call release to acknowledge GPU execution.
+ * scene_capture_submit transfers these holds into an authenticated native
+ * lifecycle and consumes the token only after acknowledged publication.
+ * Calling release itself never acknowledges GPU execution.
  * If cancellation reaches disposal and disposal fails, the capture token is
  * consumed but uncertain backing stays quarantined; retrying returns ESTALE.
  */
@@ -812,6 +829,24 @@ int remesa_persistent_scene_packet_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_scene_packet *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
+/* Install only on a fresh endpoint, before any allocation/job/capture/shader.
+ * Does not enable ordinary draw or alter resource-only/qualification flags. */
+int remesa_persistent_set_native_scene(struct remesa_device *,remesa_gpu_scene_fn);
+/* Submit the actual frozen graph through the existing provider registry and
+ * fence lifecycle, never the legacy single-target dispatch. A successful
+ * synchronous callback is independently checked for exact context/operation,
+ * retirement and publication. Success consumes the capture ONLY after all
+ * provider holds are acknowledged; target owners remain usable and the
+ * returned device fence is already published. Wait/destroy use device.ops.
+ * NOT_ISSUED leaves capture untouched and output NULL. An uncertain attempt
+ * returns EOWNERDEAD with a non-NULL failed fence, retaining the capture and
+ * quarantining the whole endpoint; cancellation/teardown must not free it.
+ * No callback installed means EOPNOTSUPP, not implicit legacy dispatch.
+ * Native authentication remains the provider's responsibility. External lock.
+ */
+int remesa_persistent_scene_capture_submit(struct remesa_device *,
+ struct remesa_scene_capture,void **fence);
+
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
  * immutable code and raw-geometry GPU owners. Restricts POSITION4/input0,
  * stride16, bias0; bounds come from the original validated draw snapshot.

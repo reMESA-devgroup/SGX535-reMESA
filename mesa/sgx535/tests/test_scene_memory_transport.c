@@ -91,6 +91,23 @@ int main(void)
  assert(!scenecalls);void *cpu=NULL;assert(!ops->cpu_map(d,32,false,&cpu)&&cpu);
  assert(remesa_linux_memory_scene_lab_submit(d,&p,5,1000,&out)==EBUSY&&!scenecalls);
  assert(!ops->cpu_unmap(d,32,false));assert(!remesa_linux_memory_scene_lab_submit(d,&p,5,1000,&out));cleanup(d);
+ for(fault=0;fault<=22;fault++){
+  d=setup();p=packet();struct remesa_gpu_scene_submit job={77,9,&p};
+  struct remesa_gpu_scene_receipt receipt={0},saved_receipt=receipt;
+  unsigned before_mem=memcalls;
+  assert(remesa_linux_memory_scene_lab_response(d,&out)==ENODATA);
+  job.context=78;assert(remesa_linux_memory_scene_lab_dispatch(d,&job,&receipt)==REMESA_NOT_ISSUED&&!scenecalls);job.context=77;
+  enum remesa_dispatch result=remesa_linux_memory_scene_lab_dispatch(d,&job,&receipt);
+  assert(result==(fault?REMESA_ISSUANCE_AMBIGUOUS:REMESA_ISSUED)&&scenecalls==1&&memcalls==before_mem);
+  assert(!remesa_linux_memory_scene_lab_response(d,&out)&&!memcmp(&out,&raw_response,sizeof out));
+  assert(remesa_linux_memory_scene_lab_response(d,(void *)d)==EINVAL);
+  if(fault){assert(!memcmp(&receipt,&saved_receipt,sizeof receipt));remesa_linux_memory_forget(d);}
+  else{
+   assert(receipt.context==77&&receipt.operation==9&&receipt.retired&&receipt.published&&receipt.acknowledged&&!receipt.failed);
+   assert(remesa_linux_memory_scene_lab_dispatch(d,&job,&receipt)==REMESA_NOT_ISSUED&&scenecalls==1);cleanup(d);
+  }
+ }
+ fault=0;
  const struct remesa_memory_recorder recorder={record_memory,NULL};d=NULL;
  assert(!remesa_linux_memory_begin_recorded(99,&d,&recorder));unsigned before_calls=scenecalls;
  assert(remesa_linux_memory_scene_lab_submit(d,&p,5,1000,&out)==EOPNOTSUPP&&scenecalls==before_calls);

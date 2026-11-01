@@ -77,6 +77,18 @@ int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *,
 int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *,
  const struct remesa_scene_packet *,uint32_t profile,uint32_t budget_ms,
  struct remesa_scene_probe_request *);
+/* Adapter for persistent_set_native_scene, still restricted to closed LAB5/6.
+ * The authenticated kernel receipt is translated into the supplied host job
+ * identity only after exact native completion/publication/retirement checks.
+ * Local/pre-ioctl refusal is NOT_ISSUED; entered uncertainty is AMBIGUOUS.
+ * No caller flags or shader/capability admission are bypassed. */
+enum remesa_dispatch remesa_linux_memory_scene_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Diagnostic snapshot of the already returned raw144-byte kernel response;
+ * no ioctl/hash/readback. Requires an entered attempt and disjoint output. */
+int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *,
+ struct remesa_scene_probe_request *);
+
 /* Synchronous typed native copy on this exact owned fd/context. Caller starts
  * version/context/response fields at zero; local owned IDs/mappings and leases
  * are checked before one ioctl. No INFO, hashes, CPU maps/readbacks or retry.
