@@ -1,7 +1,8 @@
 # Deferred CPU invalidation for normal native 2D
 
-Status: optional candidate; model-tested, not physically qualified. No FPS or
-desktop acceleration result follows from this change.
+Status: optional, default-off candidate; model tests and bounded physical
+A/B/A correctness pass. Sustained end-to-end improvement and stock return
+remain unverified. No desktop FPS result follows from this change.
 
 The normal 2D path flushes every bound source/destination before issuing DMA.
 It also waits for completion, performs device visibility maintenance and
