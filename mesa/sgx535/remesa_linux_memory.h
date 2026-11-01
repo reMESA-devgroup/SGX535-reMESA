@@ -30,6 +30,23 @@ int remesa_linux_memory_info(struct remesa_linux_memory *,uint32_t,struct remesa
 int remesa_linux_memory_validate_backing(struct remesa_linux_memory *,uint32_t,
                                         uint64_t,size_t);
 uint64_t remesa_linux_memory_context(const struct remesa_linux_memory *);
+/* Read-only host ownership inventory for separate LAB collectors. Includes
+ * CPU-only owners omitted from scene GPU bindings. No ioctl, lease, allocation
+ * or authority change; mappings/pins must still be checked by kernel INFO.
+ * Poisoned entries remain visible, including an uncertain CREATE with no ID.
+ * Output is unchanged on error and cannot alias owner metadata or CPU leases.
+ * External serialization is required; this is not a kernel/PRIME handle ABI. */
+enum remesa_linux_memory_inventory_flags {
+ REMESA_MEMORY_INVENTORY_LIVE=1u,REMESA_MEMORY_INVENTORY_LEASE=2u,
+ REMESA_MEMORY_INVENTORY_WRITE=4u,REMESA_MEMORY_INVENTORY_POISON=8u
+};
+struct remesa_linux_memory_inventory {
+ uint64_t context;
+ uint32_t version,count;
+ struct {uint64_t gpu_va,bytes;uint32_t id,flags;} entries[32];
+};
+int remesa_linux_memory_inventory_snapshot(const struct remesa_linux_memory *,
+ struct remesa_linux_memory_inventory *);
 /* Upload caller-owned complete pages without reading the allocation first.
  * No allocation, READ or SYNC; one write lease, bounded WRITE chunks, unlease.
  * Caller owns publication: use sync_for_device when required, or the qualified

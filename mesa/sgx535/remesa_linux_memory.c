@@ -126,6 +126,33 @@ int remesa_linux_memory_detach(struct remesa_linux_memory *d)
 uint64_t remesa_linux_memory_context(const struct remesa_linux_memory *d)
 {return d?d->context:0;}
 
+int remesa_linux_memory_inventory_snapshot(const struct remesa_linux_memory *d,
+ struct remesa_linux_memory_inventory *out)
+{
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_linux_memory_inventory)||
+    sizeof(*out)>UINTPTR_MAX-(uintptr_t)out)return EINVAL;
+ uintptr_t at=(uintptr_t)out,owner=(uintptr_t)d;
+ if(sizeof(*d)>UINTPTR_MAX-owner||
+    (at<owner+sizeof(*d)&&owner<at+sizeof(*out)))return EINVAL;
+ struct remesa_linux_memory_inventory snapshot={.context=d->context,.version=1};
+ for(unsigned i=0;i<32;i++){
+  const struct held *b=&d->objects[i];
+  if(b->cpu){
+   uintptr_t base=(uintptr_t)b->cpu;
+   if(b->bytes>UINTPTR_MAX-base||(at<base+b->bytes&&base<at+sizeof(*out)))return EINVAL;
+  }
+  if(!b->id&&!b->poison)continue;
+  unsigned n=snapshot.count++;
+  snapshot.entries[n].id=b->id;snapshot.entries[n].gpu_va=b->gpu_va;
+  snapshot.entries[n].bytes=b->bytes;
+  snapshot.entries[n].flags=(b->id?REMESA_MEMORY_INVENTORY_LIVE:0)|
+   (b->cpu?REMESA_MEMORY_INVENTORY_LEASE:0)|
+   (b->cpu&&b->write?REMESA_MEMORY_INVENTORY_WRITE:0)|
+   (b->poison?REMESA_MEMORY_INVENTORY_POISON:0);
+ }
+ *out=snapshot;return 0;
+}
+
 int remesa_linux_memory_submit_retained(struct remesa_linux_memory *d,
  struct remesa_retained_request *r,bool *attempted,remesa_retained_recorder record,void *priv)
 {
