@@ -41,3 +41,41 @@ twelve deep refusals, parser tests through sixteen draws, and the closed
 controller's 46 cases in native/UBSan/i486 builds. Hardware callbacks in these
 models do not execute a GPU. `PHYSICAL_INPUTS_INITIALIZED.json` pins only future
 LAB inputs; it is not physical rendering approval.
+
+## First initialized physical result
+
+The initialized 1280x800 profile was submitted once on SGX535 rev121 with the
+actual native backend and complete retirement/source/root closure. All 128000
+white triangle pixels and 896000 zero background pixels match the analytical
+oracle fixed before launch. COLOR has zero mismatches across the full plane.
+The Z plane remains zero: all 1024000 defined Z24 values fail the depth oracle.
+This is selected-profile COLOR success, not complete COLOR/Z rendering approval,
+API conformance, glxgears FPS or sustained throughput.
+
+The initialization predecessor therefore fixes the previous empty COLOR output.
+Comparing actual prepared raster words to the preserved qualified profile
+isolates register 0x480: current 0x00054f00 versus 0x00454fd0. The other difference
+is the expected relocated event address. The missing compound contribution is
+the already implemented caller finalizer 0x004000d0; its physical zero-to-defined
+Z effect is documented in `phase9/DEPTH-LIGHTING-PHYSICAL-20261023.md`.
+`remesa_depth_surface_finalize()` and `remesa_raster_control_encode()` already
+support it. The general immutable controls currently select no finalization.
+The next change must connect the explicit caller predicate to those existing
+encoders and the native consumer, preserving the old no-finalize profiles.
+No new ISP bit meaning, depth shader or geometry encoder needs to be invented.
+
+Evidence: `PHYSICAL_RESULT.json`, `VERIFY_PHYSICAL.py`, `PIXEL_ORACLE.json` and
+`PRELAUNCH_PIXEL_ORACLE.json` in the evidence directory above. Raw request,
+response, trace, inputs and readbacks remain under `hardware/physical`.
+The pure comparison tool is `tools/remesa/verify_initialized_triangle.py`;
+it never produces or presents a software frame. A preserved real empty frame
+was its negative control before the initialized launch. Foreground Z24 permits
+one quantization unit; undefined X8 is ignored. The 1280x800 fixture has no
+pixel-centre edge ties.
+
+All twelve READ inputs, four guards and twenty-one mapping INFO records passed.
+The seven admission controls returned to N, all memory cleanup completed, and
+the machine returned to its verified stock boot with original GRUB/default.
+Observed TA/raster host intervals were 1.770/14.969 ms, CPU publication flush
+59.850 ms and complete cold execute ioctl 218.246 ms. These are host intervals,
+not isolated GPU counters or valid-frame FPS. Diagnostics remain outside FAST.
