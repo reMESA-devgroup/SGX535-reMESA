@@ -2776,6 +2776,7 @@ fail:
 int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *device,
  void *object,struct remesa_persistent_linked_event_auxiliary_backing *out)
 {
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_auxiliary_backing))return EINVAL;
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  struct persistent *d=device->priv;struct memory *b=object;
  e=linked_live(d,b,true);if(e)return e;
@@ -2788,6 +2789,17 @@ int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device
   e=zclear_entry(b,value.program_offset[i],value.program_bytes[i],b->event_pixel_bank,
    REMESA_USE_PIXEL,&value.entries[i],&value.use_lower19[i]);if(e)return e;
  }
+ /* Resolve all three event DATA references from the same live owned closure.
+  * Bound the target source by committed DATA, never spare page capacity.
+  * No caller-provided numeric snapshot is trusted as an ownership token. */
+ const struct remesa_pds_psb_event_data_request request={
+  .source_allocation_address=value.targets.gpu_va,
+  .source_allocation_bytes=value.targets.used_bytes,
+  .source_offset=value.targets.color_data_offset,
+  .end_use_lower19=value.use_lower19[1],.transfer_use_lower19=value.use_lower19[0]};
+ e=remesa_pds_structure_encode_psb_event_data(&request,value.event_data,
+  value.event_data_known_mask,sizeof(value.event_data),&value.event_data_bytes);if(e)return e;
+ if(value.event_data_bytes!=sizeof(value.event_data))return EPROTO;
  *out=value;return 0;
 }
 static int dpm_storage_metadata(struct persistent *d,struct memory *b,bool owner,

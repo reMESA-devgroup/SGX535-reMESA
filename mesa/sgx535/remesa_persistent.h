@@ -578,6 +578,14 @@ struct remesa_persistent_linked_event_auxiliary_backing {
  size_t allocation_bytes,used_bytes,program_offset[2],program_bytes[2];
  struct remesa_use_entry_plan entries[2];
  struct remesa_persistent_linked_targets_backing targets;
+ /* CPU serialization, NOT bytes appended to the auxiliary USE allocation.
+  * DATA0/4 derive from end/transfer entry plans; DATA2 points to the live
+  * target owner's committed16-byte COLOR-state region. Unwritten original
+  * cells6/7/15 remain policy-zero/mask0. No event CODE or PDS BO exists here.
+  * Do not confuse event_data_bytes64 with auxiliary used_bytes40/capacity.
+  */
+ size_t event_data_bytes;
+ uint8_t event_data[64],event_data_known_mask[64];
 };
 int remesa_persistent_linked_event_auxiliary_snapshot(const struct remesa_device *,
  void *bo,struct remesa_persistent_linked_event_auxiliary_backing *);

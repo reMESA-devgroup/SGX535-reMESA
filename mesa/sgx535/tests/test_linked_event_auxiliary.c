@@ -27,9 +27,27 @@ int main(void)
   uint8_t data[64],known[64];size_t n=0;
   const struct remesa_pds_psb_event_data_request r={b.targets.gpu_va,b.targets.allocation_bytes,0,b.use_lower19[1],b.use_lower19[0]};
   CHECK(!remesa_pds_structure_encode_psb_event_data(&r,data,known,64,&n)&&n==64);
+  CHECK(b.event_data_bytes==64&&!memcmp(data,b.event_data,64)&&!memcmp(known,b.event_data_known_mask,64));
+  /* The emitted target pointer names the live committed COLOR-state source,
+   * not the COLOR pixel allocation, Z, or the auxiliary's own USE bytes. */
+  CHECK(shader_pds_le32(b.event_data+8)==b.targets.gpu_va+b.targets.color_data_offset);
+  CHECK(shader_pds_le32(b.event_data+8)!=b.targets.color.gpu_va&&shader_pds_le32(b.event_data+8)!=b.targets.depth.gpu_va);
+  for(unsigned word=0;word<16;word++)for(unsigned byte=0;byte<4;byte++){
+   bool unwritten=word==6||word==7||word==15;
+   CHECK(b.event_data_known_mask[word*4+byte]==(unwritten?0:255));
+   if(unwritten)CHECK(!b.event_data[word*4+byte]);
+  }
   CHECK(shader_pds_le32(data)==b.use_lower19[1]&&shader_pds_le32(data+8)==b.targets.gpu_va&&shader_pds_le32(data+16)==(0x200000|b.use_lower19[0]));
-  maps=f.cpu_maps;for(unsigned j=0;j<100;j++)CHECK(!remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,&b));
-  CHECK(f.cpu_maps==maps);void *cpu=NULL;
+  struct remesa_persistent_linked_event_auxiliary_backing saved=b;
+  unsigned creates=f.creates,gpu_maps=f.gpu_maps;
+  maps=f.cpu_maps;for(unsigned j=0;j<100;j++){
+   CHECK(!remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,&b)&&!memcmp(&b,&saved,sizeof(b)));
+  }
+  CHECK(f.cpu_maps==maps&&f.creates==creates&&f.gpu_maps==gpu_maps);void *cpu=NULL;
+  CHECK(remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,(void *)((uint8_t *)&b+1))==EINVAL&&!memcmp(&b,&saved,sizeof(b)));
+  CHECK(!d.ops->map(d.priv,aux,false,&cpu));
+  CHECK(remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,&b)==EBUSY&&!memcmp(&b,&saved,sizeof(b)));
+  d.ops->unmap(d.priv,aux,false);
   CHECK(d.ops->map(d.priv,aux,true,&cpu)==ENOTSUP&&!cpu);
   CHECK(d.ops->map(d.priv,c[8],false,&cpu)==EAGAIN&&!cpu&&get(&f,9)->bytes[0]==0xa5&&get(&f,10)->bytes[0]==0xa5);
   CHECK(remesa_persistent_linked_event_auxiliary_prepare(&d,c[10],3,&aux)==EBUSY);
@@ -37,6 +55,7 @@ int main(void)
   CHECK(remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,aux)==EINVAL);
   CHECK(!remesa_persistent_linked_event_auxiliary_prepare(&d,c[10],3,&second));
   bg_drop_children(&d,c);CHECK(!f.destroys&&!remesa_persistent_linked_event_auxiliary_snapshot(&d,aux,&b));
+  CHECK(!memcmp(&b,&saved,sizeof(b))); /* retained DATA pointers after public owners drop */
   CHECK(!d.ops->map(d.priv,aux,false,&cpu));d.ops->destroy_bo(d.priv,aux);
   CHECK(!f.destroys&&remesa_persistent_close(&d)==EBUSY);d.ops->unmap(d.priv,aux,false);
   CHECK(f.destroys==1&&!remesa_persistent_linked_event_auxiliary_snapshot(&d,second,&b));
