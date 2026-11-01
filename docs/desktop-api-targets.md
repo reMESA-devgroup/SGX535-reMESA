@@ -118,3 +118,10 @@ windows to the retained COLOR target; see
 constructor fields and ownership are checked without reading pixels. Shader
 bodies, unknown fields and texture/pitch runtime semantics still require
 qualification, along with event closure and ordered general execution.
+
+The fixed event now resolves target DATA16 and validates its PIXEL USE16/8
+auxiliaries; the complete selected background USE8 is checked as well. See
+[native-scene-event-closure.md](native-scene-event-closure.md). This reuses the
+preserved DATA64/CODE84 construction and historical CODE oracle. Remaining
+shader/ISP/unknown-field contracts and the ordered general executor still
+precede physical qualification and normal OpenGL integration.

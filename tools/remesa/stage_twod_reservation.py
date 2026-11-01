@@ -111,7 +111,11 @@ def scene_action_components(root, native):
     fragment = replace_once(fragment, '"ta_references.h"', '"remesa_ta_references.h"')
     background = (root / 'include/remesa/background_fetch.h').read_text()
     background = replace_once(background, '"fragment_fetch.h"', '"remesa_fragment_fetch.h"')
-    return {'remesa_background_fetch.h': background.encode(), 'remesa_fragment_fetch.h': fragment.encode(), 'remesa_vertex_fetch.h': vertex.encode(), 'remesa_state_upload.h': upload.encode(), 'remesa_ta_references.h': references.encode(), 'remesa_scene_control_words.h': controls.encode(),
+    auxiliary = (root / 'include/remesa/scene_auxiliary.h').read_text()
+    auxiliary = replace_once(auxiliary, '"ta_references.h"', '"remesa_ta_references.h"')
+    event = (root / 'include/remesa/event_fetch.h').read_text()
+    event = replace_once(event, '"ta_references.h"', '"remesa_ta_references.h"')
+    return {'remesa_scene_auxiliary.h': auxiliary.encode(), 'remesa_event_fetch.h': event.encode(), 'remesa_background_fetch.h': background.encode(), 'remesa_fragment_fetch.h': fragment.encode(), 'remesa_vertex_fetch.h': vertex.encode(), 'remesa_state_upload.h': upload.encode(), 'remesa_ta_references.h': references.encode(), 'remesa_scene_control_words.h': controls.encode(),
             'remesa_scene_actions.c': source.encode(), 'remesa_scene_actions.h': header.encode(),
             'remesa_scene_layout.h': (root / 'include/remesa/scene_layout.h').read_bytes(),
             'remesa_scene_dpm.h': (root / 'include/remesa/scene_dpm.h').read_bytes()}
@@ -804,7 +808,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_private_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_gem_scene_controls.inc"\n#include "remesa_gem_scene_use.inc"\n#include "remesa_gem_scene_ta.inc"\n#include "remesa_gem_scene_states.inc"\n#include "remesa_gem_scene_vertices.inc"\n#include "remesa_gem_scene_fragments.inc"\n#include "remesa_gem_scene_background.inc"\n#include "remesa_gem_scene_event.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
@@ -926,6 +930,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_gem_scene_vertices.h', 'remesa_gem_scene_vertices.inc',
                      'remesa_gem_scene_fragments.h', 'remesa_gem_scene_fragments.inc',
                      'remesa_gem_scene_background.h', 'remesa_gem_scene_background.inc',
+                     'remesa_gem_scene_event.h', 'remesa_gem_scene_event.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',

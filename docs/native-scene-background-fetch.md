@@ -42,8 +42,10 @@ No allocation, new flush/wait, pixel readback/hash, new MMIO, source admission
 or GPU operation is introduced. The existing canonical eleven-role executor,
 producer implementations, gates, protected evidence and normal profiles remain
 unchanged. The new checker validates selected known construction and ownership;
-USE shader body, unknown fields, background texture runtime semantics, event
-closure and the ordered general executor remain separate requirements.
+The complete selected background USE8 constructor is now also checked by
+[the event-closure increment](native-scene-event-closure.md). General USE shader
+bodies, unknown fields, background texture runtime semantics and the ordered
+general executor remain separate requirements.
 
 Evidence root:
 `/home/gama/sgx535-offline/native-scene-background-fetch-20261101/v1`.

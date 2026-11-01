@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After fragment checker. */
 #include "remesa_gem_scene_background.h"
 #include "remesa_background_fetch.h"
+#include "remesa_scene_auxiliary.h"
 /* Do not retain this transactional result across prerequisite checks. */
 static __attribute__((__noinline__)) int scene_background_build_checked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_controls *controls,
@@ -9,7 +10,7 @@ static __attribute__((__noinline__)) int scene_background_build_checked(struct r
 {
  const struct remesa_gem_scene_control_command *c=&controls->command;
  struct remesa_gem_scene_background value={0};struct remesa_background_binding binding;
- struct remesa_background_task task;struct retained_job *j;unsigned b,color,p,q,e;u32 po,qo;int error;
+ struct remesa_background_task task;struct retained_job *j;unsigned b,color,p,q,e,u;u32 po,qo;int error;
  for(b=0;b<count&&views[b].binding.id!=c->background_id;b++);
  for(color=0;color<count&&views[color].binding.id!=c->color_id;color++);
  if(b==count||color==count)return -ENOENT;
@@ -29,6 +30,9 @@ static __attribute__((__noinline__)) int scene_background_build_checked(struct r
   if(entry.data_master!=REMESA_USE_PIXEL||entry.program_bytes!=8)continue;
   if((entry.id==views[p].binding.id&&vertex_section_overlap(entry.byte_offset,8,po,64))||
      (entry.id==views[q].binding.id&&vertex_section_overlap(entry.byte_offset,8,qo,4)))return -EINVAL;
+  for(u=0;u<count&&views[u].binding.id!=entry.id;u++);
+  if(u==count||!views[u].cpu)return -EACCES;
+  error=remesa_scene_background_aux((const u8 *)views[u].cpu+entry.byte_offset,8);if(error)return -error;
   value.use_id=entry.id;value.use_offset=entry.byte_offset;break;
  }
  if(!value.use_id)return -ENOENT;
