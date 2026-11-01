@@ -70,3 +70,9 @@ Cold DPM initialization now has a kernel zero-origin claim and selected views
 that avoid mapping the two32MiB pools; see [cold-dpm-origin.md](cold-dpm-origin.md).
 This preserves required publication and does not establish native scene execution
 or physical qualification. The trusted general-scene consumer remains next.
+
+Kernel-bound DPM/TA/raster action construction now derives the original groups
+from actual retained IDs, and Mesa can retain undefined REGION storage without
+the legacy CPU initialization; see [native-scene-actions.md](native-scene-actions.md).
+Complete image/control validation and ordered native execution are still
+required before this general scene path can be physically qualified.

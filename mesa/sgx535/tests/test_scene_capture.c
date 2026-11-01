@@ -24,14 +24,21 @@ int main(void)
 {
  CHECK(!ta_persistent_fixture());CHECK(!ta_linkage_fixture());
  const unsigned sizes[][2]={{1280,800},{640,640},{641,479}};
- for(unsigned v=0;v<6;v++){
-  bool event_profile=v>=3;unsigned size=v%3;
+ for(unsigned v=0;v<9;v++){
+  bool event_profile=v>=3,raw_region=v>=6;unsigned size=v%3;
   struct fixture f={.allow_gpu_map=true,.allow_sync=true};struct remesa_device d={0};
   void *c[11]={0},*p[4]={0},*table=NULL,*parameter=NULL,*event=NULL,*selected=NULL;
   bg_setup(&f,&d,4100+v,sizes[size][0],sizes[size][1],c);
   CHECK(!remesa_persistent_linked_background_prepare(&d,c[10],3,&p[0]));
   CHECK(!remesa_persistent_linked_event_auxiliary_prepare(&d,c[10],3,&p[1]));
-  CHECK(!remesa_persistent_linked_region_prepare(&d,c[10],&p[2]));
+  if(raw_region){
+   unsigned maps=f.cpu_maps,reads=f.reads,writes=f.writes;
+   CHECK(!remesa_persistent_linked_region_allocate(&d,c[10],&p[2]));
+   CHECK(f.cpu_maps==maps&&f.reads==reads&&f.writes==writes);
+   struct remesa_persistent_linked_region_backing rb;void *cpu=NULL;
+   CHECK(!remesa_persistent_linked_region_snapshot(&d,p[2],&rb));
+   CHECK(get(&f,rb.region.handle)->bytes[0]==0xa5&&d.ops->map(d.priv,p[2],false,&cpu)==EAGAIN&&!cpu);
+  }else CHECK(!remesa_persistent_linked_region_prepare(&d,c[10],&p[2]));
   CHECK(!remesa_persistent_allocate_placed(&d,0x2000000,REMESA_VA_SURFACE,&table));
   CHECK(!remesa_persistent_allocate_placed(&d,0x2000000,REMESA_VA_RASTER,&parameter));
   CHECK(!remesa_persistent_linked_dpm_prepare(&d,table,parameter,&p[3]));
@@ -53,10 +60,13 @@ int main(void)
   struct remesa_persistent_scene_controls control_reference={0},control={0};
   struct remesa_scene_capture tokens[REMESA_PROVIDER_MAX_JOBS],bad,saved;
   memset(&bad,0xa5,sizeof bad);saved=bad;
-  void *lease=NULL;CHECK(!d.ops->map(d.priv,p[2],false,&lease));
+  /* Raw REGION remains unreadable until GPU initialization. Exercise the
+   * active-lease refusal through the already initialized background instead. */
+  void *lease=NULL,*lease_object=raw_region?p[0]:p[2];
+  CHECK(!d.ops->map(d.priv,lease_object,false,&lease));
   CHECK(remesa_persistent_linked_targets_color_initialize(&d,c[10],0)==EBUSY);
   CHECK(remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&bad)==EBUSY&&!memcmp(&bad,&saved,sizeof bad));
-  d.ops->unmap(d.priv,p[2],false);
+  d.ops->unmap(d.priv,lease_object,false);
   CHECK(remesa_persistent_scene_capture(&d,p[0],p[1],p[2],p[3],(void *)((unsigned char *)&bad+1))==EINVAL);
   CHECK(remesa_persistent_scene_capture(&d,p[0],p[1],p[2],p[3],p[0])==EINVAL);
   CHECK(remesa_persistent_scene_capture(&d,p[0],p[0],p[2],p[3],&bad)==EINVAL&&!memcmp(&bad,&saved,sizeof bad));
@@ -152,5 +162,5 @@ int main(void)
   CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!f.forbidden);
   unchanged(&d,tokens[0],ESTALE);CHECK(!remesa_persistent_close(&d));
  }
- puts("PASS unissued scene captures: three storage dimensions with auxiliary-only and fixed event PDS, shared frozen closures, full frontend release, eight-slot limit, stale/foreign/alias rejection, bound raster208/TA56/region control snapshots with retained clear depth, zero provider I/O and complete cancellation cleanup; GPU0/API0");return 0;
+ puts("PASS unissued scene captures: three dimensions with auxiliary-only, fixed event PDS and raw undefined region, shared frozen closures, full frontend release, eight-slot limit, stale/foreign/alias rejection, bound raster208/TA56/region control snapshots with retained clear depth, zero provider I/O and complete cancellation cleanup; GPU0/API0");return 0;
 }

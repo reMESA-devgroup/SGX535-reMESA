@@ -3,7 +3,7 @@
 """Retained core + private loan and real MMU auditor models; no device access."""
 import argparse,hashlib,json,os,resource,subprocess
 from pathlib import Path
-from stage_twod_reservation import PINNED,job_capacity_sources,dpm_origin_source,replace_once
+from stage_twod_reservation import PINNED,job_capacity_sources,dpm_origin_source,replace_once,scene_action_components
 from test_private_source_mmio import extract
 
 def indexed_dpm_shim(shim):
@@ -30,9 +30,12 @@ def indexed_dpm_shim(shim):
 def main():
  p=argparse.ArgumentParser(description=__doc__)
  p.add_argument('--native-source',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
+ p.add_argument('--scene-actions',action='store_true',help='Test bound kernel scene action plans with17 real modeled allocations')
  p.add_argument('--dpm',action='store_true',help='Test cold DPM provenance with full64MiB and indexed model PTEs')
  p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path)
- a=p.parse_args();w=Path(__file__).resolve().parents[2];n=a.native_source.resolve();o=a.output.resolve()
+ a=p.parse_args()
+ if a.dpm and a.scene_actions:p.error('select one focused model')
+ w=Path(__file__).resolve().parents[2];n=a.native_source.resolve();o=a.output.resolve()
  if o.exists():raise FileExistsError(o)
  if o==n or o.is_relative_to(n):raise ValueError('output must be outside frozen native input')
  sha=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
@@ -41,6 +44,7 @@ def main():
  original=(n/'remesa_gem_memory.c').read_text();header=(n/'remesa_gem_memory.h').read_text()
  core,expanded=job_capacity_sources(original,header)
  core=dpm_origin_source(core)+'\n#include "remesa_gem_dpm.inc"\n'
+ if a.scene_actions:core+='\n#include "remesa_gem_scene_actions.inc"\n'
  # Reject absent/duplicate anchors instead of silently widening the wrong source.
  for old in ['cpu_views[16]','ids[16]','count>16','uses[16]','added[16]']:
   for bad in [original.replace(old,old.replace('16','15'),1),original+'\n/* '+old+' */\n']:
@@ -51,15 +55,18 @@ def main():
  shim=(n.parent/'tests/test_gem_shim.h').read_text();anchor='struct psb_mmu_pd {int hw_context;};'
  if shim.count(anchor)!=1:raise ValueError('shim driver anchor mismatch')
  shim=shim.replace(anchor,'struct psb_mmu_pd {int hw_context;struct psb_mmu_driver *driver;};')
- if a.dpm:shim=indexed_dpm_shim(shim)
+ if a.dpm or a.scene_actions:shim=indexed_dpm_shim(shim)
  (o/'test_gem_shim.h').write_text(shim)
+ if a.scene_actions:
+  for name,data in scene_action_components(w,n).items():(o/name).write_bytes(data)
  variants=[('native','cc',['-O2'],[]),('ubsan','cc',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'],[])]
  if a.i486_cc or a.qemu_i386:
   if not(a.i486_cc and a.qemu_i386):p.error('both i486 options required')
   variants.append(('i486',str(a.i486_cc),['-O2','-static','-march=i486'],[str(a.qemu_i386)]))
  rows=[];files=[Path(__file__).resolve(),w/'tools/remesa/stage_twod_reservation.py',n/'remesa_gem_memory.c',n/'remesa_gem_memory.h',n.parent/'tests/test_gem_shim.h']
- files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_dpm.h','remesa_gem_dpm.inc','remesa_gem_job_limits.h','remesa_gem_private.h','remesa_gem_private.inc','remesa_mmu_confinement.h','remesa_mmu_confinement.inc']]
- files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c']]
+ files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_actions.h','remesa_gem_scene_actions.inc','remesa_gem_dpm.h','remesa_gem_dpm.inc','remesa_gem_job_limits.h','remesa_gem_private.h','remesa_gem_private.inc','remesa_mmu_confinement.h','remesa_mmu_confinement.inc']]
+ files += [w/'kernel/remesa/gma500/tests'/name for name in ['test_gem_scene_actions.c','test_gem_dpm.c','test_gem_job_capacity.c','test_gem_private.c','test_gem_twod.c','test_mmu_job_capacity.c','test_mmu_confinement.c']]
+ files += [w/'tools/remesa/lab_scene_actions.c',w/'tools/remesa/lab_scene_actions.h',w/'include/remesa/scene_layout.h',w/'include/remesa/scene_dpm.h',n/'frozen_kernel_contract.h']
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
  def run(label,cmd,ceiling):
   def limit():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,(ceiling,ceiling))
@@ -69,12 +76,13 @@ def main():
   return q.stdout
  includes=['-I'+str(o),'-I'+str(n),'-I'+str(w/'include'),'-I'+str(w/'kernel/remesa/gma500'),'-I'+str(w/'mesa/sgx535')]
  for variant,cc,flags,runner in variants:
-  for name in (['test_gem_dpm'] if a.dpm else ['test_gem_job_capacity','test_mmu_job_capacity']):
+  for name in (['test_gem_scene_actions'] if a.scene_actions else ['test_gem_dpm'] if a.dpm else ['test_gem_job_capacity','test_mmu_job_capacity']):
    exe=o/(variant+'-'+name);test=w/'kernel/remesa/gma500/tests'/(name+'.c')
    sources=[str(test)]+([str(w/'common/remesa/draw_packet.c'),str(w/'common/remesa/shader_request.c')] if name!='test_mmu_job_capacity' else [])
+   if a.scene_actions:sources.append(str(o/'remesa_scene_actions.c'))
    command=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-missing-field-initializers',*flags,*includes,*sources,'-o',str(exe)]
    run(variant+'-'+name+'-build',command,768*1024**2)
    out=run(variant+'-'+name+'-run',runner+[str(exe)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
  if any(sha(Path(f))!=h for f,h in before.items()):raise RuntimeError('source changed during qualification')
- (o/'RESULT.json').write_text(json.dumps(dict(status='COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
+ (o/'RESULT.json').write_text(json.dumps(dict(status='BOUND_SCENE_ACTIONS_MODEL_PASS' if a.scene_actions else 'COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
 if __name__=='__main__':main()

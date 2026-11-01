@@ -59,7 +59,7 @@ def dpm_origin_source(source):
         ('bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;',
          'bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;\n bool zero_pristine;'),
         ('unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];',
-         'unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];u32 dpm_mask;'),
+         'unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];u32 dpm_mask,region_mask;'),
         ('b->live=false;b->initialized=false;b->lease_borrowed=false;',
          'b->live=false;b->initialized=false;b->lease_borrowed=false;b->zero_pristine=false;'),
         ('b->initialized=true;b->ta_cpu_cached=true;b->ta_cpu_dirty=true;',
@@ -69,9 +69,9 @@ def dpm_origin_source(source):
         ('b->lease=true;b->write=r->flags;return 0;',
          'b->lease=true;b->write=r->flags;if(b->write)b->zero_pristine=false;return 0;'),
         ('j->command_bytes=bytes;j->count=count;j->live=true;',
-         'j->command_bytes=bytes;j->count=count;j->dpm_mask=0;j->live=true;'),
+         'j->command_bytes=bytes;j->count=count;j->dpm_mask=0;j->region_mask=0;j->live=true;'),
         ('if(capacity<j->count)return -ENOSPC;\n e=verify_job_bindings',
-         'if(capacity<j->count)return -ENOSPC;\n if(j->dpm_mask)return -EACCES;\n e=verify_job_bindings'),
+         'if(capacity<j->count)return -ENOSPC;\n if(j->dpm_mask||j->region_mask)return -EACCES;\n e=verify_job_bindings'),
         ('out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};',
          'b->zero_pristine=false;\n  out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};'),
         ('j->state=REMESA_JOB_ISSUED;\n /* Possible GPU writes',
@@ -80,6 +80,28 @@ def dpm_origin_source(source):
     for old, new in edits:
         source = replace_once(source, old, new)
     return source
+
+
+def scene_action_components(root, native):
+    """Share the proven CPU constructor unchanged; only include paths differ."""
+    import re
+    reference = (root / 'tools/psb-dri-re/frozen_kernel_contract.h').read_text()
+    target = (native / 'frozen_kernel_contract.h').read_text()
+    for kind in ['enum sgx535_frozen_reg_action_kind', 'struct sgx535_frozen_reg_action']:
+        pattern = re.escape(kind) + r' \{.*?\n\};'
+        a, b = re.search(pattern, reference, re.S), re.search(pattern, target, re.S)
+        if not a or not b or a.group() != b.group():
+            raise ValueError('scene action ABI mismatch: ' + kind)
+    source = (root / 'tools/remesa/lab_scene_actions.c').read_text()
+    for old, new in [('#include "lab_scene_actions.h"', '#include "remesa_scene_actions.h"'),
+                     ('"remesa/scene_layout.h"', '"remesa_scene_layout.h"'),
+                     ('"remesa/scene_dpm.h"', '"remesa_scene_dpm.h"')]:
+        source = replace_once(source, old, new)
+    header = (root / 'tools/remesa/lab_scene_actions.h').read_text()
+    header = replace_once(header, '"../psb-dri-re/frozen_kernel_contract.h"', '"frozen_kernel_contract.h"')
+    return {'remesa_scene_actions.c': source.encode(), 'remesa_scene_actions.h': header.encode(),
+            'remesa_scene_layout.h': (root / 'include/remesa/scene_layout.h').read_bytes(),
+            'remesa_scene_dpm.h': (root / 'include/remesa/scene_dpm.h').read_bytes()}
 
 
 def private_mmu_header_source(header):
@@ -729,7 +751,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['mmu.h'] = private_mmu_header_source((native / 'mmu.h').read_text())
         result['mmu.c'] += '\n#include "remesa_mmu_confinement.inc"\n#include "remesa_mmu_private.inc"\n#include "remesa_mmu_switch.inc"\n'
         result['mmu.c'] += '#include "remesa_console_mapping.inc"\n'
-        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_private_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '\n#include "remesa_gem_private.inc"\n#include "remesa_gem_private_execute.inc"\n#include "remesa_gem_scene_actions.inc"\n#include "remesa_private_probe.inc"\n'
         result['psb_drv.c'] = replace_once(result['psb_drv.c'],
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n',
             '#include "remesa_private_probe.h"\n#include "remesa_private_probe_uapi.h"\n'
@@ -836,11 +858,13 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                  'remesa_gem_twod_job.h', 'remesa_gem_twod_job.inc']:
         components[name] = (additions / name).read_bytes()
     if private:
+        components.update(scene_action_components(root, native))
+        patched['Makefile'] += '\ngma500_gfx-y += remesa_scene_actions.o\n'
         for name in ['remesa_mmu_confinement.h', 'remesa_mmu_confinement.inc',
                      'remesa_mmu_private.h', 'remesa_mmu_private.inc',
                      'remesa_mmu_switch.h', 'remesa_mmu_switch.inc',
                      'remesa_gem_private.h', 'remesa_gem_private.inc',
-                     'remesa_gem_private_execute.inc',
+                     'remesa_gem_private_execute.inc', 'remesa_gem_scene_actions.h', 'remesa_gem_scene_actions.inc',
                      'remesa_private_probe.h', 'remesa_private_probe.inc',
                      'remesa_private_probe_request.h',
                      'remesa_private_prefire_irq.h',

@@ -655,6 +655,15 @@ int remesa_persistent_linked_dpm_snapshot(const struct remesa_device *,void *bo,
  */
 int remesa_persistent_linked_region_prepare(struct remesa_device *,void *targets,
  void **bo);
+/* Explicit raw scratch variant for a kernel zero-origin admission path.
+ * Same dimension-bound owner/layout, no CPU write/read/sync or initialized
+ * content assertion. Public reads remain EAGAIN until a real writer completes.
+ * Metadata/capture may retain undefined storage; native admission still must
+ * authenticate fresh kernel zero provenance and publication. The existing
+ * prepare API keeps its original CPU zero/verification/sync behavior.
+ */
+int remesa_persistent_linked_region_allocate(struct remesa_device *,void *targets,
+ void **bo);
 struct remesa_persistent_linked_region_backing {
  struct remesa_persistent_scene_backing region;
  struct remesa_persistent_linked_targets_backing targets;

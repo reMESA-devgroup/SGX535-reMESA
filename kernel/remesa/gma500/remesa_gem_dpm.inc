@@ -38,7 +38,7 @@ int remesa_gem_job_snapshot_selected(struct remesa_gem_memory *s,
  if(j->state!=REMESA_JOB_PREPARED){error=-EBUSY;goto done;}
  if(capacity<j->count){error=-ENOSPC;goto done;}
  if(j->count<32&&(cpu_mask>>j->count)){error=-EINVAL;goto done;}
- if(cpu_mask&j->dpm_mask){error=-EACCES;goto done;}
+ if(cpu_mask&(j->dpm_mask|j->region_mask)){error=-EACCES;goto done;}
  for(i=0;i<j->count;i++)if(!(cpu_mask&((u32)1<<i))&&j->cpu_views[i]){error=-EBUSY;goto done;}
  error=verify_job_bindings(s,j,uses);if(error){error=job_fault(s,j,error);goto done;}
  for(i=0;i<j->count;i++)if((cpu_mask&((u32)1<<i))&&!j->cpu_views[i]){

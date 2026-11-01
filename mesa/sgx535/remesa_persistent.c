@@ -2943,8 +2943,8 @@ int remesa_persistent_linked_dpm_snapshot(const struct remesa_device *device,voi
  e=dpm_plan_metadata(d,b->linked_dpm->table,b->linked_dpm->parameter,false,&value);if(e)return e;
  *out=value;return 0;
 }
-int remesa_persistent_linked_region_prepare(struct remesa_device *device,void *targets_object,
- void **out)
+static int linked_region_prepare(struct remesa_device *device,void *targets_object,
+ bool cpu_zero,void **out)
 {
  if((uintptr_t)out%_Alignof(void *))return EINVAL;
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
@@ -2962,23 +2962,30 @@ int remesa_persistent_linked_region_prepare(struct remesa_device *device,void *t
  b->depth_width=tm.commands.width;b->depth_height=tm.commands.height;
  b->linked_dependency=targets;targets->refs++;
  if(b->va<UINT64_C(0x40000000)||b->va+b->allocated>UINT64_C(0x100000000)){e=ENOTSUP;goto fail;}
- /* Preserve the existing scene allocator's one-time full zero initialization.
-  * These bytes are region storage, not invented CODE or generated tile lists. */
- const uint8_t zero=0;
- e=owned_image_lease(d,b,&zero,1,true);if(e)goto fail;
- e=owned_image_lease(d,b,&zero,1,false);if(e)goto fail;
- e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
- if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
- b->readable=true;*out=b;return 0;
+ /* The legacy prepare API retains its one-time zero/verify/sync policy.
+  * Raw allocation leaves contents undefined for kernel-origin validation. */
+ if(cpu_zero){
+  const uint8_t zero=0;
+  e=owned_image_lease(d,b,&zero,1,true);if(e)goto fail;
+  e=owned_image_lease(d,b,&zero,1,false);if(e)goto fail;
+  e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
+  if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
+  b->readable=true;
+ }
+ *out=b;return 0;
 fail:
  if(b->quarantined){*out=b;return EOWNERDEAD;}
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
  return d->failed?EOWNERDEAD:e;
 }
+int remesa_persistent_linked_region_prepare(struct remesa_device *device,void *targets,void **out)
+{return linked_region_prepare(device,targets,true,out);}
+int remesa_persistent_linked_region_allocate(struct remesa_device *device,void *targets,void **out)
+{return linked_region_prepare(device,targets,false,out);}
 static int region_metadata(struct persistent *d,struct memory *b,bool owner,
  struct remesa_persistent_linked_region_backing *out)
 {
- int e=linked_live(d,b,owner);if(e)return e;
+ int e=linked_attachment_live(d,b,owner);if(e)return e;
  if(!b->linked_region||!b->scene_hw||!b->linked_dependency)return EINVAL;
  struct remesa_persistent_linked_region_backing value={0};
  e=background_targets_metadata(d,b->linked_dependency,false,&value.targets);if(e)return e;
@@ -3036,7 +3043,7 @@ int remesa_persistent_scene_footprint(const struct remesa_device *device,void *b
   *region=region_object,*dpm=dpm_object;
  struct memory *parents[4]={bg,aux,region,dpm};
  for(unsigned i=0;i<4;i++){
-  e=linked_live(d,parents[i],true);if(e)return e;
+  e=i==2?linked_attachment_live(d,parents[i],true):linked_live(d,parents[i],true);if(e)return e;
   for(unsigned j=0;j<i;j++)if(parents[i]==parents[j])return EINVAL;
  }
  struct memory *event=NULL;
