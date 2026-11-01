@@ -45,3 +45,7 @@ observation: boot `f507f3b8-20e9-4ed8-8a80-73e417ab5cbc`, kernel
 controls, original GRUB configuration/default and empty next entry. This closes
 the earlier unverified stock-return condition. It does not report a new GPU
 test or establish that the previous reboot command was acknowledged.
+
+The retained graph now also supplies the original raster/TA and separate
+region control groups through [scene-controls.md](scene-controls.md). This
+CPU binding leaves initialization and native admission pending.

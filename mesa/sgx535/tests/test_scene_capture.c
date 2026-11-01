@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT. Unissued userspace scene holds; no GPU/API. */
 #define REMESA_LINKED_BACKGROUND_FIXTURE
+#define REMESA_LINKED_TEST_CLEAR_DEPTH(context) (((context)&1u)?0.25f:1.0f)
 #define REMESA_LINKED_TEST_BYTES (96u*1024u*1024u)
 #define REMESA_LINKED_TEST_RASTER_END 0x34000000
 #define REMESA_LINKED_TEST_RASTER_ALIGNMENT 1048576
@@ -7,10 +8,16 @@
 #include "test_linked_background.c"
 #include <unistd.h>
 #include <sys/wait.h>
+static void controls_error(struct remesa_device *d,struct remesa_scene_capture token,int error)
+{
+ struct remesa_persistent_scene_controls out,saved;memset(&out,0xa5,sizeof out);saved=out;
+ CHECK(remesa_persistent_scene_controls_snapshot(d,token,&out)==error&&!memcmp(&out,&saved,sizeof out));
+}
 static void unchanged(struct remesa_device *d,struct remesa_scene_capture c,int error)
 {
  struct remesa_persistent_scene_footprint r,saved;memset(&r,0xa5,sizeof r);saved=r;
  CHECK(remesa_persistent_scene_capture_snapshot(d,c,&r)==error&&!memcmp(&r,&saved,sizeof r));
+ controls_error(d,c,error);
  CHECK(remesa_persistent_scene_capture_release(d,c)==error);
 }
 int main(void)
@@ -43,6 +50,7 @@ int main(void)
    }
    CHECK(found==1);
   }
+  struct remesa_persistent_scene_controls control_reference={0},control={0};
   struct remesa_scene_capture tokens[REMESA_PROVIDER_MAX_JOBS],bad,saved;
   memset(&bad,0xa5,sizeof bad);saved=bad;
   void *lease=NULL;CHECK(!d.ops->map(d.priv,p[2],false,&lease));
@@ -56,6 +64,38 @@ int main(void)
    CHECK(!remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&tokens[i]));
    CHECK(tokens[i].owner==4100+v&&tokens[i].serial==i+1&&!tokens[i].reserved&&tokens[i].slot==i);
    CHECK(!remesa_persistent_scene_capture_snapshot(&d,tokens[i],&r)&&!memcmp(&r,&expected,sizeof r));
+   if(event_profile){
+    CHECK(!remesa_persistent_scene_controls_snapshot(&d,tokens[i],&control));
+    CHECK(control.owner==tokens[i].owner&&control.serial==tokens[i].serial&&control.width==sizes[size][0]&&
+     control.height==sizes[size][1]&&control.incomplete==31&&control.raster_bytes==208&&control.ta_bytes==56);
+    if(!i){
+     struct remesa_persistent_linked_background_backing bm;
+     struct remesa_persistent_linked_event_profile_backing em;
+     struct remesa_persistent_linked_region_backing rm;
+     struct remesa_persistent_zclear_prefix_backing zm;
+     CHECK(!remesa_persistent_linked_background_snapshot(&d,p[0],&bm));
+     CHECK(!remesa_persistent_linked_event_profile_snapshot(&d,event,&em));
+     CHECK(!remesa_persistent_linked_region_snapshot(&d,p[2],&rm));
+     CHECK(!remesa_persistent_zclear_prefix_snapshot(&d,c[6],&zm));
+     CHECK(zm.clear_depth==REMESA_LINKED_TEST_CLEAR_DEPTH(4100+v));
+     uint32_t clear;memcpy(&clear,&zm.clear_depth,4);
+     CHECK(shader_pds_le32(control.raster+19*8+4)==clear);
+     CHECK(shader_pds_le32(get(&f,zm.handle)->bytes+zm.vertex_offset+8)==clear);
+     CHECK(shader_pds_le32(control.raster+3*8+4)==bm.targets.color.state.raster_410);
+     CHECK(shader_pds_le32(control.raster+10*8+4)==bm.targets.depth.initial_surface.control_480);
+     for(unsigned a=0;a<5;a++){
+      CHECK(shader_pds_le32(control.raster+(11+a)*8)==bm.targets.depth.initial_surface.addresses[a].reg);
+      CHECK(shader_pds_le32(control.raster+(11+a)*8+4)==bm.targets.depth.initial_surface.addresses[a].word);
+     }
+     CHECK(shader_pds_le32(control.raster+17*8+4)==(((bm.gpu_va>>4)&0xffffff)|0x02000000));
+     CHECK(shader_pds_le32(control.raster+23*8+4)==em.gpu_va&&shader_pds_le32(control.raster+24*8+4)==4);
+     CHECK(shader_pds_le32(control.ta+52)==bm.targets.commands.gpu_va);
+     CHECK(!memcmp(control.ta_scene,rm.ta_scene,sizeof control.ta_scene)&&!memcmp(control.raster_scene,rm.raster_scene,sizeof control.raster_scene));
+     control_reference=control;
+     CHECK(remesa_persistent_scene_controls_snapshot(&d,tokens[i],(void *)((uint8_t *)&control+1))==EINVAL&&!memcmp(&control,&control_reference,sizeof control));
+     CHECK(remesa_persistent_scene_controls_snapshot(&d,tokens[i],event)==EINVAL);
+    }else{control.serial=control_reference.serial;CHECK(!memcmp(&control,&control_reference,sizeof control));}
+   }else controls_error(&d,tokens[i],ENOTSUP);
   }
   CHECK(remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&bad)==EBUSY&&!memcmp(&bad,&saved,sizeof bad));
   bad=tokens[0];bad.owner++;unchanged(&d,bad,EINVAL);
@@ -85,6 +125,10 @@ int main(void)
   CHECK(remesa_persistent_close(&d)==EBUSY&&f.destroys==0);
   for(unsigned repeat=0;repeat<100;repeat++){
    CHECK(!remesa_persistent_scene_capture_snapshot(&d,tokens[0],&r));CHECK(!memcmp(&r,&expected,sizeof r));
+   if(event_profile){
+    CHECK(!remesa_persistent_scene_controls_snapshot(&d,tokens[0],&control)&&control.serial==tokens[0].serial);
+    control.serial=control_reference.serial;CHECK(!memcmp(&control,&control_reference,sizeof control));
+   }else controls_error(&d,tokens[0],ENOTSUP);
   }
   for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++){
    if((v==0||v==3)&&i+1==REMESA_PROVIDER_MAX_JOBS){
@@ -107,5 +151,5 @@ int main(void)
   CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!f.forbidden);
   unchanged(&d,tokens[0],ESTALE);CHECK(!remesa_persistent_close(&d));
  }
- puts("PASS unissued scene captures: three storage dimensions with auxiliary-only and fixed event PDS, shared frozen closures, full frontend release, eight-slot limit, stale/foreign/alias rejection, zero provider I/O in capture/snapshot and complete cancellation cleanup; GPU0/API0");return 0;
+ puts("PASS unissued scene captures: three storage dimensions with auxiliary-only and fixed event PDS, shared frozen closures, full frontend release, eight-slot limit, stale/foreign/alias rejection, bound raster208/TA56/region control snapshots with retained clear depth, zero provider I/O and complete cancellation cleanup; GPU0/API0");return 0;
 }

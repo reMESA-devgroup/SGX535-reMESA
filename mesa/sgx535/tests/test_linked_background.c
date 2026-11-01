@@ -10,6 +10,9 @@ int ta_linkage_fixture(void);
 /* Existing small-object fixture intentionally caps at1MiB. Only the new
  * attachment allocations use this larger fake backing; failure injection for
  * the 4KiB immutable binding continues through the original callbacks. */
+#ifndef REMESA_LINKED_TEST_CLEAR_DEPTH
+#define REMESA_LINKED_TEST_CLEAR_DEPTH(context) 1.0f
+#endif
 #ifndef REMESA_LINKED_TEST_BYTES
 #define REMESA_LINKED_TEST_BYTES (32u*1024u*1024u)
 #endif
@@ -57,7 +60,7 @@ static void ta_setup(struct fixture *f,struct remesa_device *d,unsigned context,
  CHECK(!remesa_persistent_scene_close_prepare(d,width,height,4,close));
  struct remesa_linked_body_draw draw={*state,0,3};
  CHECK(!remesa_persistent_linked_body_prepare(d,&draw,1,*close,body));
- CHECK(!remesa_persistent_zclear_prefix_prepare(d,width,height,1,4,3,4,prefix));
+ CHECK(!remesa_persistent_zclear_prefix_prepare(d,width,height,REMESA_LINKED_TEST_CLEAR_DEPTH(context),4,3,4,prefix));
 }
 static void ta_drop_children(struct remesa_device *d,void *code,void *geometry,void *pds,
  void *state,void *close,void *body,void *prefix)

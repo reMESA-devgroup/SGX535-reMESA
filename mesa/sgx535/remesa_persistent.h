@@ -495,6 +495,7 @@ struct remesa_persistent_zclear_prefix_backing {
  size_t vertex_capacity_bytes,vertex_referenced_bytes,index_capacity_bytes,index_referenced_bytes;
  size_t use_offset[3],use_bytes[3],pds_offset[4],pds_bytes[4];
  size_t state_offset,state_bytes,ta_offset,ta_bytes;
+ float clear_depth; /* Same validated scalar used by the immutable clear geometry. */
  struct remesa_use_entry_plan entries[3];
 };
 int remesa_persistent_zclear_prefix_snapshot(const struct remesa_device *,void *bo,
@@ -706,6 +707,25 @@ int remesa_persistent_scene_capture(struct remesa_device *,void *background,
  void *event_auxiliary,void *region,void *dpm,struct remesa_scene_capture *);
 int remesa_persistent_scene_capture_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_footprint *);
+/* Derive original raster208/TA56 and separate region register groups from
+ * one frozen captured graph, including after all public owners are released.
+ * Requires a fixed event PDS owner; auxiliary-only captures return ENOTSUP.
+ * Clear depth comes from the retained Z-clear prefix, stencil is0 and the
+ * original depth finalization predicate isfalse. Z remains UNDEFINED.
+ * These are CPU command groups for a future authenticated native consumer,
+ * never GPU CODE/BOs, MMIO writes, initialization or execution admission.
+ * All incomplete bits remain; no allocation/provider I/O/hash/sync occurs.
+ * External serialization required; disjoint aligned output unchanged on error.
+ */
+struct remesa_persistent_scene_controls {
+ uint64_t owner,serial;
+ uint32_t width,height,incomplete;
+ size_t raster_bytes,ta_bytes;
+ uint8_t raster[REMESA_RASTER_CONTROL_BYTES],ta[REMESA_TA_CONTROL_BYTES];
+ uint32_t ta_scene[14],raster_scene[2];
+};
+int remesa_persistent_scene_controls_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_controls *);
 int remesa_persistent_scene_capture_release(struct remesa_device *,
  struct remesa_scene_capture);
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

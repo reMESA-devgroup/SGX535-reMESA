@@ -116,6 +116,7 @@ struct shader_upload {
 struct scene_capture {
  struct remesa_persistent_scene_footprint footprint;
  struct memory *held[REMESA_PERSISTENT_BUFFERS];
+ struct memory *parents[4]; /* background,event,region,DPM; held above */
  unsigned count;uint64_t serial;bool live;
 };
 struct persistent {
@@ -2405,7 +2406,7 @@ int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
   .used_bytes=sizeof(image),.vertex_offset=64,.index_offset=128,
   .vertex_capacity_bytes=64,.vertex_referenced_bytes=48,.index_capacity_bytes=12,.index_referenced_bytes=6,
   .use_offset={0,16,32},.use_bytes={16,8,16},.pds_offset={160,224,288,352},.pds_bytes={64,56,4,60},
-  .state_offset=304,.state_bytes=44,.ta_offset=416,.ta_bytes=28,
+  .state_offset=304,.state_bytes=44,.ta_offset=416,.ta_bytes=28,.clear_depth=depth,
   .entries={owned->entries[0],owned->entries[1],owned->entries[2]}};
  e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
  e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
@@ -2713,12 +2714,10 @@ fail:
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
  return d->failed?EOWNERDEAD:e;
 }
-int remesa_persistent_linked_background_snapshot(const struct remesa_device *device,void *object,
+static int background_metadata(struct persistent *d,struct memory *b,bool owner,
  struct remesa_persistent_linked_background_backing *out)
 {
- int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
- struct persistent *d=device->priv;struct memory *b=object;
- e=linked_live(d,b,true);if(e)return e;
+ int e=linked_live(d,b,owner);if(e)return e;
  if(!b->linked_background||!b->linked_background->program)return EINVAL;
  const struct linked_background *bg=b->linked_background;struct memory *p=bg->program;
  e=linked_live(d,p,false);if(e)return e;
@@ -2730,6 +2729,13 @@ int remesa_persistent_linked_background_snapshot(const struct remesa_device *dev
  memcpy(value.primary_known_mask,bg->known,sizeof(value.primary_known_mask));
  e=background_targets_metadata(d,bg->targets,false,&value.targets);if(e)return e;
  *out=value;return 0;
+}
+int remesa_persistent_linked_background_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_background_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_background_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ return background_metadata(device->priv,object,true,out);
 }
 int remesa_persistent_linked_event_auxiliary_prepare(struct remesa_device *device,
  void *targets_object,uint32_t bank,void **out)
@@ -2842,13 +2848,10 @@ fail:
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
  return d->failed?EOWNERDEAD:e;
 }
-int remesa_persistent_linked_event_profile_snapshot(const struct remesa_device *device,
- void *object,struct remesa_persistent_linked_event_profile_backing *out)
+static int event_profile_metadata(struct persistent *d,struct memory *b,bool owner,
+ struct remesa_persistent_linked_event_profile_backing *out)
 {
- if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_profile_backing))return EINVAL;
- int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
- struct persistent *d=device->priv;struct memory *b=object;
- e=linked_live(d,b,true);if(e)return e;
+ int e=linked_live(d,b,owner);if(e)return e;
  if(!b->linked_event_profile||!b->linked_dependency)return EINVAL;
  if(b->bytes!=REMESA_PDS_PSB_EVENT_PROFILE_RESERVATION_BYTES||b->allocated<b->bytes||
     b->va%32||b->va<UINT64_C(0x20000000)||b->va+b->allocated>UINT64_C(0x30000000))return EPROTO;
@@ -2859,6 +2862,13 @@ int remesa_persistent_linked_event_profile_snapshot(const struct remesa_device *
   .descriptor_field0c=16};
  e=event_auxiliary_metadata(d,b->linked_dependency,false,&value.auxiliary);if(e)return e;
  *out=value;return 0;
+}
+int remesa_persistent_linked_event_profile_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_event_profile_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_event_profile_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ return event_profile_metadata(device->priv,object,true,out);
 }
 static int dpm_storage_metadata(struct persistent *d,struct memory *b,bool owner,
  struct remesa_persistent_memory_backing *out)
@@ -2965,13 +2975,10 @@ fail:
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}
  return d->failed?EOWNERDEAD:e;
 }
-int remesa_persistent_linked_region_snapshot(const struct remesa_device *device,void *object,
+static int region_metadata(struct persistent *d,struct memory *b,bool owner,
  struct remesa_persistent_linked_region_backing *out)
 {
- if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_region_backing))return EINVAL;
- int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
- struct persistent *d=device->priv;struct memory *b=object;
- e=linked_live(d,b,true);if(e)return e;
+ int e=linked_live(d,b,owner);if(e)return e;
  if(!b->linked_region||!b->scene_hw||!b->linked_dependency)return EINVAL;
  struct remesa_persistent_linked_region_backing value={0};
  e=background_targets_metadata(d,b->linked_dependency,false,&value.targets);if(e)return e;
@@ -2990,6 +2997,13 @@ int remesa_persistent_linked_region_snapshot(const struct remesa_device *device,
  memcpy(value.ta_scene,ta,sizeof(ta));value.raster_scene[0]=0x408;
  value.raster_scene[1]=base+layout->cookie[7];
  value.access=REMESA_ACCESS_READ|REMESA_ACCESS_WRITE;*out=value;return 0;
+}
+int remesa_persistent_linked_region_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_region_backing *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_linked_region_backing))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ return region_metadata(device->priv,object,true,out);
 }
 static int scene_footprint_add(struct persistent *d,struct memory *b,uint32_t access,
  uint32_t roles,struct remesa_persistent_scene_footprint *out)
@@ -3105,7 +3119,7 @@ int remesa_persistent_scene_capture(struct remesa_device *device,void *bg,void *
   e=scene_capture_add(d,&value,b);if(e)return e;
  }
  struct memory *parents[]={bg,aux,region,dpm};
- for(unsigned i=0;i<4;i++){e=scene_capture_add(d,&value,parents[i]);if(e)return e;}
+ for(unsigned i=0;i<4;i++){e=scene_capture_add(d,&value,parents[i]);if(e)return e;value.parents[i]=parents[i];}
  /* Validation is complete before any count changes; failure is transactional. */
  value.serial=++d->scene_serial;value.live=true;
  for(unsigned i=0;i<value.count;i++){value.held[i]->refs++;value.held[i]->scene_holds++;}
@@ -3135,6 +3149,46 @@ int remesa_persistent_scene_capture_snapshot(const struct remesa_device *device,
  struct scene_capture *c=NULL;
  e=scene_capture_lookup(device->priv,token,&c);if(e)return e;
  *out=c->footprint;return 0;
+}
+int remesa_persistent_scene_controls_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_persistent_scene_controls *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_controls))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *capture=NULL;
+ e=scene_capture_lookup(d,token,&capture);if(e)return e;
+ struct memory *bg=capture->parents[0],*event=capture->parents[1],*region=capture->parents[2];
+ if(!event->linked_event_profile)return ENOTSUP;
+ struct remesa_persistent_linked_background_backing bm;
+ struct remesa_persistent_linked_event_profile_backing em;
+ struct remesa_persistent_linked_region_backing rm;
+ e=background_metadata(d,bg,false,&bm);if(e)return e;
+ e=event_profile_metadata(d,event,false,&em);if(e)return e;
+ e=region_metadata(d,region,false,&rm);if(e)return e;
+ struct memory *targets=bg->linked_background->targets;
+ if(event->linked_dependency->linked_dependency!=targets||region->linked_dependency!=targets)return ESTALE;
+ const struct remesa_persistent_linked_targets_backing *tm=&bm.targets;
+ struct memory *prefix=targets->linked_targets->ta->linked_ta->prefix;
+ e=linked_live(d,prefix,false);if(e)return e;
+ if(!prefix->zclear_prefix||tm->commands.width!=capture->footprint.width||
+    tm->commands.height!=capture->footprint.height)return ESTALE;
+ struct remesa_persistent_scene_controls value={.owner=token.owner,.serial=token.serial,
+  .width=tm->commands.width,.height=tm->commands.height,.incomplete=capture->footprint.incomplete,
+  .raster_bytes=REMESA_RASTER_CONTROL_BYTES,.ta_bytes=REMESA_TA_CONTROL_BYTES};
+ const struct remesa_raster_control_request request={
+  .color={value.width,value.height,tm->color.state.stride_bytes/4,tm->color.gpu_va,tm->color.state.image_bytes},
+  .has_depth=true,.depth={.depth={tm->depth.width,tm->depth.height,tm->depth.pitch_pixels,tm->depth.cpp,
+   REMESA_DEPTH_SURFACE_UNDEFINED,tm->depth.gpu_va,tm->depth.allocation_bytes},
+   .color_width=value.width,.color_height=value.height,.clear_depth=prefix->zclear_prefix->clear_depth},
+  .background={bm.gpu_va,bm.allocation_bytes,0,bm.object_bytes},
+  .event={em.gpu_va,em.allocation_bytes,0,em.used_bytes},.event_field0c=em.descriptor_field0c};
+ e=remesa_raster_control_encode(&request,value.raster);if(e)return e;
+ const struct remesa_raster_object_reference stream={tm->commands.gpu_va,tm->commands.allocation_bytes,
+  0,tm->commands.command_bytes};
+ e=remesa_ta_control_encode(&stream,value.ta);if(e)return e;
+ memcpy(value.ta_scene,rm.ta_scene,sizeof(value.ta_scene));
+ memcpy(value.raster_scene,rm.raster_scene,sizeof(value.raster_scene));
+ *out=value;return 0;
 }
 int remesa_persistent_scene_capture_release(struct remesa_device *device,
  struct remesa_scene_capture token)
