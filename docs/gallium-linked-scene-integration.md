@@ -135,7 +135,8 @@ allocation, synchronization or GPU submission.
 
 The returned `MATRIX_WINDOW` request is still distinct from the physically
 qualified profiles 7/8, which use `INITIAL_ZERO` and window-coordinate vertex
-inputs. Switching their viewport to a matrix would apply a second transform.
+inputs. Their coordinate contract must not be changed by substituting matrix
+data alone.
 Physical qualification of the matrix branch needs a separate bounded clip-space
 input experiment, with the existing POSITION passthrough program and encoder;
 it must not silently change the qualified profiles or ordinary draw admission.
@@ -159,3 +160,10 @@ oracle retains the previous window-input checks by default and separately
 validates the clip inputs and matrix before applying the same analytical
 coverage/Z expectation. Its regression uses previous physical readbacks and
 does not constitute matrix hardware qualification.
+
+The subsequent physical 1280×800 experiment completed and retired but failed
+the pinned pixel oracle: the entire COLOR/Z target retained its GPU clear.
+Profiles 9/10 therefore remain unqualified; 640×640 was not attempted.
+See [the physical failure record](gallium-matrix-viewport-physical.md). This
+rejects the assumption that these six state fields alone transform raw clip
+positions. It does not invalidate the previous window-coordinate profiles.
