@@ -3214,10 +3214,10 @@ int remesa_persistent_set_native_copy(struct remesa_device *device,remesa_gpu_co
  d->native_copy=fn;return 0;
 }
 static int native_copy_surface(struct persistent *d,const struct remesa_copy_surface *s,
- struct memory **out,bool source)
+ struct memory **out,bool source,bool public_owner)
 {
  struct memory *b=s->bo;
- int e=linked_attachment_live(d,b,true);if(e)return e;
+ int e=linked_attachment_live(d,b,public_owner);if(e)return e;
  if(b->scene_holds||b->refs==UINT32_MAX)return EBUSY;
  if(b->linked_dpm||b->linked_background||b->linked_targets||b->linked_ta||b->zclear_prefix||
     b->linked_body||b->scene_hw||b->depth_backing||b->isp_update||b->raw_geometry||
@@ -3234,8 +3234,8 @@ int remesa_persistent_copy_region(void *opaque,const struct remesa_copy_region *
  if(!d||!r)return EINVAL;
  if(d->failed)return EOWNERDEAD;
  if(!d->native_copy)return EOPNOTSUPP;
- e=native_copy_surface(d,&r->source,&a,true);if(e)return e;
- e=native_copy_surface(d,&r->destination,&b,false);if(e)return e;
+ e=native_copy_surface(d,&r->source,&a,true,true);if(e)return e;
+ e=native_copy_surface(d,&r->destination,&b,false,true);if(e)return e;
  if(a==b)return EOPNOTSUPP; /* Overlap not admitted by this physical profile. */
  if(!r->width||!r->height||r->width>4095||r->height>4095||r->width==8||r->height==8)return EOPNOTSUPP;
  if(r->source_x>=r->source.width||r->source_y>=r->source.height||
@@ -3264,13 +3264,13 @@ int remesa_persistent_set_native_fill(struct remesa_device *device,remesa_gpu_fi
  if(d->native_fill||d->allocated||d->shaders)return EBUSY;
  d->native_fill=fn;return 0;
 }
-int remesa_persistent_fill_region(void *opaque,const struct remesa_fill_region *r)
+static int fill_region(struct persistent *d,const struct remesa_fill_region *r,bool public_owner)
 {
- struct persistent *d=opaque;struct memory *b;int e;
+ struct memory *b;int e;
  if(!d||!r)return EINVAL;
  if(d->failed)return EOWNERDEAD;
  if(!d->native_fill)return EOPNOTSUPP;
- e=native_copy_surface(d,&r->destination,&b,false);if(e)return e;
+ e=native_copy_surface(d,&r->destination,&b,false,public_owner);if(e)return e;
  if(!r->width||!r->height||r->width>4095||r->height>4095||r->width==8||r->height==8)return EOPNOTSUPP;
  if(r->destination_x>=r->destination.width||r->destination_y>=r->destination.height||
     r->width>r->destination.width-r->destination_x||r->height>r->destination.height-r->destination_y)return EINVAL;
@@ -3284,6 +3284,25 @@ int remesa_persistent_fill_region(void *opaque,const struct remesa_fill_region *
  drop_memory(d,b);return e;
 }
 
+int remesa_persistent_fill_region(void *opaque,const struct remesa_fill_region *r)
+{return fill_region(opaque,r,true);}
+int remesa_persistent_linked_targets_color_initialize(struct remesa_device *device,
+ void *targets_object,uint32_t packed_bgra)
+{
+ struct remesa_persistent_linked_targets_backing metadata;
+ int e=depth_output_check(device,&metadata,sizeof(metadata));if(e)return e;
+ struct persistent *d=device->priv;struct memory *targets=targets_object;
+ e=background_targets_metadata(d,targets,true,&metadata);if(e)return e;
+ if(targets->scene_holds)return EBUSY;
+ /* Cover the complete committed plane, including pitch columns outside the
+  * logical viewport. This is an explicit operation, never a cached per-frame
+  * clear/preserve decision or inference from a previous partial writer. */
+ const uint32_t pitch=metadata.color.state.stride_bytes/4;
+ const struct remesa_fill_region request={
+  .destination={targets->linked_targets->color,pitch,metadata.commands.height,metadata.color.state.stride_bytes},
+  .width=pitch,.height=metadata.commands.height,.color=packed_bgra};
+ return fill_region(d,&request,false);
+}
 int remesa_persistent_take_provider(struct remesa_device *device,int (*release)(void *),void *priv)
 {
  if(!device||device->ops!=&device_ops||!device->priv||!release||!priv)return EINVAL;

@@ -51,8 +51,9 @@ The offline Mesa25.2.0 archive tests are separate from installed Mesa25.0.7.
 The preserved fixed event DATA64/CODE84 now has an owned immutable upload and
 is retained by scene footprint/capture (`9a8a43e`, `e991e31`). This removes the
 need to rediscover that fixed program. Owned raster/TA/region control snapshots now bind that frozen graph; see
-[scene-controls.md](scene-controls.md). Complete initialization and the
-authenticated native scene lifecycle/ordered control consumption next,
+[scene-controls.md](scene-controls.md). Explicit native COLOR initialization before capture is also connected; see
+[linked-color-initialize.md](linked-color-initialize.md). Complete the DPM
+initialization contract and authenticated native lifecycle/control consumption next,
 then connect the normal frontend/loader and X11 resource/presentation path.
 The event's general ISA semantics remain distinct from reuse of its already
 preserved fixed CPU construction. Keep LAB diagnostics separate from production

@@ -541,6 +541,18 @@ struct remesa_persistent_linked_targets_backing {
 };
 int remesa_persistent_linked_targets_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_targets_backing *);
+/* Explicit full committed COLOR-plane initialization through registered native
+ * fill, before capture. Derives pitch/height/handle from this live target graph;
+ * includes row padding columns, excludes page tail, and accepts no raw VA.
+ * Requires synchronous authenticated completion/publication/retirement from
+ * the existing callback. No CPU fallback, implicit per-frame clear, memoization
+ * or new initialization certificate. Return0 is that callback's attestation,
+ * not new physical qualification or permission to clear scene admission bits.
+ * Held child owners may have been publicly released; frozen scenes/CPU leases
+ * reject. Ordinary failure is NOT issued; uncertainty quarantines/retains.
+ */
+int remesa_persistent_linked_targets_color_initialize(struct remesa_device *,
+ void *targets,uint32_t packed_bgra);
 /* Owned original background constructor for the current BGRA8 target.
  * Generates auxiliary USE8, primary PDS64, empty secondary4 in PROGRAM and
  * background object68 in RASTER. Retains the target binding and both backing

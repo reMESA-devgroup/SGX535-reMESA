@@ -45,6 +45,9 @@ static void ta_setup(struct fixture *f,struct remesa_device *d,unsigned context,
  cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,REMESA_LINKED_TEST_RASTER_END,REMESA_LINKED_TEST_RASTER_ALIGNMENT};
  cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
  CHECK(!remesa_persistent_open(d,&cfg));
+#ifdef REMESA_LINKED_TEST_NATIVE_FILL
+ if(REMESA_LINKED_TEST_NATIVE_FILL)CHECK(!remesa_persistent_set_native_fill(d,REMESA_LINKED_TEST_NATIVE_FILL));
+#endif
  struct remesa_shader_program vs=vertex(2),fs=fragment(1);struct remesa_shader_linkage link;
  CHECK(!remesa_shader_linkage_prepare(&vs,&fs,&link));const uint32_t banks[2]={4,3};
  unsigned char raw[144];for(unsigned n=0;n<144;n++)raw[n]=(unsigned char)(n*43+7);

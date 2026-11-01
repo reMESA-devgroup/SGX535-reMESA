@@ -54,6 +54,7 @@ int main(void)
   struct remesa_scene_capture tokens[REMESA_PROVIDER_MAX_JOBS],bad,saved;
   memset(&bad,0xa5,sizeof bad);saved=bad;
   void *lease=NULL;CHECK(!d.ops->map(d.priv,p[2],false,&lease));
+  CHECK(remesa_persistent_linked_targets_color_initialize(&d,c[10],0)==EBUSY);
   CHECK(remesa_persistent_scene_capture(&d,p[0],selected,p[2],p[3],&bad)==EBUSY&&!memcmp(&bad,&saved,sizeof bad));
   d.ops->unmap(d.priv,p[2],false);
   CHECK(remesa_persistent_scene_capture(&d,p[0],p[1],p[2],p[3],(void *)((unsigned char *)&bad+1))==EINVAL);
