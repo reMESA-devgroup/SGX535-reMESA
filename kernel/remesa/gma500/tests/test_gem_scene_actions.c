@@ -10,6 +10,7 @@
 #include "../remesa_gem_scene_fragments.h"
 #include "../remesa_gem_scene_background.h"
 #include "../remesa_gem_scene_event.h"
+#include "../remesa_gem_scene_job.h"
 #include "remesa_render_target.h"
 #include "remesa_ta_index.h"
 #include "remesa_scene_layout.h"
@@ -106,6 +107,34 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  command.vertex=(struct remesa_gem_scene_vertex_command){1,sizeof(command.vertex)+2*sizeof(command.windows[0]),2,0};
  command.windows[0]=(struct remesa_gem_scene_vertex_window){ids[9],128,6,ids[9],64,48,3,0};
  command.windows[1]=(struct remesa_gem_scene_vertex_window){ids[11],144,6,ids[11],0,144,3,0};
+ if(fault==14){
+  struct remesa_gem_scene_job *context=calloc(1,sizeof(*context));CHECK(context);
+  struct remesa_gem_scene_sections sections={4,control_offset,use_offset,vertex_offset},bad_sections=sections;
+  struct remesa_gem_private_rule prepare_rules[17];
+  for(unsigned k=0;k<17;k++)prepare_rules[k]=(struct remesa_gem_private_rule){ids[k],k&&k<=5?3:1,k!=0};
+  dpm_model=true;scene_output_roles=true;capacity_gpu_count=17;mode=0;
+  unsigned before_zero=test_zeroed_pages;int before_claimed=claimed;
+  bad_sections.controls++;
+  CHECK(remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&bad_sections,prepare_rules,&guard,context)==-EINVAL);
+  CHECK(!context->memory&&context->state==REMESA_SCENE_JOB_EMPTY&&claimed==before_claimed);
+  bad_sections=sections;bad_sections.use++;
+  CHECK(remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&bad_sections,prepare_rules,&guard,context)==-EINVAL);
+  CHECK(!context->memory&&claimed==before_claimed);
+  for(unsigned iteration=0;iteration<2;iteration++){
+   CHECK(!remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&sections,prepare_rules,&guard,context));
+   CHECK(context->state==REMESA_SCENE_JOB_PREPARED&&context->count==17&&context->loan.live&&!context->loan.host_published);
+   CHECK(context->actions.load_count==29&&context->actions.ta_count==31&&context->actions.raster_count==20&&context->use.entry_count==10);
+   CHECK(!context->views[1].cpu&&!context->views[2].cpu&&!context->views[3].cpu&&!context->views[4].cpu&&!context->views[5].cpu&&context->views[9].cpu);
+   CHECK(remesa_gem_scene_job_prepare(s,uses,17,&command,sizeof(command),&sections,prepare_rules,&guard,context)==-EBUSY);
+   context->loan.execution_attempted=true;
+   CHECK(remesa_gem_scene_job_cancel(context)==-EBUSY&&context->loan.live&&context->memory==s);
+   context->loan.execution_attempted=false; /* Model only: no execution occurred. */
+   CHECK(!remesa_gem_scene_job_cancel(context)&&!context->memory&&claimed==before_claimed);
+  }
+  CHECK(test_zeroed_pages==before_zero);free(context);
+  dpm_model=false;scene_output_roles=false;capacity_gpu_count=0;
+  CHECK(!remesa_gem_memory_close(s));CHECK(!gems&&!pins&&!ptes&&!claimed&&!power);expected_memory=NULL;expected_guard=NULL;return;
+ }
  CHECK(!remesa_gem_job_prepare(s,uses,17,&command,sizeof(command),&ticket));struct retained_job *j=ticket_job(s,ticket);
  command.scene.width=0; /* Only the copied kernel section is authoritative. */
  command.entries[0].bank=99;
@@ -396,6 +425,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
 int main(void)
 {
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
- for(unsigned fault=1;fault<=13;fault++)action_case(640,640,fault);
+ action_case(1280,800,14);action_case(641,479,14);action_case(1600,768,14);
+ for(unsigned fault=1;fault<=14;fault++)action_case(640,640,fault);
  puts("PASS bound scene actions+controls:17 held resources/four dimensions, original29/31/20 groups and raster208/TA56 match Mesa, immutable sections, cold scratch/no CPU aliases, strict wait15, clear IEEE/depth2+4, bounds/tamper/RW/cache/MMU refusal, publication and no native issue; GPU0");return 0;
 }

@@ -94,3 +94,12 @@ The immediate next implementation is the general job/service/backend handoff,
 reusing the components above. Normal GL/GLES frontend dispatch, full required API
 behavior, X11 integration and installation follow that real execution path; they
 remain part of the unchanged full-driver objective.
+
+## First preparation handoff connected
+
+The subsequent [general GEM job assembly](general-scene-job.md) now combines the
+existing preparers into one stable context with real held objects, selected
+views, action/control/USE plans and an unbound private loan. It is the kernel
+preparation half of item1 above. Capture serialization/submission and the
+plan-consuming service/backend/source adapter remain to connect. No encoder or
+canonical fixed executor was replaced, and no GPU admission was enabled.
