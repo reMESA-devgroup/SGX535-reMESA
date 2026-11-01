@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: MIT. Syscall model, never creates GPU pixels. */
 #define __wrap_ioctl previous_scene_model_ioctl
+#define REMESA_NATIVE_MODEL_PROFILE_MIN 7u
+#define REMESA_NATIVE_MODEL_PROFILE_MAX 8u
 #include "test_scene_native_client_model.c"
 #undef __wrap_ioctl
 static bool returned_native,teardown_started;

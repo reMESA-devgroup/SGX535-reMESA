@@ -7,11 +7,15 @@
 #include <string.h>
 static struct {unsigned char *bytes;uint64_t size,va;bool pin,lease,write;} bo[32];
 static unsigned count,submissions;
+#ifndef REMESA_NATIVE_MODEL_PROFILE_MIN
+#define REMESA_NATIVE_MODEL_PROFILE_MIN 5u
+#define REMESA_NATIVE_MODEL_PROFILE_MAX 6u
+#endif
 int __wrap_ioctl(int fd,unsigned long command,...)
 {
  assert(fd==99);va_list ap;va_start(ap,command);void *arg=va_arg(ap,void*);va_end(ap);
  if(command==DRM_IOCTL_REMESA_SCENE_PROBE){
-  struct remesa_scene_probe_request *r=arg;assert(!submissions++&&r->context==77&&r->profile>=5&&r->profile<=6);
+  struct remesa_scene_probe_request *r=arg;assert(!submissions++&&r->context==77&&r->profile>=REMESA_NATIVE_MODEL_PROFILE_MIN&&r->profile<=REMESA_NATIVE_MODEL_PROFILE_MAX);
   const char *dir=getenv("REMESA_NATIVE_MODEL_OUTPUT");assert(dir);
   char path[4096];assert(snprintf(path,sizeof path,"%s/placement.bin",dir)>0);FILE *f=fopen(path,"rb");assert(f);
   struct {uint32_t version,count;struct {uint64_t address,bytes;uint32_t id,access;} bindings[32];} p;

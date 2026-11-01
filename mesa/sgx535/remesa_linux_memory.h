@@ -83,7 +83,7 @@ int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *,
  struct remesa_private_session_lab_request *);
 /* One closed general-scene LAB attempt on this exact resource endpoint.
  * Packet must be a retained real scene_capture snapshot owned by this context;
- * the caller keeps it and its owners until acknowledged return. Only the six
+ * the caller keeps it and its owners until acknowledged return. Only the eight
  * existing kernel profiles are selected; this does not admit ordinary GL.
  * Performs one ioctl, no INFO/hash/readback/retry. Kernel validates actual held
  * images, addresses, permissions, source ownership and complete retirement.
@@ -100,6 +100,12 @@ int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *,
  * Local/pre-ioctl refusal is NOT_ISSUED; entered uncertainty is AMBIGUOUS.
  * No caller flags or shader/capability admission are bypassed. */
 enum remesa_dispatch remesa_linux_memory_scene_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Separate explicit bound-Gallium closed LAB7/8 adapter. Same ownership,
+ * identity, retirement, publication and uncertainty checks; does not change
+ * the old adapter's5/6 selection or enable a kernel gate. Requires the matching
+ * independently qualified eight-profile kernel, never implicit fallback. */
+enum remesa_dispatch remesa_linux_memory_gallium_scene_lab_dispatch(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 /* Diagnostic snapshot of the already returned raw144-byte kernel response;
  * no ioctl/hash/readback. Requires an entered attempt and disjoint output. */

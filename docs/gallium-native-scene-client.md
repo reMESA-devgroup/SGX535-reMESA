@@ -52,19 +52,22 @@ match the exact graph. `--prepare-only` does not enter a scene ioctl. It still
 uses the resource endpoint and creates real GEM objects when run on hardware.
 Neither mode enables that endpoint.
 
-**Do not run the execute form on the existing six-profile kernel.** Its current
-Linux adapter selects profiles 5/6, whose exact address/image gates reject this
-relocated Gallium graph. Before a physical execution, add independently
-qualified profiles 7/8 and an explicit matching adapter selection, preserve
-profiles 1–6, and run the established closure/controller/build tests. Do not
-replace old profiles or bypass their image/address validation. The client and
-inventory work here make no kernel gate change.
+**Do not run the execute form on a six-profile kernel.** This client's separate
+`remesa_linux_memory_gallium_scene_lab_dispatch` selects closed profiles 7/8.
+The old adapter continues to select 5/6. The new eight-profile table preserves
+all six earlier packets, bindings, addresses and digests bit-for-bit; it adds
+the exact relocated Gallium graph without bypassing image/address validation.
+The eight-profile kernel/adapter has offline qualification recorded below;
+its new frontend execution still needs a recoverable physical qualification.
 
-The supervising collector must validate the saved real readbacks, source/trace,
-full retirement, guards and remaining-object cleanup, then recover stock/N/N.
-The existing collector expects the old post-child inventory and cannot be used
-unchanged for this new lifetime. Its pixel oracles and recovery mechanisms
-should be reused.
+`tools/remesa/gallium_scene_native.py` is the separate supervisor for this
+lifetime. It verifies the pinned executable, normalizes the entire packet's
+owner/IDs, checks the saved retired readbacks and all owners/guards, queries the
+seven remaining real objects and cleans exactly those seven. It does not upload
+references. Failed child/receipt/input/guard/inventory evidence suppresses
+destructive cleanup. Trace verification is optional; a physical qualification
+must also validate the existing independent pixel oracles and recover stock/N/N.
+The old collector is preserved and continues serving the old native client.
 
 ## Evidence
 
@@ -90,3 +93,15 @@ Root: `/home/gama/sgx535-offline/gallium-native-client-20261101/v1`.
 OpenGL/GLES capability admission, continuous execution, desktop acceleration
 and installation remain unfinished. No FPS or API-conformance claim follows
 from these results.
+
+Eight-profile kernel, new adapter/client and supervisor qualification:
+`/home/gama/sgx535-offline/gallium-scene-profiles-20261101/v1`.
+`PRESERVATION.json` proves first-six compiled data equality;
+`controller/RESULT.json` covers 53 cases in three variants;
+`replay/RESULT.json` sends actual Gallium images through the existing deep
+kernel validators in three resolutions and three variants;
+`SUPERVISOR_TESTS.json` covers 14 success/failure scenarios;
+`kbuild/RESULT.json` records the full module build without new warnings;
+`boot/INITRD_BUILD.json` and `boot/INIT_CHAIN_TEST_RESULTS.json` record the
+candidate identity chain and seven-N checks. These are offline results.
+The candidate has not yet been deployed or booted by this qualification.

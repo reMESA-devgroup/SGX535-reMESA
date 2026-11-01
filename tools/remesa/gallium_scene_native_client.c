@@ -5,8 +5,8 @@
  * Diagnostic reads happen INSIDE the native callback after authenticated
  * kernel retirement and BEFORE capture consumption frees temporary owners.
  * This collector is separate from the normal driver path.
- * Exact profile fixtures are required. Existing kernel profiles5/6 do not
- * admit the relocated Gallium graph: qualify a matching closed kernel before
+ * Exact profile fixtures are required. Kernel profiles7/8 must independently
+ * qualify this relocated Gallium graph: use the matching closed kernel before
  * executing physically. --prepare-only never enters the scene ioctl.
  */
 #include "remesa_linux_memory.h"
@@ -145,7 +145,7 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  struct remesa_linux_memory *m=priv;CHECK(submit&&submit->packet&&submit->context==remesa_linux_memory_context(m));
  timings[1]=ns();check_placement(m,submit->packet);guards(m);dump_backing(m,submit->packet,false);timings[2]=ns();
  if(prepare_only)return REMESA_NOT_ISSUED;
- enum remesa_dispatch result=remesa_linux_memory_scene_lab_dispatch(m,submit,receipt);timings[3]=ns();
+ enum remesa_dispatch result=remesa_linux_memory_gallium_scene_lab_dispatch(m,submit,receipt);timings[3]=ns();
  struct remesa_scene_probe_request response;int e=remesa_linux_memory_scene_lab_response(m,&response);
  if(!e)output(out_dir,"RESPONSE.bin",&response,sizeof response);
  if(result==REMESA_ISSUED){
