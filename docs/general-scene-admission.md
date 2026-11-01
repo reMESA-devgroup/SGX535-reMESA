@@ -97,3 +97,30 @@ actual publication/TA start, native plans and existing qualified physical input
 contracts before changing any shader or geometry encoder. Further instrumentation
 must remain bounded and LAB-only; a complete lifecycle receipt alone must never
 qualify rendering.
+
+## Saved LAB source trace
+
+The separate root-only `DRM_REMESA_SCENE_TRACE` query (slot 12) returns a saved
+4256-byte metadata snapshot in a 4272-byte request. Version/context are inputs;
+reserved and all snapshot bytes must enter zero. Both LAB controls must still
+be enabled and the actual open endpoint must belong to the requesting DRM file,
+device and context. A foreign or closed context cannot retrieve the snapshot.
+No MMIO, memory mapping, new status sample, allocation, submission, source
+transition or retirement occurs in this query.
+
+The admission controller copies its existing observer events and timestamps,
+CPU publication duration, TA/raster dispatch timestamps, prepared action plans,
+USE banks and held binding metadata before freeing the heap controller. It
+copies no kernel pointers or CPU framebuffer data. Plans represent intended
+writes; they are not register readbacks. The snapshot and query share the
+existing controller mutex. Source/root/job/backing release conditions are
+unchanged, including retained failures. Ordinary frame paths do not save or
+query this LAB snapshot.
+
+Use the matching collector's `--trace` option only with the trace-enabled test
+module. `--region-full` additionally reads the complete small REGION after
+confirmed retirement; closed profile loading caps that mapping at 1 MiB. It
+never reads or aliases the 32 MiB DPM pools. All files remain LAB evidence;
+neither successful trace collection nor status events alone approve pixels.
+Host timestamps include dispatch, polling and CPU overhead; they are not a
+hardware GPU execution counter.

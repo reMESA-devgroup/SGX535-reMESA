@@ -20,6 +20,57 @@ struct remesa_scene_probe {
 };
 static struct remesa_scene_probe *scene_probe_retained;
 static bool scene_probe_consumed;
+static struct remesa_scene_probe_trace scene_probe_trace;
+/* scene_probe_lock serializes both snapshot publication and its read-only
+ * query. No allocation, register read or new source sample is introduced. */
+static void scene_probe_save_trace(const struct remesa_scene_probe *p,
+ const struct remesa_scene_probe_request *r)
+{
+ struct remesa_scene_probe_trace *t=&scene_probe_trace;unsigned i;
+ BUILD_BUG_ON(sizeof(*t)!=4256);
+ BUILD_BUG_ON(sizeof(p->job.service_plan.load)!=sizeof(t->load_actions));
+ BUILD_BUG_ON(sizeof(p->job.service_plan.ta)!=sizeof(t->ta_actions));
+ BUILD_BUG_ON(sizeof(p->job.service_plan.raster)!=sizeof(t->raster_actions));
+ memset(t,0,sizeof(*t));t->version=1;t->bytes=sizeof(*t);
+ t->profile=r->profile;t->stages=r->stages;t->phase=r->phase;t->ledger=r->ledger;
+ t->error=r->error;t->retained=r->retained;t->context=r->context;
+ t->operation=r->operation;t->cookie=r->cookie;
+ t->cpu_flush_ns=p->backend.cpu_flush_ns;t->ta_begin_ns=p->backend.ta_fire_begin_ns;
+ t->ta_end_ns=p->backend.ta_fire_end_ns;t->raster_begin_ns=p->backend.raster_fire_begin_ns;
+ t->raster_end_ns=p->backend.raster_fire_end_ns;
+ t->event_count=p->observation.event_count;
+ if(t->event_count>64)t->event_count=64;
+ t->zero_samples=p->observation.zero_samples;
+ for(i=0;i<t->event_count;i++){
+  const struct remesa_stream_source_event *e=&p->observation.events[i];
+  t->events[i]=(struct remesa_scene_trace_event){e->kind,e->sequence,e->status1,e->status2,e->ledger,e->phase,p->observation.event_ns[i]};
+ }
+ t->binding_count=p->job.count>17?17:p->job.count;
+ for(i=0;i<t->binding_count;i++)t->bindings[i]=(struct remesa_scene_trace_binding){
+  p->job.views[i].binding.id,p->packet.bindings[i].access,p->job.views[i].binding.va,p->job.views[i].binding.bytes};
+ memcpy(t->ta,p->job.service_plan.commands.ta,sizeof(t->ta));
+ memcpy(t->raster,p->job.service_plan.commands.raster,sizeof(t->raster));
+ for(i=0;i<16;i++){t->use_banks[2*i]=p->job.service_plan.use.banks[i].offset;t->use_banks[2*i+1]=p->job.service_plan.use.banks[i].word;}
+ t->use_mask=p->job.service_plan.use.mask;t->load_count=p->job.service_plan.load_count;
+ t->ta_count=p->job.service_plan.ta_count;t->raster_count=p->job.service_plan.raster_count;
+ memcpy(t->load_actions,p->job.service_plan.load,sizeof(t->load_actions));
+ memcpy(t->ta_actions,p->job.service_plan.ta,sizeof(t->ta_actions));
+ memcpy(t->raster_actions,p->job.service_plan.raster,sizeof(t->raster_actions));
+}
+int remesa_scene_trace_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+{
+ struct remesa_scene_trace_request *r=data;const u8 *bytes;unsigned i;int error=0;
+ BUILD_BUG_ON(sizeof(*r)!=4272);BUILD_BUG_ON(offsetof(struct remesa_scene_probe_trace,events)!=1800);
+ if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
+ if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
+ if(r->version!=1||r->reserved||!r->context)return -EINVAL;
+ bytes=(const u8 *)&r->trace;for(i=0;i<sizeof(r->trace);i++)if(bytes[i])return -EINVAL;
+ mutex_lock(&scene_probe_lock);mutex_lock(&endpoint_lock);
+ if(!endpoint||endpoint->dev!=dev||endpoint->file!=file||endpoint->private_device_lost||endpoint->context!=r->context)error=-EACCES;
+ else if(!scene_probe_trace.version||scene_probe_trace.context!=r->context)error=-ENODATA;
+ else r->trace=scene_probe_trace;
+ mutex_unlock(&endpoint_lock);mutex_unlock(&scene_probe_lock);return error;
+}
 static u32 scene_probe_id(const struct remesa_scene_packet *original,const u32 *ids,u32 old)
 {unsigned i;for(i=0;i<17;i++)if(original->bindings[i].id==old)return ids[i];return 0;}
 static int scene_probe_packet(struct remesa_scene_probe *p,const struct remesa_scene_probe_profile *profile,
@@ -138,8 +189,11 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
   if(!cleanup){cleanup=remesa_private_session_release(s,p);if(!cleanup)p->backing_owned=false;}
   if(cleanup&&!error)error=cleanup;
  }
- if(!cleanup){if(!error)r->stages|=8;scene_probe_retained=NULL;kfree(p);p=NULL;}
+ if(!cleanup){if(!error)r->stages|=8;scene_probe_retained=NULL;}
  else if(!error)error=cleanup;
- r->error=error;r->retained=scene_probe_retained!=NULL;error=0;
+ r->error=error;r->retained=scene_probe_retained!=NULL;
+ if(scene_probe_consumed)scene_probe_save_trace(p,r);
+ if(!cleanup){kfree(p);p=NULL;}
+ error=0;
  done:mutex_unlock(&scene_probe_lock);return error;
 }

@@ -3,4 +3,5 @@
 #define REMESA_SCENE_PROBE_H
 struct drm_device;struct drm_file;
 int remesa_scene_probe_ioctl(struct drm_device *,void *,struct drm_file *);
+int remesa_scene_trace_ioctl(struct drm_device *,void *,struct drm_file *);
 #endif

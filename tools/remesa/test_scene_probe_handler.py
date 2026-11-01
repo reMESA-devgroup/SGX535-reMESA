@@ -22,7 +22,8 @@ struct drm_device {struct drm_psb_private *dev_private;};struct drm_file {unsign
 #include "remesa_twod_reservation.h"
 '''
 suffix='''
-struct remesa_stream_observation {unsigned state;};
+struct remesa_stream_source_event {u32 kind,sequence,status1,status2,ledger,phase;};
+struct remesa_stream_observation {unsigned state,event_count,zero_samples;struct remesa_stream_source_event events[64];u64 event_ns[64];};
 struct backing {bool live,pinned,reserved,quarantine,lease,initialized,zero_pristine;unsigned holds,color_vmas;u32 generation;void *cached_job_view;struct resource va;struct drm_gem_object gem;};
 struct retained_job {bool live;u64 cookie;};
 struct remesa_gem_memory {struct drm_device *dev;struct drm_file *file;u64 context;struct resource root;struct mutex lock;const void *private_session;void *executor;bool stream_bound,ta_cache_domains,private_device_lost,private_source_held,private_source_poisoned;struct retained_job jobs[8];struct backing bo[32];};

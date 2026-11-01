@@ -104,7 +104,7 @@ int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,struct sgx535_gm
  c->loan.execution_attempted=true;c->loan.execution_started=true;c->memory->jobs[0].cookie=91;
  if(fault==EXEC)return -EIO;
  c->session.phase=SGX535_PHASE_RETIRED;c->session.observed_events=7;c->session.sequence=91;
- c->state=REMESA_SCENE_JOB_ACKNOWLEDGED;c->loan.execution_retired=fault!=NO_RECEIPT;o->state=1;return 0;
+ c->state=REMESA_SCENE_JOB_ACKNOWLEDGED;c->loan.execution_retired=fault!=NO_RECEIPT;o->state=1;o->event_count=2;o->zero_samples=3;o->events[0]=(struct remesa_stream_source_event){4,91,0x2000,0,0,5};o->events[1]=(struct remesa_stream_source_event){4,91,4,0,3,8};o->event_ns[0]=1234567890123ULL;o->event_ns[1]=1234567890456ULL;return 0;
 }
 int remesa_gem_private_release(struct remesa_gem_private *loan)
 {CHECK(endpoint_lock.held&&loan->execution_retired&&loan->live&&endpoint->jobs[0].live);if(fault==LOAN_DROP)return -EIO;loan->guard->mmu_owner=NULL;memset(loan,0,sizeof(*loan));endpoint->executor=NULL;return 0;}
@@ -147,6 +147,24 @@ int main(int argc,char **argv)
  if(fault==OK||fault==OK640){
   CHECK(!error&&!request.error&&!request.retained&&request.stages==15&&request.phase==9&&request.ledger==7&&request.operation==91&&request.cookie==91);
   CHECK(!memory.private_session&&!memory.private_source_held&&!memory.jobs[0].live&&source_ends==1&&backing_ends==1&&allocs==frees);
+  struct remesa_scene_trace_request *query=calloc(1,sizeof(*query));CHECK(query);
+  unsigned before_reads=reads;query->version=1;query->context=77;
+  CHECK(!remesa_scene_trace_ioctl(&dev,query,&file));
+  CHECK(query->trace.version==1&&query->trace.bytes==4256&&query->trace.operation==91&&query->trace.cookie==91&&query->trace.stages==15&&query->trace.profile==request.profile);
+  CHECK(query->trace.event_count==2&&query->trace.zero_samples==3&&query->trace.events[0].status1==0x2000&&query->trace.events[1].ns==1234567890456ULL&&query->trace.binding_count==17);
+  for(unsigned i=0;i<17;i++)CHECK(query->trace.bindings[i].id==request.ids[i]&&query->trace.bindings[i].address==expected_profile->bindings[i].address);
+  CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL); /* nonzero output cannot be replayed as input */
+  memset(&query->trace,0,sizeof(query->trace));query->context=78;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EACCES);query->context=77;
+  struct drm_file other={2};CHECK(remesa_scene_trace_ioctl(&dev,query,&other)==-EACCES);
+  memory.private_device_lost=true;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EACCES);memory.private_device_lost=false;
+  administrator=false;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EPERM);administrator=true;
+  scene_probe_enabled=false;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EOPNOTSUPP);scene_probe_enabled=true;
+  memory_enabled=false;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EOPNOTSUPP);memory_enabled=true;
+  query->version=2;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL);query->version=1;
+  query->reserved=1;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL);query->reserved=0;
+  ((u8*)&query->trace)[4255]=1;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL);memset(&query->trace,0,sizeof(query->trace));
+  CHECK(!remesa_scene_trace_ioctl(&dev,query,&file)&&reads==before_reads);free(query);
+
  }else CHECK(error||request.error);
  bool must_retain=fault==LOST||fault==PREPARE_HELD||fault==EXEC||fault==NO_RECEIPT||
   fault==LOAN_DROP||fault==GUARD_DROP||fault==JOB_DROP||fault==SOURCE_END||fault==BACKING_END||fault==LOST_AFTER_CLAIM;

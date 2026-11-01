@@ -826,6 +826,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '#include "remesa_scene_probe.h"\n#include "remesa_scene_probe_uapi.h"\n'
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_PROBE, remesa_scene_probe_ioctl, DRM_ROOT_ONLY),\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_TRACE, remesa_scene_trace_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_SESSION_LAB, remesa_private_session_lab_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'

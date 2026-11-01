@@ -7,6 +7,7 @@ requires an independently pinned recoverable test boot and matching profile.
 import argparse,fcntl,json,os,struct,time
 from pathlib import Path
 import private_probe as p
+import scene_trace
 PROBE=struct.Struct('<IIQ17IIQQ5Ii4I')
 assert PROBE.size==144
 
@@ -47,7 +48,7 @@ def receipt(packet,context,profile,ids,budget):
  if (not r['operation'] or r['cookie']!=r['operation'] or r['core']!=0x01130000 or r['revision']!=0x10201 or r['pds_base']!=0x20000000 or r['phase']!=9 or r['ledger']!=7 or r['error'] or r['retained'] or r['stages']!=15):raise RuntimeError('incomplete scene lifecycle receipt: '+json.dumps(r))
  return r
 
-def collect(device,output,plan,images,budget,region_prefix=False):
+def collect(device,output,plan,images,budget,region_prefix=False,trace=False,region_full=False):
  report={'status':'PREPARING','identity':p.device_identity(device),'plan':plan,'probe_ioctl_calls':0,'hardware_driver_qualified':False,'requires_independent_pixel_oracle':True}
  def save():(output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
  save();fd=os.open(device,os.O_RDWR|os.O_CLOEXEC);memory=p.Memory(fd,0)
@@ -81,7 +82,17 @@ def collect(device,output,plan,images,budget,region_prefix=False):
   for rid,va,n in expected:
    info=memory.info(rid);report['object_info'].append({'id':rid,'info':list(info)})
    if info[1:3]!=(n,va) or any(info[i] for i in (6,7,8,11)) or info[9]!=1 or info[10]!=n//4096 or info[12]!=n//4096:raise RuntimeError('restored mapping/ownership mismatch')
-  complete=True;start=time.monotonic();readbacks={}
+  complete=True
+  if trace:
+   packet=bytearray(scene_trace.QUERY.pack(1,0,memory.context,bytes(4256)));request=bytes(packet)
+   (output/'TRACE-REQUEST.bin').write_bytes(packet);report['trace_ioctl_calls']=1
+   try:
+    if fcntl.ioctl(fd,p.ioctl_number(12,len(packet)),packet,True):raise RuntimeError('nonzero trace query return')
+   finally:(output/'TRACE-RESPONSE.bin').write_bytes(packet)
+   if packet[:16]!=request[:16]:raise ValueError('trace query changed immutable owner')
+   report['trace']=scene_trace.decode(bytes(packet[16:]),memory.context,report['receipt'],plan)
+   if [x['id'] for x in report['trace']['bindings']]!=ids:raise ValueError('trace binding IDs differ from submitted objects')
+  start=time.monotonic();readbacks={}
   selected=sorted(set(images)|{plan['color_index'],plan['depth_index']})
   for i in selected:
    data=memory.read(ids[i],plan['bindings'][i]['bytes']);(output/('bo-'+str(i)+'-readback.bin')).write_bytes(data)
@@ -92,10 +103,10 @@ def collect(device,output,plan,images,budget,region_prefix=False):
    data=memory.read(g['id'],4096);(output/('guard-'+str(i)+'-readback.bin')).write_bytes(data)
    if data!=b'\xa5'*4096:raise RuntimeError('unmapped-private guard changed')
   report['guards_intact']=True
-  if region_prefix:
-   start=time.monotonic();i=plan['region_index'];n=min(4096,plan['bindings'][i]['bytes'])
-   data=memory.read(ids[i],n);(output/'region-prefix-readback.bin').write_bytes(data)
-   report['region_prefix']={'index':i,'bytes':len(data),'nonzero_bytes':sum(x!=0 for x in data),'sha256':p.sha(data),'wall_seconds':time.monotonic()-start}
+  if region_prefix or region_full:
+   start=time.monotonic();i=plan['region_index'];n=plan['bindings'][i]['bytes'] if region_full else min(4096,plan['bindings'][i]['bytes'])
+   data=memory.read(ids[i],n);(output/('region-full-readback.bin' if region_full else 'region-prefix-readback.bin')).write_bytes(data)
+   report['region_readback' if region_full else 'region_prefix']={'index':i,'bytes':len(data),'nonzero_bytes':sum(x!=0 for x in data),'sha256':p.sha(data),'wall_seconds':time.monotonic()-start}
   report['status']='RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING'
  except BaseException as e:report['status']='FAILED';report['error']=str(e);raise
  finally:
@@ -114,9 +125,9 @@ def collect(device,output,plan,images,budget,region_prefix=False):
  return report
 
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--size',choices=['1280x800','640x640'],default='1280x800');parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--budget-ms',type=int,default=1000);parser.add_argument('--execute',action='store_true');parser.add_argument('--region-prefix',action='store_true',help='LAB-only bounded post-retirement REGION prefix; never reads full DPM pools');a=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--size',choices=['1280x800','640x640'],default='1280x800');parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--budget-ms',type=int,default=1000);parser.add_argument('--execute',action='store_true');parser.add_argument('--region-prefix',action='store_true',help='LAB-only bounded post-retirement REGION prefix; never reads full DPM pools');parser.add_argument('--trace',action='store_true',help='Query saved LAB plans and raw source events; requires matching trace-enabled module');parser.add_argument('--region-full',action='store_true',help='LAB-only complete small REGION readback, capped at1MiB; no DPM readback');a=parser.parse_args()
  if not 1<=a.budget_ms<=10000:parser.error('budget must be1..10000ms')
  plan,images=load_profile(a.catalogue,a.size,a.asset_root);a.output.mkdir(parents=True,exist_ok=False)
  if not a.execute:(a.output/'PLAN.json').write_text(json.dumps({'status':'OFFLINE_PLAN_ONLY','GPU_operations':0,'plan':plan},indent=2)+'\n');return
- collect(a.device,a.output,plan,images,a.budget_ms,a.region_prefix)
+ collect(a.device,a.output,plan,images,a.budget_ms,a.region_prefix,a.trace,a.region_full)
 if __name__=='__main__':main()
