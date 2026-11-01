@@ -66,5 +66,19 @@ int main(void)
  assert(remesa_ta_references_walk(image,bytes,NULL,NULL,(void *)image)==EINVAL);
  assert(remesa_ta_references_walk((void *)(UINTPTR_MAX-1),bytes,NULL,NULL,&counts)==EINVAL);
  assert(!memcmp(&counts,&initial,sizeof counts));
- puts("PASS TA reference grammar: original copy/compiled/close encoders,1/2/16 draws,52-reference bound, full syntax before callbacks, transactional counts, aliases/wrap/malformed tails; minimum spans only, GPU0");return 0;
+ /* An initialization predecessor shares the exact clear INDEX descriptor;
+  * it adds one state reference, preserving all16 compiled draw windows. */
+ for(unsigned n=0;n<3;n++){
+  size_t original=build(sizes[n],image);memmove(image+28,image,original);
+  assert(!remesa_ta_state_reference_encode(0x20080340,11,false,image));
+  memcpy(image+8,image+36,20);bytes=original+28;v=(struct visitor){0};
+  assert(!remesa_ta_references_walk(image,bytes,visit,&v,&counts));
+  assert(counts.draws==sizes[n]&&counts.references==3*(sizes[n]+1)+2&&v.calls==counts.references);
+  memcpy(saved,image,bytes);
+  image[12]^=2;v=(struct visitor){0};counts=initial;
+  assert(remesa_ta_references_walk(image,bytes,visit,&v,&counts)==EINVAL&&!v.calls&&!memcmp(&counts,&initial,sizeof counts));
+  memcpy(image,saved,bytes);memcpy(image,image+28,8);v=(struct visitor){0};
+  assert(remesa_ta_references_walk(image,bytes,visit,&v,&counts)==EINVAL&&!v.calls&&!memcmp(&counts,&initial,sizeof counts));
+ }
+ puts("PASS TA reference grammar: original copy/compiled/close encoders,1/2/16 draws,52 legacy /53 initialized references, exact shared descriptor, full syntax before callbacks, transactional counts, aliases/wrap/malformed tails; minimum spans only, GPU0");return 0;
 }

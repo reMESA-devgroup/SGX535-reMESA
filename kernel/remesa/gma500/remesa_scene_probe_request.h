@@ -5,7 +5,7 @@
 static inline int remesa_scene_probe_request_valid(const struct remesa_scene_probe_request *r)
 {
  unsigned i,j;
- if(!r||r->version!=1||r->profile<1||r->profile>2||!r->context||!r->budget_ms||r->budget_ms>10000||
+ if(!r||r->version!=1||r->profile<1||r->profile>REMESA_SCENE_PROBE_PROFILE_COUNT||!r->context||!r->budget_ms||r->budget_ms>10000||
     r->operation||r->cookie||r->core||r->revision||r->pds_base||r->phase||r->ledger||r->error||
     r->retained||r->stages||r->reserved[0]||r->reserved[1])return 0;
  for(i=0;i<17;i++){

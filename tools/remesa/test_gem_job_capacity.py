@@ -80,7 +80,7 @@ def main():
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_use.h','remesa_gem_scene_use.inc']]
  files += [w/'mesa/sgx535'/name for name in ['remesa_program_registers.c','remesa_program_registers.h']]+[w/'include/remesa/scene_use_limits.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_ta.h','remesa_gem_scene_ta.inc']]+[w/'include/remesa/ta_references.h',w/'mesa/sgx535/remesa_ta_index.c',w/'mesa/sgx535/remesa_ta_index.h']
- files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_states.h','remesa_gem_scene_states.inc']]+[w/'include/remesa/state_upload.h']
+ files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_states.h','remesa_gem_scene_states.inc']]+[w/'include/remesa/state_upload.h',w/'include/remesa/scene_initial.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_vertices.h','remesa_gem_scene_vertices.inc']]+[w/'include/remesa/vertex_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_fragments.h','remesa_gem_scene_fragments.inc']]+[w/'include/remesa/fragment_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_background.h','remesa_gem_scene_background.inc']]+[w/'include/remesa/background_fetch.h']

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After TA reference checker. */
 #include "remesa_gem_scene_states.h"
 #include "remesa_state_upload.h"
+#include "remesa_scene_initial.h"
 /* Keep this transactional result off the prerequisite validators' stack.
  * The noinline boundary is intentional on the 8 KiB i486 kernel stack. */
 static __attribute__((__noinline__)) int scene_states_build_checked(struct remesa_gem_private *loan,
@@ -14,8 +15,8 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
  for(ref=0;ref<ta->reference_count;ref++){
   u32 kind=ta->references[ref].kind,dwords,offset=ta->references[ref].byte_offset,n=value.count;
   struct remesa_state_upload decoded;u64 source_offset=0;u32 found_id=0,found_offset=0;
-  if(kind!=REMESA_TA_REF_PREFIX_STATE&&kind!=REMESA_TA_REF_DRAW_STATE&&kind!=REMESA_TA_REF_CLOSE_STATE)continue;
-  dwords=kind==REMESA_TA_REF_PREFIX_STATE?11:kind==REMESA_TA_REF_DRAW_STATE?14:2;
+  if(kind!=REMESA_TA_REF_INITIAL_STATE&&kind!=REMESA_TA_REF_PREFIX_STATE&&kind!=REMESA_TA_REF_DRAW_STATE&&kind!=REMESA_TA_REF_CLOSE_STATE)continue;
+  dwords=(kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)?11:kind==REMESA_TA_REF_DRAW_STATE?14:2;
   for(p=0;p<count&&views[p].binding.id!=ta->references[ref].id;p++);
   if(p==count||!views[p].cpu)return -EACCES;
   error=remesa_state_upload_pds((const u8 *)views[p].cpu+offset,60,dwords,&decoded);if(error)return -error;
@@ -28,7 +29,8 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
   if(loan->rules[s].access!=REMESA_MMU_GPU_READ||loan->rules[s].cached!=1||!views[s].cpu)return -EACCES;
   {
    const u8 *data=(const u8 *)views[s].cpu+source_offset;u32 header=remesa_ta_ref_word(data);
-   if(header!=(kind==REMESA_TA_REF_PREFIX_STATE?0x54c5u:kind==REMESA_TA_REF_DRAW_STATE?0xf41u:0x2000u))return -EINVAL;
+   if(header!=((kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)?0x54c5u:kind==REMESA_TA_REF_DRAW_STATE?0xf41u:0x2000u))return -EINVAL;
+   if(kind==REMESA_TA_REF_INITIAL_STATE&&!remesa_scene_initial_matches(data,decoded.source_bytes))return -EINVAL;
    if(kind==REMESA_TA_REF_CLOSE_STATE&&remesa_ta_ref_word(data+4)!=
       (((controls->command.width+15)>>4)<<16|((controls->command.height+15)>>4)))return -EINVAL;
   }
@@ -48,7 +50,7 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
   value.uploads[n].source_bytes=decoded.source_bytes;value.uploads[n].use_id=found_id;value.uploads[n].use_offset=found_offset;
   value.count++;
  }
- if(value.count!=ta->draw_count+2)return -EPROTO;
+ if(value.count!=ta->draw_count+2+(ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE))return -EPROTO;
  value.ticket=loan->ticket;*out=value;return 0;
 }
 

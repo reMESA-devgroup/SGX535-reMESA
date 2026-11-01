@@ -124,6 +124,7 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
  struct remesa_scene_probe_request *r=data;const struct remesa_scene_probe_profile *profile;
  struct remesa_gem_memory *s;struct drm_psb_private *dev_priv;struct remesa_scene_probe *p=NULL;
  struct retained_job *job;unsigned i;int error,cleanup=0;
+ BUILD_BUG_ON(sizeof(scene_probe_profiles)/sizeof(scene_probe_profiles[0])!=REMESA_SCENE_PROBE_PROFILE_COUNT);
  BUILD_BUG_ON(sizeof(*r)!=144);BUILD_BUG_ON(offsetof(struct remesa_scene_probe_request,operation)!=88);
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
  if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;

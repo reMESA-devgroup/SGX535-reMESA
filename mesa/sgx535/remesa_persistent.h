@@ -491,6 +491,11 @@ int remesa_persistent_linked_body_snapshot(const struct remesa_device *,void *bo
 int remesa_persistent_zclear_prefix_prepare(struct remesa_device *,
  uint32_t width,uint32_t height,float depth,uint32_t vertex_bank,
  uint32_t pixel_bank,uint32_t state_bank,void **bo);
+/* Explicit initialization predecessor plus the unchanged Z-clear. Shares its
+ * validated vertex/index/VS with the clear; no extra USSE program or BO. */
+int remesa_persistent_initialized_prefix_prepare(struct remesa_device *,
+ uint32_t width,uint32_t height,float depth,uint32_t vertex_bank,
+ uint32_t pixel_bank,uint32_t state_bank,void **bo);
 struct remesa_persistent_zclear_prefix_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle,width,height,index_count;
@@ -498,6 +503,7 @@ struct remesa_persistent_zclear_prefix_backing {
  size_t vertex_capacity_bytes,vertex_referenced_bytes,index_capacity_bytes,index_referenced_bytes;
  size_t use_offset[3],use_bytes[3],pds_offset[4],pds_bytes[4];
  size_t state_offset,state_bytes,ta_offset,ta_bytes;
+ size_t initial_state_offset,initial_pds_offset; /* zero for the preserved legacy prefix */
  float clear_depth; /* Same validated scalar used by the immutable clear geometry. */
  struct remesa_use_entry_plan entries[3];
 };

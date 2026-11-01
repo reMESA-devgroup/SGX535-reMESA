@@ -1,3 +1,4 @@
+#include "remesa/scene_initial.h"
 /* SPDX-License-Identifier: MIT */
 #include "remesa_persistent.h"
 #include "remesa_shader_program.h"
@@ -35,7 +36,7 @@ struct linked_body {
 };
 struct linked_ta {
  struct memory *prefix,*body;size_t bytes;
- uint8_t commands[40+28*REMESA_LINKED_BODY_MAX_DRAWS];
+ uint8_t commands[68+28*REMESA_LINKED_BODY_MAX_DRAWS];
 };
 struct linked_dpm {struct memory *table,*parameter;};
 struct linked_targets {struct memory *ta,*color,*depth;uint32_t pitch;};
@@ -2334,9 +2335,9 @@ static int zclear_entry(const struct memory *b,size_t offset,size_t length,uint3
 }
 static void zclear_word(uint8_t *out,uint32_t v)
 {for(unsigned i=0;i<4;i++)out[i]=(uint8_t)(v>>(i*8));}
-int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
+static int zclear_prefix_prepare(struct remesa_device *device,
  uint32_t width,uint32_t height,float depth,uint32_t vertex_bank,
- uint32_t pixel_bank,uint32_t state_bank,void **out)
+ uint32_t pixel_bank,uint32_t state_bank,void **out,bool initial)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
@@ -2347,7 +2348,7 @@ int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
  const uint32_t banks[3]={vertex_bank,pixel_bank,state_bank};
  for(unsigned i=0;i<3;i++){e=remesa_use_base_offset(banks[i],&ignored);if(e)return e;}
  if(vertex_bank==pixel_bank||pixel_bank==state_bank)return EBUSY;
- uint8_t image[444]={0};size_t n=0;
+ uint8_t image[556]={0};size_t n=0;
  struct remesa_shader_ir ir={.schema=REMESA_SHADER_IR_SCHEMA,.stage=REMESA_IR_VERTEX,.count=2};
  ir.instructions[0]=(struct remesa_ir_instruction){.op=REMESA_IR_INPUT,.components=4,.type=REMESA_IR_FLOAT32};
  ir.instructions[1]=(struct remesa_ir_instruction){.op=REMESA_IR_POSITION,
@@ -2371,7 +2372,7 @@ int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
  memcpy(image+64,geometry.positions,64);memcpy(image+128,geometry.indices,12);
  struct remesa_persistent_zclear_prefix_backing *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
  struct persistent *d=device->priv;void *object=NULL;size_t before=d->allocated;
- e=allocate_class(d,sizeof(image),&object,REMESA_VA_PROGRAM);
+ e=allocate_class(d,initial?556:444,&object,REMESA_VA_PROGRAM);
  if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
  struct memory *b=object;b->zclear_prefix=owned;
  uint32_t fixup[3];
@@ -2406,15 +2407,24 @@ int remesa_persistent_zclear_prefix_prepare(struct remesa_device *device,
   .pds_byte_offset=160,.pds_object_bytes=64,.pds_data_dwords=12,
   .descriptor_a_field10=4,.descriptor_b_field38=4};
  e=remesa_ta_index_triangles_encode(&index,image+424);if(e)goto fail;
+ if(initial){
+  /* Reuse the preserved initialization DATA and the already validated11-word
+   * state-copy program. Added PDS CODE is a real upload task, not padding. */
+  memcpy(image+448,remesa_scene_initial_data,44);
+  const struct remesa_pds_state_image_request init={.source_allocation_address=b->va,
+   .source_allocation_bytes=b->allocated,.source_offset=448,.state_dwords=11,.use_lower19=fixup[2]};
+  e=remesa_pds_structure_encode_state_image(&init,image+496,mask,60,&n);if(e)goto fail;
+ }
  *owned=(struct remesa_persistent_zclear_prefix_backing){.owner=d->cfg.context,.generation=b->token.generation,
   .gpu_va=b->va,.handle=b->handle,.width=width,.height=height,.index_count=3,.allocation_bytes=b->allocated,
-  .used_bytes=sizeof(image),.vertex_offset=64,.index_offset=128,
+  .used_bytes=initial?556:444,.vertex_offset=64,.index_offset=128,
   .vertex_capacity_bytes=64,.vertex_referenced_bytes=48,.index_capacity_bytes=12,.index_referenced_bytes=6,
   .use_offset={0,16,32},.use_bytes={16,8,16},.pds_offset={160,224,288,352},.pds_bytes={64,56,4,60},
-  .state_offset=304,.state_bytes=44,.ta_offset=416,.ta_bytes=28,.clear_depth=depth,
+  .state_offset=304,.state_bytes=44,.ta_offset=416,.ta_bytes=28,
+  .initial_state_offset=initial?448:0,.initial_pds_offset=initial?496:0,.clear_depth=depth,
   .entries={owned->entries[0],owned->entries[1],owned->entries[2]}};
- e=owned_image_lease(d,b,image,sizeof(image),true);if(e)goto fail;
- e=owned_image_lease(d,b,image,sizeof(image),false);if(e)goto fail;
+ e=owned_image_lease(d,b,image,owned->used_bytes,true);if(e)goto fail;
+ e=owned_image_lease(d,b,image,owned->used_bytes,false);if(e)goto fail;
  e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
  if(e){memory_error(d,b,EOWNERDEAD);e=EOWNERDEAD;goto fail;}
  b->readable=true;*out=b;return 0;
@@ -2422,6 +2432,12 @@ fail:
  if(b->quarantined){*out=b;return EOWNERDEAD;}
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
 }
+int remesa_persistent_zclear_prefix_prepare(struct remesa_device *d,
+ uint32_t w,uint32_t h,float z,uint32_t vb,uint32_t pb,uint32_t sb,void **out)
+{return zclear_prefix_prepare(d,w,h,z,vb,pb,sb,out,false);}
+int remesa_persistent_initialized_prefix_prepare(struct remesa_device *d,
+ uint32_t w,uint32_t h,float z,uint32_t vb,uint32_t pb,uint32_t sb,void **out)
+{return zclear_prefix_prepare(d,w,h,z,vb,pb,sb,out,true);}
 int remesa_persistent_zclear_prefix_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_zclear_prefix_backing *out)
 {
@@ -2489,7 +2505,7 @@ int remesa_persistent_linked_ta_prepare(struct remesa_device *device,void *prefi
  e=linked_ta_reads(d,prefix,body,reads,&count,banks,present);if(e)return e;
  if(count>=REMESA_PERSISTENT_BUFFERS)return E2BIG; /* include the new TA owner */
  if(prefix->refs==UINT32_MAX||body->refs==UINT32_MAX)return EBUSY;
- uint8_t image[28+REMESA_LINKED_BODY_MAX_DRAWS*28+12]={0};
+ uint8_t image[56+REMESA_LINKED_BODY_MAX_DRAWS*28+12]={0};
  const struct remesa_persistent_zclear_prefix_backing *p=prefix->zclear_prefix;
  e=remesa_ta_state_reference_encode(p->gpu_va+p->pds_offset[3],11,false,image);if(e)return e;
  const struct remesa_ta_index_request index={.index_bo_gpu_va=p->gpu_va,
@@ -2498,8 +2514,15 @@ int remesa_persistent_linked_ta_prepare(struct remesa_device *device,void *prefi
   .pds_byte_offset=p->pds_offset[0],.pds_object_bytes=p->pds_bytes[0],.pds_data_dwords=12,
   .descriptor_a_field10=4,.descriptor_b_field38=4};
  e=remesa_ta_index_triangles_encode(&index,image+8);if(e)return e;
- size_t bytes=28+body->linked_body->bytes;
- memcpy(image+28,body->linked_body->commands,body->linked_body->bytes);
+ size_t prefix_bytes=p->initial_pds_offset?56:28;
+ if(p->initial_pds_offset){
+  /* Preserve the exact old clear group as the second primitive. Both INDEX
+   * commands refer to the SAME immutable vertex/index fetch window. */
+  memcpy(image+28,image,28);
+  e=remesa_ta_state_reference_encode(p->gpu_va+p->initial_pds_offset,11,false,image);if(e)return e;
+ }
+ size_t bytes=prefix_bytes+body->linked_body->bytes;
+ memcpy(image+prefix_bytes,body->linked_body->commands,body->linked_body->bytes);
  struct linked_ta *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
  *owned=(struct linked_ta){.prefix=prefix,.body=body,.bytes=bytes};
  memcpy(owned->commands,image,bytes);
@@ -2532,7 +2555,7 @@ int remesa_persistent_linked_ta_snapshot(const struct remesa_device *device,void
  struct remesa_persistent_linked_ta_backing value={.owner=d->cfg.context,.generation=b->token.generation,
   .gpu_va=b->va,.handle=b->handle,.width=p->width,.height=p->height,
   .draw_count=t->body->linked_body->draw_count,.read_allocation_count=count,
-  .allocation_bytes=b->allocated,.command_bytes=t->bytes,.draw_offset=28,.close_offset=t->bytes-12};
+  .allocation_bytes=b->allocated,.command_bytes=t->bytes,.draw_offset=t->prefix->zclear_prefix->initial_pds_offset?56:28,.close_offset=t->bytes-12};
  for(unsigned i=0;i<count;i++){
   value.reads[i].generation=reads[i]->token.generation;value.reads[i].gpu_va=reads[i]->va;
   value.reads[i].handle=reads[i]->handle;value.reads[i].access=REMESA_ACCESS_READ;
@@ -3292,6 +3315,11 @@ static int scene_ta_reference(void *context,const struct remesa_ta_reference *re
  if(!b)return ENOENT;
  int e=linked_live(d,b,false);if(e)return e;
  switch(ref->kind){
+ case REMESA_TA_REF_INITIAL_STATE:{
+  const struct remesa_persistent_zclear_prefix_backing *p=t->prefix->zclear_prefix;
+  if(b!=t->prefix||!p->initial_pds_offset||offset!=p->initial_pds_offset)return EINVAL;
+  object_bytes=60;break;
+ }
  case REMESA_TA_REF_PREFIX_STATE:
  case REMESA_TA_REF_PREFIX_VERTEX:
  case REMESA_TA_REF_PREFIX_INDEX:{
@@ -3367,7 +3395,8 @@ int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *device
  struct remesa_persistent_scene_vertices value={.owner=token.owner,.serial=token.serial,
   .draw_count=ta.draw_count,.window_count=ta.draw_count+1,.incomplete=c->footprint.incomplete};
  for(unsigned draw=0;draw<value.window_count;draw++){
-  unsigned ir=draw*3+1,pr=draw*3+2;struct memory *vertex=NULL;size_t offset,bytes;uint32_t records;
+  unsigned initial=ta.references[0].kind==REMESA_TA_REF_INITIAL_STATE;
+  unsigned ir=initial+draw*3+1,pr=initial+draw*3+2;struct memory *vertex=NULL;size_t offset,bytes;uint32_t records;
   if(!draw){
    vertex=commands->linked_ta->prefix;
    offset=vertex->zclear_prefix->vertex_offset;bytes=vertex->zclear_prefix->vertex_referenced_bytes;

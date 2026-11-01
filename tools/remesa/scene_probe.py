@@ -39,7 +39,7 @@ def load_profile(catalogue,size,asset_root=None):
   for va in [min(b['va'] for b in group)-4096,max(b['va']+b['bytes'] for b in group)]:
    if lower<=va and va+4096<=upper and not any(va<b['va']+b['bytes'] and b['va']<va+4096 for b in bindings) and va not in guards:guards.append(va)
  if len(bindings)+len(guards)>32:raise ValueError('guard allocation exceeds endpoint capacity')
- return {'profile':index+1,'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
+ return {'profile':index+1+(2 if c.get('initialization_predecessor',False) else 0),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
 
 def receipt(packet,context,profile,ids,budget):
  q=PROBE.unpack(packet)

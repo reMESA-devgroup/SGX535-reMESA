@@ -12,11 +12,11 @@ typedef uint64_t remesa_ta_ref_u64;
 typedef uintptr_t remesa_ta_ref_uptr;
 #endif
 #define REMESA_TA_REFERENCE_MAX_DRAWS 16u
-#define REMESA_TA_REFERENCE_MAX (3u*(1u+REMESA_TA_REFERENCE_MAX_DRAWS)+1u)
+#define REMESA_TA_REFERENCE_MAX (3u*(1u+REMESA_TA_REFERENCE_MAX_DRAWS)+2u)
 enum remesa_ta_reference_kind {
  REMESA_TA_REF_PREFIX_STATE=1,REMESA_TA_REF_PREFIX_INDEX,REMESA_TA_REF_PREFIX_VERTEX,
  REMESA_TA_REF_DRAW_STATE,REMESA_TA_REF_DRAW_INDEX,REMESA_TA_REF_DRAW_VERTEX,
- REMESA_TA_REF_CLOSE_STATE
+ REMESA_TA_REF_CLOSE_STATE,REMESA_TA_REF_INITIAL_STATE
 };
 struct remesa_ta_reference {
  remesa_scene_u32 address,minimum_bytes,kind,index_count,draw;
@@ -64,18 +64,34 @@ static inline int remesa_ta_references_walk(const void *input,size_t bytes,
  remesa_ta_ref_uptr a=(remesa_ta_ref_uptr)input,b=(remesa_ta_ref_uptr)out;
  remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;
  const remesa_ta_ref_u8 *p=input;struct remesa_ta_reference refs[3],close;
- struct remesa_ta_reference_counts value;unsigned pass,draw,k;int error;
+ struct remesa_ta_reference_counts value;unsigned pass,draw,k,initial=0;int error;
  if(!input||!out||a>limit-bytes||b>limit-sizeof(*out)||b%_Alignof(struct remesa_ta_reference_counts))return EINVAL;
  if(a<=b?b-a<bytes:a-b<sizeof(*out))return EINVAL;
- if(bytes<68||bytes>40+28*REMESA_TA_REFERENCE_MAX_DRAWS||(bytes-40)%28)return EINVAL;
- value.draws=(bytes-40)/28;value.references=3*(value.draws+1)+1;
+ if(bytes<68||bytes>68+28*REMESA_TA_REFERENCE_MAX_DRAWS||(bytes-40)%28)return EINVAL;
+ /* Optional preserved initialization primitive. Its INDEX/vertex descriptor
+  * must be byte-identical to the following clear's descriptor, so the same
+  * committed vertex/index window and complete fetch closure cover BOTH.
+  * Only the distinct initial state upload adds a reference. */
+ if(bytes>=96&&remesa_ta_ref_word(p+32)==0x0c02a203u){
+  error=remesa_ta_ref_group(p,0,refs);if(error)return error;
+  if(remesa_ta_ref_word(p)==remesa_ta_ref_word(p+28)||memcmp(p+8,p+36,20))return EINVAL;
+  initial=1;
+ }
+ value.draws=(bytes-40-28*initial)/28;
+ if(!value.draws||value.draws>REMESA_TA_REFERENCE_MAX_DRAWS)return EINVAL;
+ value.references=3*(value.draws+1)+1+initial;
  for(pass=0;pass<(visitor?2u:1u);pass++){
+  if(initial){
+   error=remesa_ta_ref_group(p,0,refs);if(error)return error;
+   refs[0].kind=REMESA_TA_REF_INITIAL_STATE;
+   if(pass){error=visitor(context,&refs[0]);if(error)return error;}
+  }
   for(draw=0;draw<=value.draws;draw++){
-   error=remesa_ta_ref_group(p+draw*28,draw,refs);if(error)return error;
+   error=remesa_ta_ref_group(p+(draw+initial)*28,draw,refs);if(error)return error;
    if(pass)for(k=0;k<3;k++){error=visitor(context,&refs[k]);if(error)return error;}
   }
   {
-   const remesa_ta_ref_u8 *tail=p+(value.draws+1)*28;
+   const remesa_ta_ref_u8 *tail=p+(value.draws+1+initial)*28;
    remesa_scene_u32 state=remesa_ta_ref_word(tail);
    if((state&0xf0000000u)!=0x60000000u||remesa_ta_ref_word(tail+4)!=0x0c02a201u||
       remesa_ta_ref_word(tail+8)!=0xc0000000u)return EINVAL;

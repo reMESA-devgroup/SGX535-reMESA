@@ -2,7 +2,7 @@
 #ifndef REMESA_GEM_SCENE_STATES_H
 #define REMESA_GEM_SCENE_STATES_H
 #include "remesa_gem_scene_ta.h"
-#define REMESA_GEM_SCENE_STATE_MAX (REMESA_TA_REFERENCE_MAX_DRAWS+2u)
+#define REMESA_GEM_SCENE_STATE_MAX (REMESA_TA_REFERENCE_MAX_DRAWS+3u)
 struct remesa_gem_scene_states {
  struct remesa_memory_ticket ticket;u32 count;
  struct {u32 pds_id,pds_offset,source_id,source_offset,source_bytes,use_id,use_offset;} uploads[REMESA_GEM_SCENE_STATE_MAX];

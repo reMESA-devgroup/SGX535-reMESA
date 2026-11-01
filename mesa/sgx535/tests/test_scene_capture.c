@@ -118,7 +118,7 @@ int main(void)
     CHECK(vertices.windows[1].vertex_count==3&&vertices.windows[1].vertex_bytes==144&&vertices.windows[1].vertex_offset==0&&
      vertices.windows[1].index_bytes==6&&vertices.windows[1].index_offset==144);
     for(unsigned q=0;q<2;q++){
-     CHECK(vertices.windows[q].index_handle==ta.references[q*3+1].handle&&vertices.windows[q].index_generation==ta.references[q*3+1].generation);
+     CHECK(vertices.windows[q].index_handle==ta.references[q*3+1+(ta.references[0].kind==REMESA_TA_REF_INITIAL_STATE)].handle&&vertices.windows[q].index_generation==ta.references[q*3+1+(ta.references[0].kind==REMESA_TA_REF_INITIAL_STATE)].generation);
      unsigned a=0;for(;a<expected.allocation_count&&expected.allocations[a].handle!=vertices.windows[q].vertex_handle;a++);
      CHECK(a<expected.allocation_count&&expected.allocations[a].generation==vertices.windows[q].vertex_generation&&
       expected.allocations[a].access==REMESA_ACCESS_READ&&vertices.windows[q].vertex_offset+vertices.windows[q].vertex_bytes<=expected.allocations[a].logical_bytes);
@@ -126,17 +126,19 @@ int main(void)
     CHECK(remesa_persistent_scene_vertices_snapshot(&d,tokens[i],(void *)((uint8_t *)&vertices+1))==EINVAL);
     CHECK(remesa_persistent_scene_vertices_snapshot(&d,tokens[i],p[0])==EINVAL);
    }else{vertices.serial=vertices_reference.serial;CHECK(!memcmp(&vertices,&vertices_reference,sizeof vertices));}
-   CHECK(ta.owner==tokens[i].owner&&ta.serial==tokens[i].serial&&ta.draw_count==1&&ta.reference_count==7&&ta.incomplete==31);
+   CHECK(ta.owner==tokens[i].owner&&ta.serial==tokens[i].serial&&ta.draw_count==1&&ta.reference_count==7+(getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_INITIALIZED_PREFIX"))&&ta.incomplete==31);
    if(!i){
     ta_reference=ta;
     for(unsigned q=0;q<ta.reference_count;q++){
      unsigned a=0;for(;a<expected.allocation_count&&expected.allocations[a].handle!=ta.references[q].handle;a++);
      CHECK(a<expected.allocation_count&&expected.allocations[a].generation==ta.references[q].generation&&
       expected.allocations[a].access==REMESA_ACCESS_READ&&ta.references[q].minimum_bytes<=ta.references[q].object_bytes&&
-      ta.references[q].byte_offset+ta.references[q].object_bytes<=expected.allocations[a].logical_bytes&&ta.references[q].kind==q+1);
+      ta.references[q].byte_offset+ta.references[q].object_bytes<=expected.allocations[a].logical_bytes&&ta.references[q].kind==((getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_INITIALIZED_PREFIX"))?(q?q:REMESA_TA_REF_INITIAL_STATE):q+1));
     }
-    CHECK(ta.references[0].object_bytes==60&&ta.references[1].object_bytes==6&&ta.references[2].object_bytes==64&&
-     ta.references[3].object_bytes==60&&ta.references[4].object_bytes==6&&ta.references[5].object_bytes==64&&ta.references[6].object_bytes==60);
+    unsigned initial=getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_INITIALIZED_PREFIX");
+    if(initial)CHECK(ta.references[0].kind==REMESA_TA_REF_INITIAL_STATE&&ta.references[0].object_bytes==60);
+    static const unsigned lengths[7]={60,6,64,60,6,64,60};
+    for(unsigned q=0;q<7;q++)CHECK(ta.references[q+initial].object_bytes==lengths[q]);
     CHECK(remesa_persistent_scene_ta_snapshot(&d,tokens[i],(void *)((uint8_t *)&ta+1))==EINVAL);
     CHECK(remesa_persistent_scene_ta_snapshot(&d,tokens[i],p[0])==EINVAL);
    }else{ta.serial=ta_reference.serial;CHECK(!memcmp(&ta,&ta_reference,sizeof ta));}

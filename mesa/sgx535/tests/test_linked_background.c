@@ -73,6 +73,9 @@ static void ta_setup(struct fixture *f,struct remesa_device *d,unsigned context,
  CHECK(!remesa_persistent_scene_close_prepare(d,width,height,4,close));
  struct remesa_linked_body_draw draw={*state,0,3};
  CHECK(!remesa_persistent_linked_body_prepare(d,&draw,1,*close,body));
+ if(getenv("REMESA_CAPTURE_EXPORT_DIR")&&getenv("REMESA_CAPTURE_INITIALIZED_PREFIX"))
+  CHECK(!remesa_persistent_initialized_prefix_prepare(d,width,height,REMESA_LINKED_TEST_CLEAR_DEPTH(context),4,3,4,prefix));
+ else
  CHECK(!remesa_persistent_zclear_prefix_prepare(d,width,height,REMESA_LINKED_TEST_CLEAR_DEPTH(context),4,3,4,prefix));
 }
 static void ta_drop_children(struct remesa_device *d,void *code,void *geometry,void *pds,

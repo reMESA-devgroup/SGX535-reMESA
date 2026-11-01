@@ -25,10 +25,11 @@ static __attribute__((__noinline__)) int scene_fragments_build_checked(struct re
  if(!out)return -EINVAL;
  j=ticket_job(loan->memory,loan->ticket);value.expected_pds_window=0x20000000u;
  for(draw=0;draw<vertices->count;draw++){
+  unsigned upload=draw+(states->count==vertices->count+2);
   struct remesa_fragment_binding binding;struct remesa_fragment_task task;u32 po,qo,use_id=0,use_offset=0;
-  for(s=0;s<count&&views[s].binding.id!=states->uploads[draw].source_id;s++);
+  for(s=0;s<count&&views[s].binding.id!=states->uploads[upload].source_id;s++);
   if(s==count||!views[s].cpu)return -EACCES;
-  error=remesa_fragment_binding_read((const u8 *)views[s].cpu+states->uploads[draw].source_offset+(draw?8:12),12,
+  error=remesa_fragment_binding_read((const u8 *)views[s].cpu+states->uploads[upload].source_offset+(draw?8:12),12,
     value.expected_pds_window,draw?1:0,&binding);if(error)return -error;
   error=fragment_read_view(loan,views,count,binding.primary,binding.primary_bytes,&p,&po);if(error)return error;
   error=fragment_read_view(loan,views,count,binding.secondary,4,&q,&qo);if(error)return error;

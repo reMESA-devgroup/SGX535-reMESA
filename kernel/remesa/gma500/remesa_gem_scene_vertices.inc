@@ -27,7 +27,8 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
     vertex_section_overlap(offset,command.bytes,use->command_offset,use_command.bytes))return -EINVAL;
  for(draw=0;draw<command.count;draw++){
   struct remesa_gem_scene_vertex_window w;struct remesa_vertex_fetch decoded;struct remesa_vertex_indices indices;
-  unsigned ir=draw*3+1,pr=draw*3+2;u32 use_id=0,use_offset=0,use_bytes=draw?64:16;
+  unsigned initial=ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE;
+  unsigned ir=initial+draw*3+1,pr=initial+draw*3+2;u32 use_id=0,use_offset=0,use_bytes=draw?64:16;
   memcpy(&w,(const u8 *)j->commands+offset+sizeof(command)+draw*sizeof(w),sizeof(w));
   if(w.reserved||!w.vertex_count||w.vertex_count>65536||(!draw&&w.vertex_count!=3)||w.index_id!=ta->references[ir].id||
      w.index_offset!=ta->references[ir].byte_offset||w.index_bytes!=ta->references[ir].minimum_bytes)return -EINVAL;
