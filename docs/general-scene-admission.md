@@ -82,3 +82,18 @@ must be at most 1 MiB. It never maps or reads the 32 MiB DPM pools. This isolate
 TA output from later raster/output issues without changing the programs,
 placement, native module or safety gates. Object INFO responses already checked
 by the LAB collector are now also saved; this adds no extra INFO calls.
+
+A second fresh test boot reused the identical module, READ allocations and GPU
+placement. It reproduced zero COLOR/Z and also returned a zero first 4 KiB of
+REGION. The remaining REGION bytes and DPM pools were not read, so this does not
+establish that the whole TA output was unchanged. The diagnostic read took
+3.009 ms; the ioctl wall time was 186.078 ms. All 21 object INFO records were
+saved and verified, twelve READ inputs and four guards remained intact, and
+stock recovery completed again. Evidence and verifier are under
+`/home/gama/sgx535-offline/general-scene-admission-20261101/v2-region`.
+The unresolved issue is the new integrated submission's empty output. Another
+identical run without additional discrimination is not useful. Compare the
+actual publication/TA start, native plans and existing qualified physical input
+contracts before changing any shader or geometry encoder. Further instrumentation
+must remain bounded and LAB-only; a complete lifecycle receipt alone must never
+qualify rendering.
