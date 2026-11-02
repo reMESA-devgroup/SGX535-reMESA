@@ -14,6 +14,7 @@ int remesa_private_session_acquire(struct drm_device *dev,struct drm_file *file,
  if(s->private_device_lost){error=-ENODEV;goto unlock;}
  if(s->private_session||s->stream_bound||s->executor||s->pds_write_guard){error=-EBUSY;goto unlock;}
  if(s->private_work_owned){error=-EBUSY;goto unlock;}
+ if(s->private_scene_binding_count||scene_input_objects_locked(s)){error=-EBUSY;goto unlock;}
  for(i=0;i<2;i++)if(s->private_dpm_ids[i]){error=-EBUSY;goto unlock;}
  if(s->private_dpm_ready||s->private_dpm_retired_operation){error=-EBUSY;goto unlock;}
  for(i=0;i<6;i++)if(s->private_work_ids[i]){error=-EBUSY;goto unlock;}
@@ -47,6 +48,9 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
  }
  /* Validate the complete seal before clearing any part of it. Source close,
   * job retirement and all CPU leases were checked above. */
+ error=scene_input_objects_locked(s);if(error)goto unlock;
+ if(s->private_scene_binding_count&&(!s->private_dpm_ids[0]||!s->private_dpm_ids[1]||
+    s->pds_write_guard||s->private_work_owned)){error=-EIO;goto unlock;}
  if(s->private_dpm_ids[0]||s->private_dpm_ids[1]){
   if(s->private_work_owned||s->pds_write_guard){error=-EIO;goto unlock;}
   for(i=0;i<5;i++)if(s->private_input_ids[i]){error=-EIO;goto unlock;}
@@ -80,6 +84,10 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
   memset(s->private_input_ids,0,sizeof(s->private_input_ids));s->pds_write_guard=NULL;
  }else if(s->pds_write_guard){error=-EIO;goto unlock;}
  memset(s->private_work_ids,0,sizeof(s->private_work_ids));s->private_work_owned=false;
+ for(i=0;i<32;i++)if(s->private_scene_input_ids[i])
+  s->bo[s->private_scene_input_ids[i]&31].input_seal=0;
+ memset(s->private_scene_input_ids,0,sizeof(s->private_scene_input_ids));
+ s->private_scene_input_mask=0;s->private_scene_binding_count=0;
 #ifdef REMESA_PRIVATE_DPM_CACHE
  /* Source closed and every job/lease gone. Restore CPU coherence before
   * dropping domain classification, including pools never read back. */

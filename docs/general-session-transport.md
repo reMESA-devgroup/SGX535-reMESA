@@ -123,3 +123,8 @@ This endpoint supplies no sustained FPS, general arbitrary-shader admission,
 GL2.1/GLES2 conformance, complete desktop2D or installation approval. The goal
 remains the complete userspace driver; this LAB path qualifies the repeated
 transaction before exposing a production submit interface.
+
+A subsequent [general READ ownership contract](general-scene-input-ownership.md)
+adds immutable input seals at OPEN and metadata checks before execution. It
+keeps LAB authentication and qualification separate. Its new module is an
+offline-tested candidate; the physical pair above qualifies the earlier module.

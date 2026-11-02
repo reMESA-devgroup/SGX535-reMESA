@@ -38,6 +38,17 @@ struct remesa_memory_ticket;
 int remesa_private_session_seal_dpm(struct remesa_gem_memory *,const void *,
  struct remesa_memory_ticket,u32 table_id,u32 parameter_id);
 int remesa_private_session_dpm_locked(struct remesa_gem_memory *,struct remesa_memory_ticket);
+/* General READ ownership, separate from the eleven-role/PDS-update protocol.
+ * Trusted caller authenticates final inputs under this admission job's holds
+ * and derives read_mask from its validated private-loan rules. No user mask,
+ * new image authority or hash is accepted here. Seal once, before source_begin,
+ * after seal_dpm; user WRITE/write-LEASE/SYNC remain denied until idle release.
+ * Reuse checks the same complete READ set/IDs/generations under fresh holds.
+ * No typed updates are permitted by this first immutable-input contract. */
+int remesa_private_session_seal_scene_inputs(struct remesa_gem_memory *,const void *,
+ struct remesa_memory_ticket,u32 read_mask);
+int remesa_private_session_scene_inputs_locked(struct remesa_gem_memory *,
+ struct remesa_memory_ticket,u32 read_mask);
 /* Trusted general-session preparation/closure only. The caller retains the
  * endpoint/source lease; claim locks memory, check/retired require it locked.
  * A warm job references a prior acknowledged operation, never zero provenance.

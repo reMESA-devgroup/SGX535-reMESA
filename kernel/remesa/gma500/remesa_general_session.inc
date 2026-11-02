@@ -59,6 +59,11 @@ static int general_open(struct drm_device *dev,struct drm_file *file,struct reme
  mutex_unlock(&endpoint_lock);
  error=remesa_private_session_seal_dpm(p->memory,p,p->job.snapshot.ticket,p->packet.actions.table_id,p->packet.actions.parameter_id);
  if(!error){
+  u32 mask=0;
+  for(i=0;i<p->job.count;i++)if(p->job.loan.rules[i].access==REMESA_MMU_GPU_READ)mask|=(u32)1<<i;
+  error=remesa_private_session_seal_scene_inputs(p->memory,p,p->job.snapshot.ticket,mask);
+ }
+ if(!error){
   mutex_lock(&endpoint_lock);error=remesa_gem_scene_job_cancel(&p->job);mutex_unlock(&endpoint_lock);
  }
  if(!error){error=remesa_private_session_source_begin(p->memory,p);if(!error)p->source_claimed=true;}

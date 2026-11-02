@@ -45,6 +45,16 @@ int remesa_private_session_scene_execute(struct remesa_gem_memory *s,const void 
  }
  if(!error&&(s->private_dpm_ids[0]||s->private_dpm_ids[1]))
   error=remesa_private_session_dpm_locked(s,job->loan.ticket);
+#ifdef REMESA_PRIVATE_SCENE_INPUT_SEALS
+ if(!error&&s->private_scene_binding_count){
+  u32 mask=0;
+  if(!job->count||job->count>REMESA_GEM_JOB_BINDINGS)error=-EACCES;
+  else{
+   for(i=0;i<job->count;i++)if(job->loan.rules[i].access==REMESA_MMU_GPU_READ)mask|=(u32)1<<i;
+   error=remesa_private_session_scene_inputs_locked(s,job->loan.ticket,mask);
+  }
+ }
+#endif
 #ifdef REMESA_PRIVATE_DPM_CACHE
  if(!error&&(s->private_dpm_ids[0]||s->private_dpm_ids[1])){
   struct retained_job *j=ticket_job(s,job->loan.ticket);
