@@ -5,8 +5,8 @@
  * Diagnostic reads happen INSIDE the native callback after authenticated
  * kernel retirement and BEFORE capture consumption frees temporary owners.
  * This collector is separate from the normal driver path.
- * Exact profile fixtures are required. Kernel separate version2 profiles1/2 must independently
- * qualify this18-binding graph: use the matching closed kernel before
+ * Exact fixtures are required: separate version2 profiles1/2 (state14),3/4
+ * (explicit homogeneous build). Use the matching gated closed kernel before
  * executing physically. --prepare-only never enters the scene ioctl.
  */
 #include "remesa_linux_memory.h"
@@ -145,9 +145,11 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  timings[1]=ns();check_placement(m,submit->packet);guards(m);dump_backing(m,submit->packet,false);timings[2]=ns();
  if(prepare_only)return REMESA_NOT_ISSUED;
 #ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
- (void)receipt;return REMESA_NOT_ISSUED; /* No matching native catalogue yet. */
+ enum remesa_dispatch result=remesa_linux_memory_gears_homogeneous_lab_dispatch(m,submit,receipt);
 #else
- enum remesa_dispatch result=remesa_linux_memory_gears_scene_lab_dispatch(m,submit,receipt);timings[3]=ns();
+ enum remesa_dispatch result=remesa_linux_memory_gears_scene_lab_dispatch(m,submit,receipt);
+#endif
+ timings[3]=ns();
  struct remesa_gears_scene_probe_request response;int e=remesa_linux_memory_gears_scene_lab_response(m,&response);
  if(!e)output(out_dir,"RESPONSE.bin",&response,sizeof response);
  if(!e){
@@ -170,15 +172,9 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
   dump_backing(m,submit->packet,true);timings[4]=ns();
  }
  return result;
-#endif
 }
 int main(int argc,char **argv)
 {
-#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
- if(argc!=6||strcmp(argv[5],"--prepare-only")){
-  fprintf(stderr,"homogeneous client supports --prepare-only until a matching native catalogue is qualified\n");return 2;
- }
-#endif
  if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute"))){
   fprintf(stderr,"usage: gears_scene_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --prepare-only|--execute\n");return 2;
  }

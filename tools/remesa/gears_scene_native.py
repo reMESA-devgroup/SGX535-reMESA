@@ -33,8 +33,8 @@ def packet_matches(raw,expected,context,ids):
  for at in offsets:struct.pack_into('<I',normalized,at,mapping[struct.unpack_from('<I',expected,at)[0]])
  if normalized!=raw:raise ValueError('bound packet differs from exact profile')
 
-def collect(device,output,plan,images,client,expected_fixture,client_sha):
- if plan['profile'] not in (1,2):raise ValueError('bound Gallium closed gears version2 profiles1/2 required')
+def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homogeneous=False):
+ if plan['profile'] not in ((3,4) if homogeneous else (1,2)):raise ValueError('explicit bound Gallium catalogue mode/profile mismatch')
  if p.sha(client.read_bytes())!=client_sha:raise ValueError('native client binary changed')
  report={'status':'PREPARING','identity':p.device_identity(device),'plan':plan,'hardware_driver_qualified':False,'requires_independent_pixel_oracle':True,'submission_path':'BOUND_GALLIUM_NIR_REAL_LINUX_MEMORY_PROVIDER','native_client_sha256':client_sha,'reference_images_uploaded_by_collector':False,'probe_ioctl_calls':0}
  def save():(output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
@@ -123,12 +123,12 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha):
  return report
 
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--size',choices=['1280x800','640x640'],required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--client',type=Path,required=True);parser.add_argument('--client-sha256',required=True);parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--execute',action='store_true');a=parser.parse_args()
- plan,images=scene.load_profile(a.catalogue,a.size,a.asset_root)
- if plan['profile'] not in (1,2):parser.error('bound gears version2 1/2 catalogue required')
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--size',choices=['1280x800','640x640'],required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--client',type=Path,required=True);parser.add_argument('--client-sha256',required=True);parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--execute',action='store_true');parser.add_argument('--homogeneous',action='store_true',help='Explicit state15/W2 profiles3/4, matching client and kernel required');a=parser.parse_args()
+ plan,images=scene.load_profile(a.catalogue,a.size,a.asset_root,homogeneous=a.homogeneous)
+ if plan['profile'] not in ((3,4) if a.homogeneous else (1,2)):parser.error('explicit catalogue/profile mismatch')
  a.output.mkdir(parents=True,exist_ok=False)
  if not a.execute:(a.output/'PLAN.json').write_text(json.dumps(plan,indent=2)+'\n');print('PLAN_ONLY_NO_DEVICE_OPEN');return
  entry=next(f for f in json.loads(a.catalogue.read_text())['profiles'] if f['size']==a.size)
  fixture=a.asset_root/a.size if a.asset_root else Path(entry['packet_path']).parent
- print(collect(a.device,a.output,plan,images,a.client.resolve(),fixture,a.client_sha256)['status'])
+ print(collect(a.device,a.output,plan,images,a.client.resolve(),fixture,a.client_sha256,homogeneous=a.homogeneous)['status'])
 if __name__=='__main__':main()

@@ -6,8 +6,13 @@ from pathlib import Path
 import private_probe as p
 PROBE=struct.Struct('<IIQ18I2IQQ5Ii4I')
 assert PROBE.size==152
-def load_profile(catalogue,size,asset_root=None):
- c=json.loads(catalogue.read_text());assert c['format']=='REMESA_BOUND_GEARS_POSITIVE_V1' and not c['physical_qualification'] and c['GPU_operations']==0
+def load_profile(catalogue,size,asset_root=None,*,homogeneous=False):
+ c=json.loads(catalogue.read_text())
+ expected_format='REMESA_BOUND_GEARS_HOMOGENEOUS_V1' if homogeneous else 'REMESA_BOUND_GEARS_POSITIVE_V1'
+ if c.get('format')!=expected_format or c.get('physical_qualification') is not False or c.get('GPU_operations')!=0:raise ValueError('wrong explicit gears catalogue mode')
+ if homogeneous:
+  from gears_homogeneous_oracle import VERTICES_SHA,COEFFICIENT_SHA
+  if c.get('registered_kernel_profiles') is not False or [x['proposed_profile'] for x in c['profiles']]!=[3,4] or c['witness']['vertices_sha256']!=VERTICES_SHA or c['witness']['coefficient_sha256']!=COEFFICIENT_SHA or c['witness']['code_sha256']!='b60249a06a8fbed9f8d235a06cac8f7511cbafd9f1344a076a24535859d713fd':raise ValueError('changed homogeneous witness/selectors')
  assert [x['size'] for x in c['profiles']]==['1280x800','640x640']
  index=next(i for i,x in enumerate(c['profiles']) if x['size']==size);profile=c['profiles'][index]
  def path(original,name):return asset_root/size/name if asset_root else Path(original)
@@ -38,7 +43,7 @@ def load_profile(catalogue,size,asset_root=None):
   for va in [min(b['va'] for b in group)-4096,max(b['va']+b['bytes'] for b in group)]:
    if lower<=va and va+4096<=upper and not any(va<b['va']+b['bytes'] and b['va']<va+4096 for b in bindings) and va not in guards:guards.append(va)
  if len(bindings)+len(guards)>32:raise ValueError('guard allocation exceeds endpoint capacity')
- return {'profile':index+1,'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
+ return {'profile':index+(3 if homogeneous else 1),'size':size,'packet_sha256':p.sha(raw),'bindings':bindings,'color_index':color,'depth_index':depth,'region_index':region,'guard_va':guards},images
 
 def receipt(packet,context,profile,ids,budget):
  q=PROBE.unpack(packet)

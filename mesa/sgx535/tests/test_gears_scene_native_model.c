@@ -8,11 +8,27 @@ static bool returned_gears,teardown_gears;
 static unsigned reads_retired;
 static struct remesa_gears_scene_probe_request model_receipt;
 static struct remesa_scene_fixture model_placement;
+static bool model_check_registered;
+static void check_model_exit(void)
+{
+ unsigned live=0;for(unsigned k=0;k<count;k++)if(bo[k].bytes){live++;assert(bo[k].pin&&bo[k].va&&!bo[k].lease);}
+ assert(submissions<=1);
+ if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT")||getenv("REMESA_GEARS_MODEL_IOCTL_ERROR")){
+  assert(submissions==1&&live==25&&!reads_retired&&!teardown_gears);
+ }else assert(live==7);
+}
+
 int __wrap_ioctl(int fd,unsigned long command,...)
 {
+ if(!model_check_registered){assert(!atexit(check_model_exit));model_check_registered=true;}
  va_list ap;va_start(ap,command);void *arg=va_arg(ap,void *);va_end(ap);assert(fd==99);
  if(command==DRM_IOCTL_REMESA_GEARS_SCENE_PROBE){
-  struct remesa_gears_scene_probe_request *r=arg;assert(!submissions++&&r->version==2&&r->context==77&&r->profile>=1&&r->profile<=2&&!r->reserved_input);
+  struct remesa_gears_scene_probe_request *r=arg;assert(!submissions++&&r->version==2&&r->context==77&&r->profile>=1&&r->profile<=REMESA_GEARS_SCENE_PROFILE_COUNT&&!r->reserved_input);
+#ifdef REMESA_GEARS_MODEL_HOMOGENEOUS
+  assert(r->profile==3||r->profile==4);
+#else
+  assert(r->profile==1||r->profile==2);
+#endif
   const char *dir=getenv("REMESA_NATIVE_MODEL_OUTPUT");assert(dir);char path[4096];assert(snprintf(path,sizeof path,"%s/placement.bin",dir)>0);FILE *f=fopen(path,"rb");assert(f);
   assert(fread(&model_placement,1,sizeof model_placement,f)==sizeof model_placement&&model_placement.count==18&&fgetc(f)==EOF&&!fclose(f));
   for(unsigned i=0;i<18;i++){
@@ -20,7 +36,9 @@ int __wrap_ioctl(int fd,unsigned long command,...)
    if(model_placement.bindings[i].access==1){assert(snprintf(path,sizeof path,"%s/model-bo-%u.bin",dir,i)>0);f=fopen(path,"wbx");assert(f&&fwrite(bo[k].bytes,1,bo[k].size,f)==bo[k].size&&!fclose(f));}
   }
   r->operation=r->cookie=1;r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;r->phase=9;r->ledger=7;r->stages=15;model_receipt=*r;returned_gears=true;
-  if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT"))r->phase=8;return 0;
+  if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT"))r->phase=8;
+  if(getenv("REMESA_GEARS_MODEL_IOCTL_ERROR")){errno=EINTR;return -1;}
+  return 0;
  }
  if(command==DRM_IOCTL_REMESA_GEARS_SCENE_TRACE){
   struct remesa_gears_scene_trace_request *q=arg;struct remesa_gears_scene_trace zero={0};assert(returned_gears&&q->version==2&&!q->reserved&&q->context==77&&!memcmp(&q->trace,&zero,sizeof zero));

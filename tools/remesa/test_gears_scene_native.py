@@ -8,17 +8,25 @@ from unittest.mock import patch
 import gears_scene_native as native
 import gears_scene_profile as scene
 import private_probe as p
-parser=argparse.ArgumentParser();parser.add_argument('--model-output',type=Path,required=True);parser.add_argument('--catalogue',type=Path,required=True);a=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument('--model-output',type=Path,required=True);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--homogeneous',action='store_true');parser.add_argument('--case-prefix',default='');parser.add_argument('--case-suffix',default='--execute');parser.add_argument('--client-name',default='model');a=parser.parse_args()
 
 class Collector(unittest.TestCase):
+ def test_explicit_catalogue_mode(self):
+  for size in ['1280x800','640x640']:
+   with self.assertRaises(ValueError):scene.load_profile(a.catalogue,size,homogeneous=not a.homogeneous)
+   if a.homogeneous:
+    with tempfile.TemporaryDirectory() as temp:
+     candidate=json.loads(a.catalogue.read_text());candidate['profiles'][0]['proposed_profile']=1
+     path=Path(temp)/'catalogue.json';path.write_text(json.dumps(candidate))
+     with self.assertRaises(ValueError):scene.load_profile(path,size,homogeneous=True)
  def test_lifetime_and_failures(self):
   for size in ['1280x800','640x640']:
-   source=a.model_output/(size+'--execute');raw=(source/'INVENTORY-REMAINING.bin').read_bytes()
+   source=a.model_output/(a.case_prefix+size+a.case_suffix);raw=(source/'INVENTORY-REMAINING.bin').read_bytes()
    objects=[struct.unpack_from('<QQII',raw,16+i*24) for i in range(7)];byid={x[2]:x for x in objects}
    profile=next(f for f in json.loads(a.catalogue.read_text())['profiles'] if f['size']==size);fixture=Path(profile['packet_path']).parent
    for fault in [None,'child','receipt','read','guard','remaining','packet','trace','trace_owner','missing_response','timeout']:
     with self.subTest(size=size,fault=fault),tempfile.TemporaryDirectory() as temp:
-     output=Path(temp);calls=[];plan,images=scene.load_profile(a.catalogue,size)
+     output=Path(temp);calls=[];plan,images=scene.load_profile(a.catalogue,size,homogeneous=a.homogeneous)
      class Memory:
       def __init__(self,fd,context):assert fd==99 and context==77;self.poisoned=False
       def info(self,rid=0):
@@ -27,7 +35,7 @@ class Collector(unittest.TestCase):
       def request(self,action,rid=0):assert action in (p.UNMAP,p.UNPIN,p.DESTROY,p.CLOSE);calls.append((action,rid))
      def child(argv,**kwargs):
       assert kwargs['pass_fds']==(99,) and argv[5]=='--execute'
-      assert argv[6:]==[] and plan['profile'] in [1,2]
+      assert argv[6:]==[] and plan['profile'] in ([3,4] if a.homogeneous else [1,2])
       for f in source.iterdir():
        if f.is_file():shutil.copyfile(f,output/f.name)
       if fault=='timeout':raise subprocess.TimeoutExpired(argv,180)
@@ -47,19 +55,19 @@ class Collector(unittest.TestCase):
       if fault=='packet':
        path=output/'packet.bin';b=bytearray(path.read_bytes());b[396]^=1;path.write_bytes(b)
       return subprocess.CompletedProcess(argv,1 if fault=='child' else 0)
-     client=a.model_output/'model'
+     client=a.model_output/a.client_name
      with patch.object(p,'device_identity',return_value={'scope':'MODEL_GPU0'}),patch.object(native.os,'open',return_value=99),patch.object(native.os,'close') as close,patch.object(native.subprocess,'run',side_effect=child),patch.object(p,'Memory',Memory):
       if fault:
-       with self.assertRaises((RuntimeError,ValueError,FileNotFoundError,subprocess.TimeoutExpired)):native.collect(Path('/never-device'),output,plan,images,client,fixture,p.sha(client.read_bytes()))
+       with self.assertRaises((RuntimeError,ValueError,FileNotFoundError,subprocess.TimeoutExpired)):native.collect(Path('/never-device'),output,plan,images,client,fixture,p.sha(client.read_bytes()),homogeneous=a.homogeneous)
        self.assertFalse(any(isinstance(action,int) for action,_ in calls))
       else:
-       result=native.collect(Path('/never-device'),output,plan,images,client,fixture,p.sha(client.read_bytes()))
+       result=native.collect(Path('/never-device'),output,plan,images,client,fixture,p.sha(client.read_bytes()),homogeneous=a.homogeneous)
        self.assertEqual(result['memory_cleanup'],'complete');self.assertEqual(result['status'],'RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING');self.assertEqual(len(result['object_info']),7)
        self.assertEqual(len([1 for action,_ in calls if action==p.DESTROY]),7);self.assertIn((p.CLOSE,0),calls);self.assertTrue(result['guards_intact']);self.assertFalse(result['reference_images_uploaded_by_collector'])
       close.assert_called_once_with(99)
  def test_complete_trace_and_receipt_rejection(self):
   for size in ['1280x800','640x640']:
-   source=a.model_output/(size+'--execute');plan,_=scene.load_profile(a.catalogue,size)
+   source=a.model_output/(a.case_prefix+size+a.case_suffix);plan,_=scene.load_profile(a.catalogue,size,homogeneous=a.homogeneous)
    raw=(source/'RESPONSE.bin').read_bytes();q=scene.PROBE.unpack(raw);ids=list(q[3:21]);context=q[2]
    receipt=scene.receipt(raw,context,plan['profile'],ids,1000)
    blob=(source/'TRACE-RESPONSE.bin').read_bytes()[16:]
