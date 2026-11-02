@@ -9,7 +9,7 @@ It does not replace the old136-byte eleven-ID session or either one-shot ABI.
 
 This first transport is explicitly a bounded LAB admission. It accepts the
 already qualified native CODE344 catalogue selectors5/6, representing1280×800
-and640×640. It accepts eighteen owned IDs, not caller addresses, packets, CODE,
+and 640×640. It accepts eighteen owned IDs, not caller addresses, packets, CODE,
 PFNs or injected events. Root privilege, the existing default-off memory and
 scene controls, exclusive source lineage and the consumed-per-boot boundary
 remain required. No new control is enabled by staging or by the C provider.
@@ -86,7 +86,8 @@ Evidence root: `/home/gama/sgx535-offline/general-session-wire-20261102/v1`.
   without new warning messages and defines `remesa_general_session_ioctl`.
   Candidate `module/gma500_gfx.ko` SHA256
   `a0db616098026fea162bb5aad2e240d01442aeab5c68eacb4b65cf2a45188f49`.
-  It has not been installed or physically qualified.
+  That build record is offline. Later hardware qualification of this same
+  module is recorded in [the real OpenGL client results](opengl-general-session-client.md).
 
 Preserved fixture failures: `handler/native-build.log` retains two unused
 variables from the inherited fixture's unused main. `handler-final/` retains
@@ -105,17 +106,20 @@ Pair `--i486-cc` and `--qemu-i386` for the i486 model. Kernel-controller
 generators, command journals, source pins and failed/successful logs are kept
 in the evidence root.
 
-## Next execution
+## Physical integration
 
-Wire the real native OpenGL client's existing collector to this separate
-transport, preserving its one-shot mode. Export each submission response,
-complete trace, COLOR/defined Z24 readback and input/guard capture separately;
-verify them offline before the first supervised physical sequence. Run both
-sizes on separate fresh controlled boots and recover stock afterward.
+The real native OpenGL client now uses this transport in its separate
+`--session-2` mode, preserving the one-shot mode. It captures each response,
+complete trace, COLOR/defined Z24, inputs and guards separately. Offline client,
+archive-refusal and supervisor tests precede hardware execution; see
+[the client results](opengl-general-session-client.md) for their evidence paths.
 
-The first warm job after one cold job is a new physical qualification; the
-historical FAST donor waited three cold jobs. This endpoint has not executed
-on hardware. It supplies no sustained FPS, general arbitrary-shader admission,
+Cold/warm pairs have passed on the physical Mini 12 at 1280×800 and 640×640 in
+separate controlled boots, each followed by verified stock recovery.
+The earlier warm transition is qualified only by these new results, rather than
+inherited from the historical FAST donor's three cold jobs.
+
+This endpoint supplies no sustained FPS, general arbitrary-shader admission,
 GL2.1/GLES2 conformance, complete desktop2D or installation approval. The goal
-remains the complete userspace driver; this LAB path qualifies the new repeated
+remains the complete userspace driver; this LAB path qualifies the repeated
 transaction before exposing a production submit interface.

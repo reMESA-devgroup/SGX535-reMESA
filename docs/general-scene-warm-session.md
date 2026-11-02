@@ -60,11 +60,11 @@ Evidence root: `/home/gama/sgx535-offline/general-scene-warm-20261102/v1`.
 
 - `warm-final/RESULT.json`: current actual memory/source-session/packet
   preparation, claims, closure, service, executor and retirement operate on
-  the previously exported real OpenGL/native inputs at1280×800 and640×640.
+  the previously exported real OpenGL/native inputs at 1280×800 and 640×640.
   Native, UBSan and static i486/QEMU pass five jobs per case: one cold, three
   untouched warm jobs and one warm job after an actual modeled CPU read lease.
   An extra unissued preparation is canceled and prepared again. All pool
-  page clears after allocation remain zero. REGION uses30 pages at1280×800
+  page clears after allocation remain zero. REGION uses30 pages at 1280×800
   and its layout-derived allocation at640×640, overwritten only when needed.
 - Cold execution has21 flush calls, untouched warm execution19, and warm
   execution after reading one pool20. These are modeled operation counts,
@@ -96,17 +96,19 @@ All hardware/source/cache/MMU/GEM primitives in these tests are injected models.
 The old physical GLXGears and finite native OpenGL proofs remain unchanged;
 these tests supply no new physical GPU completion, pixel correctness or FPS.
 
-## Next physical integration
+## Userspace and physical integration
 
-The new session methods are kernel-internal. The old eleven-ID session ioctl
-and one-shot general controllers keep their existing contracts. A separately
-bounded general-session admission/transport must connect the real userspace
-driver to these methods before testing multiple physical general jobs. Its
-first experiment must distinguish an initialized cold job from the first warm
-job and retain full identity, completion, retirement, readback and guard checks
-at both sizes, followed by stock recovery. The historical FAST waited until
-after three cold jobs before skipping pool clears; this new earlier warm
-transition remains a physical experiment, not inherited approval.
+The separately [bounded general-session transport](general-session-transport.md)
+now connects these methods to the real native OpenGL client. The old eleven-ID
+session ioctl and one-shot controllers keep their contracts. The new collector
+captures cold and first warm jobs separately, with complete identity,
+completion, retirement, readback, input and guard checks.
+
+The new sequence has passed physically at 1280×800 and 640×640 in separate
+controlled boots, each followed by verified stock recovery. The [client evidence](opengl-general-session-client.md)
+distinguishes offline models from new GPU execution. The historical FAST waited
+until after three cold jobs before skipping pool clears; its approval was not
+transferred to this earlier warm transition.
 
 Do not clear consumed gate/source lifetime flags, restore pool zero provenance,
 claim an arbitrary DPM capacity, or count the model as hardware rendering.

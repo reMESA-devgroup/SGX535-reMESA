@@ -30,14 +30,14 @@ owners and does not retry, close again or free the buffers.
 
 `tools/remesa/verify_general_session_capture.py` checks both complete176-byte
 exchanges, monotonic operations, SGX535 rev121/PDS identity, phase9/ledger7,
-closed ownership, all13 READ inputs, CPU/source backing and four guards.
+closed ownership, all 13 READ inputs, CPU/source backing and four guards.
 Each job's full action/USE plan must equal the pinned previous physically
 qualified plan. Its66 control words must also equal the independently exported
 kernel-validator oracle. Attributable source completion samples must match the
 previously accepted separate or combined status patterns for that operation.
 
 It compares all COLOR pixels and defined Z24 bits against the existing pinned
-oracles at1280×800 or640×640, and checks the final actual `glReadPixels` bytes
+oracles at 1280×800 or640×640, and checks the final actual `glReadPixels` bytes
 against the established bottom-up copy contract. Undefined Z X8 remains ignored.
 It never marks an archive as physical proof: boot/module identity, source
 lineage, gates, kernel health and stock recovery require the outer audit.
@@ -95,14 +95,39 @@ The unchanged observer and unrelated initramfs members/metadata are preserved.
 All seven controls must still be N at first load. Five CPU identity-chain tests
 pass, including rejection of changed script/module content.
 
-The image and client have **not been deployed or booted**. This component's
-read-only SSH attempt to192.168.18.90 returned exit255, connection timeout.
-`STOCK_VERIFIED.json` records no successful observation; no current boot or
-power state can be inferred. No GPU operation, reboot or pending physical test
-was started.
+The image and actual client have now been exercised on the Mini 12 in separate
+controlled boots at 1280×800 and 640×640. The consolidated result is
+`/home/gama/sgx535-offline/opengl-general-session-20261102/FINAL_PAIR_RESULT.json`.
+Per-size records and complete captures are in:
 
-The next step is the fresh supervised physical pair, using a new experiment
-record, pinned payload/verifiers and stock rollback. The first warm transition
-after one cold job remains unqualified on hardware. Preserve all previous
-OpenGL/GLXGears evidence and consumed gates; do not rerun old physical scripts
-or transfer their approval to this new sequence.
+- `v1/FINAL_PHYSICAL_1280_RESULT.json`, `v1/hardware-1280/physical/`;
+- `v2-640/FINAL_PHYSICAL_640_RESULT.json`, `v2-640/hardware-640/physical/`.
+
+Both cold and first warm jobs completed on SGX535 rev121 in the same source
+and backing session, with operations/cookies 2/2 and 3/3 in each boot, phase9 and
+ledger7. Each full action/USE plan and all 66 control words matched the pinned
+qualified plan and independent kernel oracle. Full COLOR and defined Z24
+comparisons reported zero mismatches, all 13 READ inputs remained unchanged and
+all four guards were intact after each job. The final actual `glReadPixels`
+copy matched the established bottom-up contract. Memory cleanup completed,
+the source closed and all seven controls returned to N. Stock boot identity,
+configuration and empty next-entry were verified after each case.
+
+These are four physical GPU operations from two actual API draws, each replayed
+cold and warm. They qualify the first warm transition after one cold job in
+both sizes. They measure neither FPS nor GPU-only time: each run includes
+intentional LAB readbacks and comparisons. No test or reboot remains pending.
+
+Failed observations remain in the evidence directories. Initial boot/network
+waits did not repeat reboot or GPU commands. During the 640×640 evidence copy,
+a 60-second uncompressed download timed out and a compressed attempt encountered
+`No route to host`. Once the route returned, a separate compressed read-only
+copy succeeded and the presealed audit passed. The GPU test was not repeated.
+The subsequent explicit stock return was observed successfully.
+
+The next integration is the general driver's dispatch and resource lifecycle;
+this endpoint still admits fixed catalogue inputs through LAB controls.
+Preserve previous OpenGL/GLXGears evidence and consumed gates. Production
+admission, changing application resources, broader API coverage and continuous
+rendering need their own contracts and qualification; the finite pair does not
+establish GL2.1/GLES2 conformance or complete desktop acceleration.
