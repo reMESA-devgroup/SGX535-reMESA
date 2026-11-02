@@ -48,7 +48,9 @@ physical draw. All protected physical evidence remains unchanged.
 
 The remaining immediate physical boundary is the closed LAB transport:
 profile generation, request/trace structures, controller and client still
-describe 17 bindings. The integrated graph has 18 bindings and 11 USE entries.
+expose 17 bindings. The [shared controller](scene-controller-capacity.md) now
+handles both capacities internally, including complete last-owner validation
+and trace retention. The integrated graph has 18 bindings and 11 USE entries.
 Do not truncate the extra owner, reinterpret old reserved fields, weaken old
 profile gates or use generic test coefficients as pixel expectations. A
 separate qualified transport/profile/client/oracle set must precede a fresh

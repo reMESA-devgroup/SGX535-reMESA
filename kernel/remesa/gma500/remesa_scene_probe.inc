@@ -21,17 +21,47 @@ struct remesa_scene_probe {
 static struct remesa_scene_probe *scene_probe_retained;
 static bool scene_probe_consumed;
 static struct remesa_scene_probe_trace scene_probe_trace;
+/* Complete internal snapshot for the extra owner; the old trace ioctl must
+ * refuse an 18-binding result rather than silently truncate it. */
+static struct remesa_scene_trace_binding scene_probe_trace_last;
+struct scene_probe_selection {
+ const u8 *packet;u32 packet_bytes,binding_count;
+ const struct remesa_scene_probe_binding *bindings;
+};
+/* Internal normalized admission, never an arbitrary userspace descriptor.
+ * The existing ioctl supplies only its original static 17-binding catalogue.
+ * A future separate ABI must select its own exact 18-binding catalogue. */
+static bool scene_probe_selection_valid(const struct remesa_scene_probe_request *r,
+ const u32 *ids,const struct scene_probe_selection *profile)
+{
+ unsigned i,j;struct remesa_scene_probe_request legacy;
+ if(!r||!ids||!profile||!profile->packet||!profile->bindings||
+    profile->packet_bytes!=sizeof(struct remesa_scene_packet)||
+    (profile->binding_count!=17&&profile->binding_count!=18))return false;
+ if(profile->binding_count==17){
+  if(!remesa_scene_probe_request_valid(r)||memcmp(ids,r->ids,sizeof(r->ids)))return false;
+ }else{
+  if(r->version!=2||r->profile<1||r->profile>2)return false;
+  legacy=*r;legacy.version=1;legacy.profile=1;memcpy(legacy.ids,ids,sizeof(legacy.ids));
+  if(!remesa_scene_probe_request_valid(&legacy))return false;
+ }
+ for(i=0;i<profile->binding_count;i++){
+  if(!ids[i])return false;
+  for(j=0;j<i;j++)if(ids[j]==ids[i])return false;
+ }
+ return true;
+}
 /* scene_probe_lock serializes both snapshot publication and its read-only
  * query. No allocation, register read or new source sample is introduced. */
 static void scene_probe_save_trace(const struct remesa_scene_probe *p,
- const struct remesa_scene_probe_request *r)
+ const struct remesa_scene_probe_request *r,unsigned capacity)
 {
  struct remesa_scene_probe_trace *t=&scene_probe_trace;unsigned i;
  BUILD_BUG_ON(sizeof(*t)!=4256);
  BUILD_BUG_ON(sizeof(p->job.service_plan.load)!=sizeof(t->load_actions));
  BUILD_BUG_ON(sizeof(p->job.service_plan.ta)!=sizeof(t->ta_actions));
  BUILD_BUG_ON(sizeof(p->job.service_plan.raster)!=sizeof(t->raster_actions));
- memset(t,0,sizeof(*t));t->version=1;t->bytes=sizeof(*t);
+ memset(t,0,sizeof(*t));memset(&scene_probe_trace_last,0,sizeof(scene_probe_trace_last));t->version=1;t->bytes=sizeof(*t);
  t->profile=r->profile;t->stages=r->stages;t->phase=r->phase;t->ledger=r->ledger;
  t->error=r->error;t->retained=r->retained;t->context=r->context;
  t->operation=r->operation;t->cookie=r->cookie;
@@ -45,9 +75,13 @@ static void scene_probe_save_trace(const struct remesa_scene_probe *p,
   const struct remesa_stream_source_event *e=&p->observation.events[i];
   t->events[i]=(struct remesa_scene_trace_event){e->kind,e->sequence,e->status1,e->status2,e->ledger,e->phase,p->observation.event_ns[i]};
  }
- t->binding_count=p->job.count>17?17:p->job.count;
- for(i=0;i<t->binding_count;i++)t->bindings[i]=(struct remesa_scene_trace_binding){
-  p->job.views[i].binding.id,p->packet.bindings[i].access,p->job.views[i].binding.va,p->job.views[i].binding.bytes};
+ t->binding_count=p->job.count;
+ if(t->binding_count>capacity||t->binding_count>18){t->binding_count=0;t->error=-EOVERFLOW;}
+ for(i=0;i<t->binding_count;i++){
+  struct remesa_scene_trace_binding *binding=i<17?&t->bindings[i]:&scene_probe_trace_last;
+  *binding=(struct remesa_scene_trace_binding){p->job.views[i].binding.id,
+   p->packet.bindings[i].access,p->job.views[i].binding.va,p->job.views[i].binding.bytes};
+ }
  memcpy(t->ta,p->job.service_plan.commands.ta,sizeof(t->ta));
  memcpy(t->raster,p->job.service_plan.commands.raster,sizeof(t->raster));
  for(i=0;i<16;i++){t->use_banks[2*i]=p->job.service_plan.use.banks[i].offset;t->use_banks[2*i+1]=p->job.service_plan.use.banks[i].word;}
@@ -68,41 +102,42 @@ int remesa_scene_trace_ioctl(struct drm_device *dev,void *data,struct drm_file *
  mutex_lock(&scene_probe_lock);mutex_lock(&endpoint_lock);
  if(!endpoint||endpoint->dev!=dev||endpoint->file!=file||endpoint->private_device_lost||endpoint->context!=r->context)error=-EACCES;
  else if(!scene_probe_trace.version||scene_probe_trace.context!=r->context)error=-ENODATA;
+ else if(scene_probe_trace.binding_count>17)error=-EOVERFLOW;
  else r->trace=scene_probe_trace;
  mutex_unlock(&endpoint_lock);mutex_unlock(&scene_probe_lock);return error;
 }
-static u32 scene_probe_id(const struct remesa_scene_packet *original,const u32 *ids,u32 old)
-{unsigned i;for(i=0;i<17;i++)if(original->bindings[i].id==old)return ids[i];return 0;}
-static int scene_probe_packet(struct remesa_scene_probe *p,const struct remesa_scene_probe_profile *profile,
- const struct remesa_scene_probe_request *r)
+static u32 scene_probe_id(const struct remesa_scene_packet *original,const u32 *ids,unsigned count,u32 old)
+{unsigned i;for(i=0;i<count;i++)if(original->bindings[i].id==old)return ids[i];return 0;}
+static int scene_probe_packet(struct remesa_scene_probe *p,const struct scene_probe_selection *profile,
+ const struct remesa_scene_probe_request *r,const u32 *ids)
 {
  struct remesa_scene_packet *original;unsigned i;
  if(profile->packet_bytes!=sizeof(p->packet))return -EPROTO;
  /* Temporary source preserves captured IDs while translating only metadata.
   * No large packet or general context is allocated on the kernel stack. */
  original=kmemdup(profile->packet,sizeof(*original),GFP_KERNEL);if(!original)return -ENOMEM;
- if(!remesa_scene_packet_valid(original)||original->binding_count!=17){kfree(original);return -EPROTO;}
+ if(!remesa_scene_packet_valid(original)||original->binding_count!=profile->binding_count){kfree(original);return -EPROTO;}
  p->packet=*original;p->packet.owner=r->context;
- for(i=0;i<17;i++)p->packet.bindings[i].id=r->ids[i];
- p->packet.actions.region_id=scene_probe_id(original,r->ids,original->actions.region_id);
- p->packet.actions.table_id=scene_probe_id(original,r->ids,original->actions.table_id);
- p->packet.actions.parameter_id=scene_probe_id(original,r->ids,original->actions.parameter_id);
- p->packet.controls.color_id=scene_probe_id(original,r->ids,original->controls.color_id);
- p->packet.controls.depth_id=scene_probe_id(original,r->ids,original->controls.depth_id);
- p->packet.controls.ta_id=scene_probe_id(original,r->ids,original->controls.ta_id);
- p->packet.controls.background_id=scene_probe_id(original,r->ids,original->controls.background_id);
- p->packet.controls.event_id=scene_probe_id(original,r->ids,original->controls.event_id);
- for(i=0;i<p->packet.use_count;i++)p->packet.uses[i].id=scene_probe_id(original,r->ids,original->uses[i].id);
+ for(i=0;i<profile->binding_count;i++)p->packet.bindings[i].id=ids[i];
+ p->packet.actions.region_id=scene_probe_id(original,ids,profile->binding_count,original->actions.region_id);
+ p->packet.actions.table_id=scene_probe_id(original,ids,profile->binding_count,original->actions.table_id);
+ p->packet.actions.parameter_id=scene_probe_id(original,ids,profile->binding_count,original->actions.parameter_id);
+ p->packet.controls.color_id=scene_probe_id(original,ids,profile->binding_count,original->controls.color_id);
+ p->packet.controls.depth_id=scene_probe_id(original,ids,profile->binding_count,original->controls.depth_id);
+ p->packet.controls.ta_id=scene_probe_id(original,ids,profile->binding_count,original->controls.ta_id);
+ p->packet.controls.background_id=scene_probe_id(original,ids,profile->binding_count,original->controls.background_id);
+ p->packet.controls.event_id=scene_probe_id(original,ids,profile->binding_count,original->controls.event_id);
+ for(i=0;i<p->packet.use_count;i++)p->packet.uses[i].id=scene_probe_id(original,ids,profile->binding_count,original->uses[i].id);
  for(i=0;i<p->packet.window_count;i++){
-  p->packet.windows[i].index_id=scene_probe_id(original,r->ids,original->windows[i].index_id);
-  p->packet.windows[i].vertex_id=scene_probe_id(original,r->ids,original->windows[i].vertex_id);
+  p->packet.windows[i].index_id=scene_probe_id(original,ids,profile->binding_count,original->windows[i].index_id);
+  p->packet.windows[i].vertex_id=scene_probe_id(original,ids,profile->binding_count,original->windows[i].vertex_id);
  }
  kfree(original);return remesa_scene_packet_valid(&p->packet)?0:-EPROTO;
 }
-static int scene_probe_images(struct remesa_scene_probe *p,const struct remesa_scene_probe_profile *profile)
+static int scene_probe_images(struct remesa_scene_probe *p,const struct scene_probe_selection *profile)
 {
  unsigned i;u8 digest[32];int error;
- for(i=0;i<17;i++)if(profile->bindings[i].access==1){
+ for(i=0;i<profile->binding_count;i++)if(profile->bindings[i].access==1){
   const struct remesa_memory_view *v=&p->job.views[i];
   if(!v->cpu||v->binding.bytes!=profile->bindings[i].bytes)return -EACCES;
   error=remesa_depth1280_sha256(v->cpu,v->binding.bytes,digest);if(error)return error;
@@ -119,23 +154,22 @@ static int scene_probe_cancel_locked(struct remesa_scene_probe *p)
  if(p->guard.held){error=remesa_twod_release(p->guard.device,&p->guard);if(error)return error;}
  return 0;
 }
-int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+static int scene_probe_execute_selected(struct drm_device *dev,struct drm_file *file,
+ struct remesa_scene_probe_request *r,const u32 *ids,const struct scene_probe_selection *profile)
 {
- struct remesa_scene_probe_request *r=data;const struct remesa_scene_probe_profile *profile;
  struct remesa_gem_memory *s;struct drm_psb_private *dev_priv;struct remesa_scene_probe *p=NULL;
  struct retained_job *job;unsigned i;int error,cleanup=0;
  BUILD_BUG_ON(sizeof(scene_probe_profiles)/sizeof(scene_probe_profiles[0])!=REMESA_SCENE_PROBE_PROFILE_COUNT);
  BUILD_BUG_ON(sizeof(*r)!=144);BUILD_BUG_ON(offsetof(struct remesa_scene_probe_request,operation)!=88);
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
  if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
- if(!remesa_scene_probe_request_valid(r))return -EINVAL;
+ if(!scene_probe_selection_valid(r,ids,profile))return -EINVAL;
  mutex_lock(&scene_probe_lock);
  if(scene_probe_retained||scene_probe_consumed){error=-EBUSY;goto done;}
  p=kzalloc(sizeof(*p),GFP_KERNEL);if(!p){error=-ENOMEM;goto done;}
  error=remesa_private_session_acquire(dev,file,r->context,p,&p->memory);
  if(error){kfree(p);p=NULL;goto done;}
  p->backing_owned=true;scene_probe_retained=p;s=p->memory;
- profile=&scene_probe_profiles[r->profile-1];
  mutex_lock(&endpoint_lock);
  if(endpoint!=s||s->private_device_lost||s->file!=file||s->private_session!=p){error=-ENODEV;goto cancel_locked;}
  dev_priv=dev->dev_private;
@@ -145,15 +179,15 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
  mutex_lock(&s->lock);error=0;
  if(s->executor||s->stream_bound||s->ta_cache_domains||s->root.end+1!=0xe0000000ULL){error=-EBUSY;goto bindings_done;}
  for(i=0;i<8;i++)if(s->jobs[i].live){error=-EBUSY;goto bindings_done;}
- for(i=0;i<17;i++){
-  u32 id=r->ids[i];struct backing *b=&s->bo[id&31];const struct remesa_scene_probe_binding *expected=&profile->bindings[i];
+ for(i=0;i<profile->binding_count;i++){
+  u32 id=ids[i];struct backing *b=&s->bo[id&31];const struct remesa_scene_probe_binding *expected=&profile->bindings[i];
   if(!b->live||b->generation!=id>>5){error=-ENOENT;break;}
   if(b->va.start!=expected->address||b->gem.size!=expected->bytes||b->lease||b->holds||
      !b->pinned||!b->reserved||b->quarantine||atomic_read(&b->color_vmas)){error=-EACCES;break;}
   if(expected->access==3&&(!b->initialized||!b->zero_pristine||b->cached_job_view)){error=-ENODATA;break;}
  }
  bindings_done:mutex_unlock(&s->lock);if(error)goto cancel_locked;
- error=scene_probe_packet(p,profile,r);if(error)goto cancel_locked;
+ error=scene_probe_packet(p,profile,r,ids);if(error)goto cancel_locked;
  error=remesa_twod_reserve(dev_priv,&p->guard);if(error)goto cancel_locked;
  mutex_unlock(&endpoint_lock);
  /* Existing opaque backing/source leases keep all endpoint/device dependencies
@@ -165,6 +199,7 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
  if(endpoint!=s||s->private_device_lost||s->file!=file||s->private_session!=p){error=-ENODEV;cleanup=-ENODEV;goto unlock_cleanup;}
  error=remesa_gem_scene_packet_prepare(s,&p->packet,&p->guard,&p->job);if(error)goto cancel_locked;
  r->operation=p->job.snapshot.ticket.operation;r->stages=1;
+ if(p->job.count!=profile->binding_count){error=-EPROTO;goto cancel_locked;}
  error=scene_probe_images(p,profile);if(error)goto cancel_locked;
  r->stages|=2;
  error=remesa_gem_scene_job_execute(&p->job,&p->backend,&p->observation,p,msecs_to_jiffies(r->budget_ms),100000);
@@ -193,8 +228,20 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
  if(!cleanup){if(!error)r->stages|=8;scene_probe_retained=NULL;}
  else if(!error)error=cleanup;
  r->error=error;r->retained=scene_probe_retained!=NULL;
- if(scene_probe_consumed)scene_probe_save_trace(p,r);
+ if(scene_probe_consumed)scene_probe_save_trace(p,r,profile->binding_count);
  if(!cleanup){kfree(p);p=NULL;}
  error=0;
  done:mutex_unlock(&scene_probe_lock);return error;
+}
+
+/* Preserve the original wire ABI, catalogue, root/default-off gates and
+ * profile selectors. No 18-binding operation is registered here. */
+int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+{
+ struct remesa_scene_probe_request *r=data;struct scene_probe_selection selected={0};
+ if(r&&r->profile>=1&&r->profile<=REMESA_SCENE_PROBE_PROFILE_COUNT){
+  const struct remesa_scene_probe_profile *p=&scene_probe_profiles[r->profile-1];
+  selected=(struct scene_probe_selection){p->packet,p->packet_bytes,17,p->bindings};
+ }
+ return scene_probe_execute_selected(dev,file,r,r?r->ids:NULL,&selected);
 }
