@@ -9,7 +9,8 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
  const struct remesa_gem_scene_use *use,struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *out)
 {
  struct remesa_gem_scene_states value={0};struct retained_job *j;
- unsigned ref,p,s,e,u,parameters=0;int error;
+ unsigned ref,p,s,e,u,parameters=0,draw_dwords=0;int error;
+ bool prefix_window=true;
  if(!ta||!out)return -EINVAL;
  j=ticket_job(loan->memory,loan->ticket);
  for(ref=0;ref<ta->reference_count;ref++){
@@ -20,6 +21,23 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
   dwords=parameter?40:(kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)?11:kind==REMESA_TA_REF_DRAW_STATE?14:2;
   for(p=0;p<count&&views[p].binding.id!=ta->references[ref].id;p++);
   if(p==count||!views[p].cpu)return -EACCES;
+  if(kind==REMESA_TA_REF_DRAW_STATE){
+   /* The complete PDS decoder below authenticates the form. This exact DMA
+    * selector only chooses its consumed count, never spare TA capacity. */
+   const u8 *pds=(const u8 *)views[p].cpu+offset;
+   if(remesa_ta_ref_word(pds+4)==(0x80000000u|(14u<<21)|14u))dwords=15;
+   if(draw_dwords&&draw_dwords!=dwords)return -EINVAL;
+   draw_dwords=dwords;
+   if(dwords==15){
+    unsigned r;
+    for(r=0;r<ta->reference_count;r++)if(
+      ta->references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS&&
+      ta->references[r].draw==ta->references[ref].draw)break;
+    if(r==ta->reference_count)return -EINVAL;
+    /* The subsequent vertex checker requires the exact gears CODE320 when
+     * this PARAM grammar is present. States alone never certify a shader. */
+   }
+  }
   error=parameter?remesa_parameter_upload_pds((const u8 *)views[p].cpu+offset,60,&decoded):
    remesa_state_upload_pds((const u8 *)views[p].cpu+offset,60,dwords,&decoded);if(error)return -error;
   for(s=0;s<count;s++){
@@ -33,7 +51,11 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
    const u8 *data=(const u8 *)views[s].cpu+source_offset;u32 header=remesa_ta_ref_word(data);
    if(parameter){
     error=remesa_parameter_upload_source(data,decoded.source_bytes,decoded.source_address);if(error)return -error;
-   }else if(header!=((kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)?0x54c5u:kind==REMESA_TA_REF_DRAW_STATE?0xf41u:0x2000u))return -EINVAL;
+   }else if(header!=((kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)?0x54c5u:
+     kind==REMESA_TA_REF_DRAW_STATE?(dwords==15?0x1f41u:0xf41u):0x2000u))return -EINVAL;
+   if(kind==REMESA_TA_REF_DRAW_STATE&&dwords==15&&remesa_ta_ref_word(data+56))return -EINVAL;
+   if((kind==REMESA_TA_REF_PREFIX_STATE||kind==REMESA_TA_REF_INITIAL_STATE)&&
+      remesa_ta_ref_word(data+36)!=0x10000u)prefix_window=false;
    if(kind==REMESA_TA_REF_INITIAL_STATE&&!remesa_scene_initial_matches(data,decoded.source_bytes))return -EINVAL;
    if(kind==REMESA_TA_REF_CLOSE_STATE&&remesa_ta_ref_word(data+4)!=
       (((controls->command.width+15)>>4)<<16|((controls->command.height+15)>>4)))return -EINVAL;
@@ -56,6 +78,7 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
   value.count++;
   if(parameter)parameters++;
  }
+ if(draw_dwords==15&&!prefix_window)return -EINVAL;
  if(parameters&&parameters!=ta->draw_count)return -EPROTO;
  if(value.count!=ta->draw_count+parameters+2+(ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE))return -EPROTO;
  value.ticket=loan->ticket;*out=value;return 0;

@@ -565,6 +565,12 @@ int remesa_persistent_linked_body_prepare(struct remesa_device *,
  * Legacy body preparation continues to refuse gears states. */
 int remesa_persistent_gears_attribute_body_prepare(struct remesa_device *,
  const struct remesa_linked_body_draw *,size_t count,void *scene_close,void **bo);
+/* All draws must use the distinct state15 owner. Mixed state14/state15 lists
+ * reject before allocation: state14 does not restore the window mode that
+ * state15 changes. PARAM/read dependencies and bank checks remain identical.
+ */
+int remesa_persistent_gears_homogeneous_body_prepare(struct remesa_device *,
+ const struct remesa_linked_body_draw *,size_t count,void *scene_close,void **bo);
 struct remesa_persistent_linked_body_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle,draw_count,dependency_count;
@@ -950,6 +956,12 @@ int remesa_persistent_linked_scene_prepare(struct remesa_device *,
  * retains parameters in the capture; it does not consume their public ref.
  * Same preparation-only, cleanup and native-admission contract as above. */
 int remesa_persistent_gears_attribute_scene_prepare(struct remesa_device *,
+ const struct remesa_linked_scene_request *,void *parameters,struct remesa_scene_capture *);
+/* Separate homogeneous state15 composition using the existing initialized
+ * window-mode prefix, attachments and complete PARAM/USE/read closure. This
+ * does not select a LAB catalogue, enable caps or grant native execution.
+ */
+int remesa_persistent_gears_homogeneous_scene_prepare(struct remesa_device *,
  const struct remesa_linked_scene_request *,void *parameters,struct remesa_scene_capture *);
 
 

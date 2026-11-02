@@ -31,7 +31,7 @@ struct linked_geometry {
 struct memory;
 struct linked_body {
  struct memory *dependencies[REMESA_LINKED_BODY_MAX_DRAWS+1];
- unsigned dependency_count,draw_count;bool parameters;
+ unsigned dependency_count,draw_count;bool parameters,homogeneous;
  size_t bytes;
  uint8_t commands[REMESA_LINKED_BODY_MAX_DRAWS*36+12];
 };
@@ -2434,12 +2434,14 @@ static int body_bank_add(const struct remesa_use_entry_plan *entry,
  banks[b]=*entry;present[b]=true;return 0;
 }
 static int linked_body_prepare(struct remesa_device *device,
- const struct remesa_linked_body_draw *draws,size_t count,void *close,bool gears,void **out)
+ const struct remesa_linked_body_draw *draws,size_t count,void *close,bool gears,
+ bool homogeneous,void **out)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(!draws||!count||count>REMESA_LINKED_BODY_MAX_DRAWS||
     overlaps(draws,count*sizeof(*draws),out,sizeof(*out)))return EINVAL;
  if(*out)return EBUSY;
+ if(homogeneous&&!gears)return ENOTSUP;
  struct remesa_linked_body_draw request[REMESA_LINKED_BODY_MAX_DRAWS];
  memcpy(request,draws,count*sizeof(*draws));
  struct persistent *d=device->priv;struct memory *ending=close;
@@ -2447,7 +2449,8 @@ static int linked_body_prepare(struct remesa_device *device,
  if(!ending->scene_close||ending->state_kind!=REMESA_PERSISTENT_STATE_SCENE_CLOSE||
     !ending->depth_width||!ending->depth_height)return EINVAL;
  const size_t stride=gears?36:28;
- struct linked_body metadata={.draw_count=(unsigned)count,.bytes=count*stride+12,.parameters=gears};
+ struct linked_body metadata={.draw_count=(unsigned)count,.bytes=count*stride+12,
+  .parameters=gears,.homogeneous=homogeneous};
  metadata.dependencies[metadata.dependency_count++]=ending;
  struct remesa_use_entry_plan banks[16]={0};bool present[16]={0};
  e=body_bank_add(&ending->state_use_entry,banks,present);if(e)return e;
@@ -2455,7 +2458,7 @@ static int linked_body_prepare(struct remesa_device *device,
  for(size_t i=0;i<count;i++){
   struct memory *state=request[i].state;
   struct remesa_persistent_linked_state_backing sb;
-  e=linked_state_snapshot(device,state,gears,false,&sb);if(e)return e;
+  e=linked_state_snapshot(device,state,gears,homogeneous,&sb);if(e)return e;
   if(state->depth_width!=ending->depth_width||state->depth_height!=ending->depth_height)return EINVAL;
   for(unsigned p=0;p<2;p++){
    e=body_bank_add(&sb.dependencies.program.entry[p],banks,present);if(e)return e;
@@ -2509,10 +2512,16 @@ fail:
 }
 int remesa_persistent_linked_body_prepare(struct remesa_device *device,
  const struct remesa_linked_body_draw *draws,size_t count,void *close,void **out)
-{return linked_body_prepare(device,draws,count,close,false,out);}
+{return linked_body_prepare(device,draws,count,close,false,false,out);}
 int remesa_persistent_gears_attribute_body_prepare(struct remesa_device *device,
  const struct remesa_linked_body_draw *draws,size_t count,void *close,void **out)
-{return linked_body_prepare(device,draws,count,close,true,out);}
+{return linked_body_prepare(device,draws,count,close,true,false,out);}
+int remesa_persistent_gears_homogeneous_body_prepare(struct remesa_device *device,
+ const struct remesa_linked_body_draw *draws,size_t count,void *close,void **out)
+{return linked_body_prepare(device,draws,count,close,true,true,out);}
+static unsigned linked_body_state_kind(const struct linked_body *body)
+{return body->homogeneous?REMESA_PERSISTENT_STATE_GEARS_HOMOGENEOUS_DRAW:
+ body->parameters?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW;}
 int remesa_persistent_linked_body_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_linked_body_backing *out)
 {
@@ -2685,7 +2694,7 @@ static int linked_ta_reads(struct persistent *d,struct memory *prefix,struct mem
    if(!state->scene_close||state->state_kind!=REMESA_PERSISTENT_STATE_SCENE_CLOSE)return EPROTO;
    continue;
   }
-  if(state->state_kind!=(body->linked_body->parameters?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW)||!state->linked_dependency)return EPROTO;
+  if(state->state_kind!=linked_body_state_kind(b)||!state->linked_dependency)return EPROTO;
   struct memory *pds=state->linked_dependency;
   e=linked_read_add(d,pds,reads,count);if(e)return e;
   if(!pds->linked_pds)return EPROTO;
@@ -3495,7 +3504,8 @@ int remesa_persistent_scene_use_snapshot(const struct remesa_device *device,
    const struct remesa_persistent_zclear_prefix_backing *p=b->zclear_prefix;
    e=scene_use_add(d,c,&value,b,p->use_offset[k],p->use_bytes[k],&p->entries[k]);if(e)return e;
   }
-  if(b->scene_close||b->state_kind==REMESA_PERSISTENT_STATE_LINKED_DRAW||b->state_kind==REMESA_PERSISTENT_STATE_GEARS_DRAW){
+  if(b->scene_close||b->state_kind==REMESA_PERSISTENT_STATE_LINKED_DRAW||
+     b->state_kind==REMESA_PERSISTENT_STATE_GEARS_DRAW||b->state_kind==REMESA_PERSISTENT_STATE_GEARS_HOMOGENEOUS_DRAW){
    e=scene_use_add(d,c,&value,b,b->state_use_offset,16,&b->state_use_entry);if(e)return e;
   }
   if(b->state_kind==REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS){
@@ -3557,7 +3567,7 @@ static int scene_ta_reference(void *context,const struct remesa_ta_reference *re
  case REMESA_TA_REF_DRAW_STATE:{
   const struct linked_body *body=t->body->linked_body;bool found=false;
   for(unsigned k=1;k<body->dependency_count;k++)if(body->dependencies[k]==b)found=true;
-  if(!found||b->state_kind!=(body->parameters?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW)||offset!=b->state_pds_offset)return EINVAL;
+  if(!found||b->state_kind!=linked_body_state_kind(body)||offset!=b->state_pds_offset)return EINVAL;
   object_bytes=60;ctx->state=b;break;
  }
  case REMESA_TA_REF_DRAW_PARAMETERS:{
@@ -3782,7 +3792,8 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *device,
 }
 
 static int linked_scene_prepare(struct remesa_device *device,
- const struct remesa_linked_scene_request *request,void *parameters,bool gears,struct remesa_scene_capture *out)
+ const struct remesa_linked_scene_request *request,void *parameters,bool gears,
+ bool homogeneous,struct remesa_scene_capture *out)
 {
  if(!request||!out||(uintptr_t)request%_Alignof(struct remesa_linked_scene_request)||
     (uintptr_t)out%_Alignof(struct remesa_scene_capture)||
@@ -3794,6 +3805,7 @@ static int linked_scene_prepare(struct remesa_device *device,
     (r.geometry.vertices&&overlaps(r.geometry.vertices,r.geometry.vertex_bytes,out,sizeof(*out)))||
     (r.geometry.indices&&overlaps(r.geometry.indices,r.geometry.index_bytes,out,sizeof(*out))))return EINVAL;
  if(out->owner||out->serial||out->slot||out->reserved)return EBUSY;
+ if(homogeneous&&(!gears||r.state.viewport.path!=REMESA_TA_VIEWPORT_MATRIX_WINDOW))return ENOTSUP;
  if(gears){
   struct remesa_persistent_vertex_parameters_backing pb;
   e=remesa_persistent_vertex_parameters_snapshot(device,parameters,&pb);if(e)return e;
@@ -3813,10 +3825,10 @@ static int linked_scene_prepare(struct remesa_device *device,
  e=remesa_persistent_linked_geometry_prepare(device,&r.geometry,&objects[1]);if(e)goto done;
  e=gears?remesa_persistent_gears_attribute_pds_prepare(device,objects[0],objects[1],parameters,&objects[2]):
   remesa_persistent_linked_pds_prepare(device,objects[0],objects[1],&objects[2]);if(e)goto done;
- e=linked_state_prepare(device,objects[2],&r.state,r.state_bank,gears,false,&objects[3]);if(e)goto done;
+ e=linked_state_prepare(device,objects[2],&r.state,r.state_bank,gears,homogeneous,&objects[3]);if(e)goto done;
  e=remesa_persistent_scene_close_prepare(device,r.width,r.height,r.state_bank,&objects[4]);if(e)goto done;
  const struct remesa_linked_body_draw draw={objects[3],0,r.geometry.indices?r.geometry.index_count:r.geometry.vertex_count};
- e=linked_body_prepare(device,&draw,1,objects[4],gears,&objects[5]);if(e)goto done;
+ e=linked_body_prepare(device,&draw,1,objects[4],gears,homogeneous,&objects[5]);if(e)goto done;
  e=remesa_persistent_initialized_prefix_prepare(device,r.width,r.height,r.clear_depth,r.vertex_bank,r.pixel_bank,r.state_bank,&objects[6]);if(e)goto done;
  e=remesa_persistent_linked_ta_prepare(device,objects[6],objects[5],&objects[7]);if(e)goto done;
  e=remesa_persistent_finalized_targets_prepare(device,objects[7],r.color,r.depth,r.color_pitch,&objects[8]);if(e)goto done;
@@ -3837,10 +3849,13 @@ static int linked_scene_prepare(struct remesa_device *device,
 }
 int remesa_persistent_linked_scene_prepare(struct remesa_device *device,
  const struct remesa_linked_scene_request *request,struct remesa_scene_capture *out)
-{return linked_scene_prepare(device,request,NULL,false,out);}
+{return linked_scene_prepare(device,request,NULL,false,false,out);}
 int remesa_persistent_gears_attribute_scene_prepare(struct remesa_device *device,
  const struct remesa_linked_scene_request *request,void *parameters,struct remesa_scene_capture *out)
-{if(!parameters)return EINVAL;return linked_scene_prepare(device,request,parameters,true,out);}
+{if(!parameters)return EINVAL;return linked_scene_prepare(device,request,parameters,true,false,out);}
+int remesa_persistent_gears_homogeneous_scene_prepare(struct remesa_device *device,
+ const struct remesa_linked_scene_request *request,void *parameters,struct remesa_scene_capture *out)
+{if(!parameters)return EINVAL;return linked_scene_prepare(device,request,parameters,true,true,out);}
 
 int remesa_persistent_set_native_copy(struct remesa_device *device,remesa_gpu_copy_fn fn)
 {
