@@ -71,11 +71,11 @@ USE relocation words differ. This is offline reuse of physically exercised
 components, not physical approval of the new closure.
 
 The legacy index, draw-state and scene builders still refuse this PDS profile.
-The next executor integration must include the owned parameter TA reference
-in order before the draw and carry this extra source through the complete
-kernel use-set, bank/extent validation, job holds and retirement. It must also
-preserve the appropriate coordinate/export and raster contracts. A successful
-CODE/PDS preparation cannot replace those checks. Ordinary draw/capabilities,
+The separate [ordered TA integration](gears-ordered-ta.md) now includes the
+owned parameter command, READ/USE closure and independent kernel PARAM checks.
+The remaining vertex/program, fragment-state selection and complete scene
+contracts must be integrated before native execution. A successful CODE/PDS
+or TA preparation cannot replace those checks. Ordinary draw/capabilities,
 the production FAST route and the working GLXGEARS path are unchanged.
 
 No hardware operation was performed for this integration. The failed

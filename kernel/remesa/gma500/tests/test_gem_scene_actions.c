@@ -17,6 +17,7 @@
 #include "scene_service_model.inc"
 #include "scene_backend_model.inc"
 #include "scene_execute_model.inc"
+static bool parameter_upload_case;
 static void state_word(u8 *p,u32 word)
 {for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
 /* Modeled inputs only. Separate tests compare validators against unchanged
@@ -165,6 +166,10 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  command.entries[7]=(struct remesa_gem_scene_use_entry){ids[16],0,8,3,1,0};
  command.entries[8]=(struct remesa_gem_scene_use_entry){ids[14],96,16,3,1,0};
  command.entries[9]=(struct remesa_gem_scene_use_entry){ids[14],128,8,3,1,0};
+ if(parameter_upload_case){
+  command.controls.ta_bytes=76;command.use.entry_count=11;command.use.bytes+=sizeof(command.entries[0]);
+  command.entries[10]=(struct remesa_gem_scene_use_entry){ids[10],512,8,4,0,0};
+ }
  command.vertex=(struct remesa_gem_scene_vertex_command){1,sizeof(command.vertex)+2*sizeof(command.windows[0]),2,0};
  command.windows[0]=(struct remesa_gem_scene_vertex_window){ids[9],128,6,ids[9],64,48,3,0};
  command.windows[1]=(struct remesa_gem_scene_vertex_window){ids[11],144,6,ids[11],0,144,3,0};
@@ -294,7 +299,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_scene_controls_prepare(s,ticket,4,control_offset,&controls)&&!memcmp(&controls,&control_saved,sizeof controls));
  memset(&use,0xa5,sizeof use);use_saved=use;
  CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset+1,&use)==-EINVAL&&!memcmp(&use,&use_saved,sizeof use));
- CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==10&&use.bank_mask==24);
+ CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&use.entry_count==(parameter_upload_case?11u:10u)&&use.bank_mask==24);
  CHECK(vmap_calls==maps_before&&flushes==flush_before&&test_zeroed_pages==zero_before);
  use_saved=use;
  struct remesa_gem_scene_use_command *use_copy=(void *)((u8 *)j->commands+use_offset),use_header=*use_copy;
@@ -318,11 +323,20 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  use_copy->entry_count++;use_copy->bytes+=sizeof(*entries);use_bad=use;
  CHECK(remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)==-EINVAL&&!memcmp(&use,&use_bad,sizeof use));
  *use_copy=use_header;
+ if(parameter_upload_case)entries[10]=(struct remesa_gem_scene_use_entry){ids[10],512,8,4,0,0};
  CHECK(!remesa_gem_scene_use_prepare(s,ticket,4,control_offset,use_offset,&use)&&!memcmp(&use,&use_saved,sizeof use));
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,9)==-EACCES);
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,0x1ffc1)==17&&vmap_calls==maps_before+12);
  CHECK(!views[1].cpu&&!views[2].cpu&&!views[3].cpu);
  scene_images(views,uses,&use,width,height,pitch);
+ if(parameter_upload_case){
+  u8 *stream=(u8 *)views[6].cpu+4,*draw=views[10].cpu;
+  memmove(stream+44,stream+36,32);CHECK(!remesa_ta_parameter_reference_encode(uses[10].va+832,40,stream+36));
+  state_fixture(draw+832,uses[10].va+1024,40,use.lower19[10],draw+512);
+  state_word(draw+836,0x80000000u|(9u<<21)|(3u<<4)|9u);state_word(draw+844,0x04000000u);state_word(draw+872,0);
+  state_word(draw+512,0);state_word(draw+516,0xf8040140);
+  memset(draw+1024,0,160);state_word(draw+1024,uses[10].va+1024);
+ }
  u8 *stream=(u8 *)views[6].cpu+4,stream_saved[68];memcpy(stream_saved,stream,68);
  u8 *prefix=views[9].cpu,*draw=views[10].cpu,*close=views[13].cpu,*indices=views[11].cpu;
  u8 *bg=(u8 *)views[7].cpu+16,*bp=(u8 *)views[16].cpu+32,*ep=(u8 *)views[8].cpu+32,*target=views[15].cpu;
@@ -340,6 +354,28 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(!remesa_gem_scene_controls_check_locked(&loan,views,17,&plan,&controls));
  if(fault>=9&&fault<=10){CHECK(remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use)==-EACCES);goto unlock;}
  CHECK(!remesa_gem_scene_use_check_locked(&loan,views,17,&plan,&controls,&use));
+ if(parameter_upload_case){
+  CHECK(!remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs));
+  CHECK(ta_refs.reference_count==8&&ta_refs.draw_count==1&&ta_refs.references[4].kind==REMESA_TA_REF_DRAW_PARAMETERS);
+  CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)&&states.count==4);
+  CHECK(states.uploads[2].source_id==ids[10]&&states.uploads[2].source_offset==1024&&
+   states.uploads[2].source_bytes==160&&states.uploads[2].use_id==ids[10]&&states.uploads[2].use_offset==512);
+  states_saved=states;
+  memset(&vertices,0xa5,sizeof vertices);vertices_saved=vertices;
+  CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-EOPNOTSUPP&&
+   !memcmp(&vertices,&vertices_saved,sizeof vertices));
+  const unsigned corrupt[]={1024,1024+148,836,844,872,832+48,516};
+  for(unsigned n=0;n<sizeof corrupt/sizeof corrupt[0];n++){
+   draw[corrupt[n]]^=1;
+   CHECK(remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)<0&&!memcmp(&states,&states_saved,sizeof states));
+   draw[corrupt[n]]^=1;
+  }
+  /* Inject corrupt rule metadata only at the inner state checker. The model's
+   * prerequisite auditor deliberately asserts its original immutable rules. */
+  loan.rules[10].access=3;CHECK(scene_states_build_checked(&loan,views,17,&controls,&use,&ta_refs,&states)==-EACCES&&!memcmp(&states,&states_saved,sizeof states));loan.rules[10].access=1;
+  loan.rules[10].cached=0;CHECK(scene_states_build_checked(&loan,views,17,&controls,&use,&ta_refs,&states)==-EACCES&&!memcmp(&states,&states_saved,sizeof states));loan.rules[10].cached=1;
+  goto unlock;
+ }
  CHECK(!remesa_gem_scene_ta_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs));
  CHECK(ta_refs.draw_count==1&&ta_refs.reference_count==7&&ta_refs.ta_id==ids[6]&&ta_refs.ta_bytes==68);
  CHECK(ta_refs.references[0].id==ids[9]&&ta_refs.references[0].byte_offset==352&&
@@ -473,6 +509,10 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(int argc,char **argv)
 {
+ if(argc==2&&!strcmp(argv[1],"--parameter-upload")){
+  parameter_upload_case=true;action_case(640,640,0);
+  puts("PASS actual retained core/private loan + ordered PARAM TA/kernel source/PDS/EE checks, address/padding/CODE/RW/cache corruption refusal, cleanup; GPU0");return 0;
+ }
  if(argc==3&&!strcmp(argv[1],"--replay")){scene_replay(argv[2]);return 0;}
  if(argc==3){CHECK(!strcmp(argv[1],"--execute-fault"));execute_fault=(unsigned)strtoul(argv[2],NULL,10);CHECK(execute_fault>=1&&execute_fault<=10);action_case(640,640,14);CHECK(0);}
  CHECK(argc==1);

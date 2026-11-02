@@ -35,8 +35,19 @@ static __attribute__((__noinline__)) int scene_ta_build_checked(struct remesa_ge
  for(i=0;i<count&&views[i].binding.id!=c->ta_id;i++);
  if(i==count||!views[i].cpu||loan->rules[i].access!=REMESA_MMU_GPU_READ||loan->rules[i].cached!=1)return -EACCES;
  resolver=(struct scene_ta_resolver){loan,views,count,&value};
- error=remesa_ta_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
-  scene_ta_resolve,&resolver,&counts);if(error)return -error;
+ /* Select only after a side-effect-free complete syntax check. Never retry
+  * another grammar after a resolver permission/address failure. */
+ error=remesa_ta_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,NULL,NULL,&counts);
+ if(!error)error=remesa_ta_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
+  scene_ta_resolve,&resolver,&counts);
+ else{
+  int legacy_error=error;
+  error=remesa_ta_gears_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,NULL,NULL,&counts);
+  if(error)return -legacy_error;
+  error=remesa_ta_gears_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
+   scene_ta_resolve,&resolver,&counts);
+ }
+ if(error)return -error;
  if(counts.references!=value.reference_count)return -EPROTO;
  value.ticket=loan->ticket;value.ta_id=c->ta_id;value.ta_offset=c->ta_offset;value.ta_bytes=c->ta_bytes;
  value.draw_count=counts.draws;*out=value;return 0;

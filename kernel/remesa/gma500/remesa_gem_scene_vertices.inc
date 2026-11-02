@@ -15,6 +15,12 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
  struct remesa_gem_scene_use_command use_command;struct retained_job *j;
  unsigned draw,p,i,v,e,u;int error;
  if(!out)return -EINVAL;
+ /* The PARAM grammar has four references per draw; the legacy decoder below
+  * indexes triples and authenticates only the old 64-byte vertex program.
+  * Refuse before indexing or dereferencing any indirect image until the
+  * separate 320-byte program/fetch contract is integrated. */
+ for(draw=0;draw<ta->reference_count;draw++)
+  if(ta->references[draw].kind==REMESA_TA_REF_DRAW_PARAMETERS)return -EOPNOTSUPP;
  j=ticket_job(loan->memory,loan->ticket);
  if((offset&3)||offset>j->command_bytes||sizeof(command)>j->command_bytes-offset)return -EINVAL;
  memcpy(&command,(const u8 *)j->commands+offset,sizeof(command));

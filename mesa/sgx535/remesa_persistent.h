@@ -241,7 +241,8 @@ enum remesa_persistent_state_kind {
  REMESA_PERSISTENT_STATE_CONSTANT_DRAW=3, REMESA_PERSISTENT_STATE_SCENE_ZCLEAR=4,
  REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6,
  REMESA_PERSISTENT_STATE_LINKED_DRAW=7,
- REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS=8
+ REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS=8,
+ REMESA_PERSISTENT_STATE_GEARS_DRAW=9
 };
 /* Owned parameter source using the physically exercised dense16-coefficient,
  * prefix17/transfer20-DWORD policy. Exact float bits, not vertex evaluation.
@@ -526,11 +527,15 @@ struct remesa_persistent_linked_state_request {
 };
 int remesa_persistent_linked_state_prepare(struct remesa_device *,void *pds,
  const struct remesa_persistent_linked_state_request *,uint32_t state_bank,void **bo);
+int remesa_persistent_gears_attribute_state_prepare(struct remesa_device *,void *pds,
+ const struct remesa_persistent_linked_state_request *,uint32_t state_bank,void **bo);
 struct remesa_persistent_linked_state_backing {
  struct remesa_persistent_isp_update_backing image;
  struct remesa_persistent_linked_pds_backing dependencies;
 };
 int remesa_persistent_linked_state_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_state_backing *);
+int remesa_persistent_gears_attribute_state_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_state_backing *);
 /* Ordered dynamic draw-body storage: (state reference8 + indexed draw20)*N
  * followed by the owned scene-close12. Not an initial scene: bounds/clears,
@@ -543,6 +548,11 @@ int remesa_persistent_linked_state_snapshot(const struct remesa_device *,void *b
 #define REMESA_LINKED_BODY_MAX_DRAWS 16u
 struct remesa_linked_body_draw {void *state;uint32_t first_index,index_count;};
 int remesa_persistent_linked_body_prepare(struct remesa_device *,
+ const struct remesa_linked_body_draw *,size_t count,void *scene_close,void **bo);
+/* Separate state8/PARAM8/index20 ordered body. All parameter references derive
+ * from the state's held PDS closure; no caller VA/command or standalone task.
+ * Legacy body preparation continues to refuse gears states. */
+int remesa_persistent_gears_attribute_body_prepare(struct remesa_device *,
  const struct remesa_linked_body_draw *,size_t count,void *scene_close,void **bo);
 struct remesa_persistent_linked_body_backing {
  uint64_t owner,generation,gpu_va;

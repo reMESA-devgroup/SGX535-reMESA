@@ -23,7 +23,7 @@ uint32_t nir_debug=0;
 static void open_link_owner(struct fixture *f,struct remesa_device *d,uint64_t context)
 {
  struct remesa_persistent_config cfg={.ops=&ops,.priv=f,.context=context,
-  .va_start=0x20000000,.va_end=0x20100000,.byte_budget=8*4096,.resource_only_backend=true};
+  .va_start=0x20000000,.va_end=0x20100000,.byte_budget=16*4096,.resource_only_backend=true};
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};
  CHECK(!remesa_persistent_open(d,&cfg));
 }
@@ -65,6 +65,7 @@ static void setup_gears(struct fixture *f,struct remesa_device *d,unsigned conte
 #endif
  CHECK(!remesa_persistent_vertex_parameter_block_prepare(d,coefficients,count,(count+4u)&~3u,parameter_bank,parameters));
 }
+#ifndef REMESA_GEARS_ATTRIBUTE_OWNER_FIXTURE
 int main(void)
 {
 #if defined(REMESA_WITH_NIR) && defined(REMESA_TEST_REAL_NIR_BUILDER)
@@ -137,3 +138,4 @@ int main(void)
 #endif
  puts("PASS existing gears attribute CODE320/PDS with owned source37/transfer40, semantic admission, 8input/11temp/8output, transitive lifetime/bank conflicts and quarantine; legacy scene/index refusal retained; GPU0");return 0;
 }
+#endif
