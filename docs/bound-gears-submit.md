@@ -41,3 +41,5 @@ are freed, complete trace decoding, independent oracles and the recoverable
 boot image. The existing module has not been installed by this change.
 Full OpenGL/GLES admission, continuous sessions and complete driver installation
 remain unfinished.
+
+The separate native LAB client and its remaining physical boundary are documented in [gears-native-client.md](gears-native-client.md).
