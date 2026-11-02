@@ -93,3 +93,47 @@ controlled physical pair and verified stock recovery before hardware approval.
 The next driver work remains production dispatch and resource lifecycle,
 including authenticated update epochs for changing inputs. Complete desktop
 3D/2D, GL2.1/GLES2 support and an installable driver are still the objective.
+
+## Boot profile correction, November 2
+
+The first candidate compiled the private MMU profile without the existing
+native copy and fill components. It passed the core ownership tests but could
+not satisfy first-load's seven-control contract. The Mini 12 stopped before
+network startup when `remesa_twod_copy_enabled` was absent; ELF inspection also
+confirmed the missing fill control. This was a packaging error, not a reason
+to remove the first-load checks or reimplement the validated 2D paths.
+
+Stage this combined profile with all three options:
+
+```sh
+python3 tools/remesa/stage_twod_reservation.py \
+  --native-source checkpoints/sgx535-20261026/qualified-single-clear/module \
+  --output NEW_MODULE_DIRECTORY --with-native-copy --with-native-fill \
+  --with-private-mmu-preparation
+```
+
+Before packaging an i486 first-load image, run:
+
+```sh
+python3 tools/remesa/verify_firstload_module.py \
+  --module NEW_MODULE_DIRECTORY/gma500_gfx.ko --output NEW_RESULT.json
+```
+
+This reads the ELF parameter registrations, bool types, permissions and static
+initializers. All seven controls must exist, have mode 0600 and start at zero.
+It does not load a module or replace the runtime identity and seven-N checks.
+The corrected image builder requires this preflight before writing its output.
+The regression tool `tools/remesa/test_firstload_module.py` takes
+`--known-good`, `--missing-profile` and `--output`; it checks the actual accepted
+and rejected modules plus malformed metadata, permissions, type and initializer
+fixtures without changing either input file.
+
+Preserved correction evidence:
+`/home/gama/sgx535-offline/general-scene-input-ownership-20261102/v2-full-profile/`.
+The corrected module SHA-256 is
+`70a315aa0d03489b0ffbf0eae1cc399f2c479dd809412701d3630490599504ac`;
+the image SHA-256 is
+`e44d85f68aec3aa88b5259e100597780b35b3bb49903bb5b8fa2c937ab515070`.
+Seven module metadata tests, five identity-chain tests and four visible-HOLD
+tests pass offline. Physical qualification of this corrected image is separate;
+the earlier failed image is retained as evidence.
