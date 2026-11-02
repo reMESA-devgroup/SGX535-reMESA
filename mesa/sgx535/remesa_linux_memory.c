@@ -329,7 +329,7 @@ int remesa_linux_memory_gears_scene_lab_submit(struct remesa_linux_memory *d,
  if(!profile||profile>REMESA_GEARS_SCENE_PROFILE_COUNT||!budget||budget>10000||
     !remesa_scene_packet_valid(packet)||packet->owner!=d->context||
     packet->binding_count!=18||packet->use_count!=11||packet->window_count!=2)return EINVAL;
- const unsigned width=profile==1?1280:640,height=profile==1?800:640;
+ const unsigned width=(profile&1)?1280:640,height=(profile&1)?800:640;
  if(packet->controls.width!=width||packet->controls.height!=height||
     packet->controls.schema!=2||packet->controls.depth_finalize!=1||packet->controls.ta_bytes!=104)return EINVAL;
  for(unsigned i=0;i<18;i++){
@@ -350,8 +350,8 @@ int remesa_linux_memory_gears_scene_lab_submit(struct remesa_linux_memory *d,
     r.phase!=9||r.ledger!=7||r.error||r.retained||r.stages!=15)return private_lab_uncertain(d);
  return 0;
 }
-enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *opaque,
- const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+static enum remesa_dispatch gears_scene_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out,unsigned profile_offset)
 {
  struct remesa_linux_memory *d=opaque;
  if(!d||!submit||!out||(uintptr_t)submit%_Alignof(struct remesa_gpu_scene_submit)||
@@ -361,12 +361,18 @@ enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *opaque,
  if(d->private_poison)return REMESA_ISSUANCE_AMBIGUOUS;
  if(d->scene_attempted)return REMESA_NOT_ISSUED;
  struct remesa_gears_scene_probe_request response;
- unsigned profile=submit->packet->controls.width==1280?1:2;
+ unsigned profile=(submit->packet->controls.width==1280?1:2)+profile_offset;
  int error=remesa_linux_memory_gears_scene_lab_submit(d,submit->packet,profile,1000,&response);
  if(error)return d->private_poison?REMESA_ISSUANCE_AMBIGUOUS:REMESA_NOT_ISSUED;
  *out=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,
   .retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
 }
+enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{return gears_scene_lab_dispatch(opaque,submit,out,0);}
+enum remesa_dispatch remesa_linux_memory_gears_homogeneous_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{return gears_scene_lab_dispatch(opaque,submit,out,2);}
 int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *d,
  struct remesa_gears_scene_probe_request *out)
 {

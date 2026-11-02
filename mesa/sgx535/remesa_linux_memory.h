@@ -125,6 +125,11 @@ int remesa_linux_memory_gears_scene_lab_submit(struct remesa_linux_memory *,
  struct remesa_gears_scene_probe_request *);
 enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Explicit state15/W2 profiles3/4. Never selected by the old adapter or
+ * inferred from target size. Requires the separately staged four-profile
+ * kernel; registration is not physical qualification or general GL support. */
+enum remesa_dispatch remesa_linux_memory_gears_homogeneous_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *,
  struct remesa_gears_scene_probe_request *);
 /* Optional LAB query after authenticated retirement. One read-only ioctl, no

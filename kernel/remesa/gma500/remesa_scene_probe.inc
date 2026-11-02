@@ -6,6 +6,7 @@
 #include "remesa_scene_probe_request.h"
 #include "remesa_scene_probe_profiles.h"
 #include "remesa_gears_scene_probe_profiles.h"
+#include "remesa_gears_homogeneous_probe_profiles.h"
 #include "remesa_gears_scene_probe_envelope.h"
 #include "remesa_private_session.h"
 static DEFINE_MUTEX(scene_probe_lock);
@@ -44,7 +45,7 @@ static bool scene_probe_selection_valid(const struct remesa_scene_probe_request 
  if(profile->binding_count==17){
   if(!remesa_scene_probe_request_valid(r)||memcmp(ids,r->ids,sizeof(r->ids)))return false;
  }else{
-  if(r->version!=2||r->profile<1||r->profile>2)return false;
+  if(r->version!=2||r->profile<1||r->profile>REMESA_GEARS_SCENE_PROFILE_COUNT)return false;
   legacy=*r;legacy.version=1;legacy.profile=1;memcpy(legacy.ids,ids,sizeof(legacy.ids));
   if(!remesa_scene_probe_request_valid(&legacy))return false;
  }
@@ -260,14 +261,17 @@ int remesa_gears_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_
  struct remesa_scene_probe_request normalized={0};struct scene_probe_selection selected;
  const struct remesa_gears_scene_probe_profile *profile;u32 ids[18];unsigned i;int error;
  BUILD_BUG_ON(sizeof(*r)!=152);BUILD_BUG_ON(offsetof(struct remesa_gears_scene_probe_request,operation)!=96);
- BUILD_BUG_ON(sizeof(gears_scene_probe_profiles)/sizeof(gears_scene_probe_profiles[0])!=REMESA_GEARS_SCENE_PROFILE_COUNT);
+ BUILD_BUG_ON((sizeof(gears_scene_probe_profiles)/sizeof(gears_scene_probe_profiles[0]))!=2);
+ BUILD_BUG_ON((sizeof(gears_homogeneous_probe_profiles)/sizeof(gears_homogeneous_probe_profiles[0]))!=2);
+ BUILD_BUG_ON(REMESA_GEARS_SCENE_PROFILE_COUNT!=4);
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
  if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
  if(!remesa_gears_scene_probe_request_valid(r))return -EINVAL;
  normalized.version=2;normalized.profile=r->profile;normalized.context=r->context;normalized.budget_ms=r->budget_ms;
  for(i=0;i<18;i++)ids[i]=r->ids[i];
  memcpy(normalized.ids,ids,sizeof(normalized.ids));
- profile=&gears_scene_probe_profiles[r->profile-1];
+ profile=r->profile<=2?&gears_scene_probe_profiles[r->profile-1]:
+  &gears_homogeneous_probe_profiles[r->profile-3];
  selected=(struct scene_probe_selection){profile->packet,profile->packet_bytes,18,profile->bindings};
  error=scene_probe_execute_selected(dev,file,&normalized,ids,&selected);
  if(error)return error;

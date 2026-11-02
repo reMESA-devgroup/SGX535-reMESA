@@ -7,8 +7,9 @@ constant buffer, using the same Linux/GEM provider and complete scene owners.
 
 The separate binary currently accepts only `--prepare-only`. Its compile-time
 path contains no scene-probe dispatch; `--execute` is refused before memory
-allocation. A matching native catalogue and explicit selector must be added
-before this mode may run on hardware. The original client's execute path and
+allocation. The separate native catalogue and explicit transport selectors now
+exist, but this client still needs its execute path connected and tested before
+this mode may run on hardware. The original client's execute path and
 its existing catalogues are unchanged.
 
 The candidate uses raw PN and coefficient bytes extracted from the sealed
@@ -36,8 +37,24 @@ input/expected-pixel comparisons, independent oracle tests and both W2 captures
 through all three retained kernel models. Hardware callbacks are modeled;
 no new GPU operation took place.
 
-`CANDIDATE_INPUTS.json` proposes separate selectors 3/4 but does not register
-them. Do not use it as an installed catalogue or submit these images through
-old selectors 1/2. The next integration must preserve those old profiles,
-select the matching new images explicitly and qualify the complete path on a
-fresh recoverable N/N boot. Complete OpenGL 2.1 remains unproved.
+`CANDIDATE_INPUTS.json` records the proposed selectors 3/4. Its augmented sealed
+input record, `CANDIDATE_INPUTS_WITH_PATHS.json`, feeds the separate generator
+`tools/remesa/build_gears_homogeneous_probe_profiles.py`. The generated
+`remesa_gears_homogeneous_probe_profiles.h` registers those two exact scenes in
+newly staged kernels. The old selectors 1/2 and their table remain unchanged.
+The request and trace layouts and the shared once-per-boot gate are unchanged.
+Registration does not qualify the new physical path or enable a gate.
+
+The Linux memory adapter `remesa_linux_memory_gears_homogeneous_lab_dispatch`
+selects 3/4 explicitly. The old adapter still selects 1/2. Both use the same
+ownership, address, permission, completion, retirement and uncertainty checks.
+An entered failure retains and poisons all endpoint resources without retry.
+
+Offline evidence for this integration is under
+`/home/gama/sgx535-offline/homogeneous-native-wire-20261102/v1`.
+It covers all four transport selectors, separate old/new controller catalogues,
+wire layout preservation, altered state rejection and a full module build.
+The module is not installed. Next connect and test the native client, then
+qualify the complete path on a fresh recoverable N/N boot at each size. Do not
+submit these images through old selectors or treat model receipts as GPU
+evidence. Complete OpenGL 2.1 remains unproved.

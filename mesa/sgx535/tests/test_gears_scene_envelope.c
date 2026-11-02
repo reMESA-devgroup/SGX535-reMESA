@@ -18,9 +18,9 @@ int main(void)
  assert(DRM_IOCTL_REMESA_GEARS_SCENE_PROBE!=DRM_IOCTL_REMESA_SCENE_PROBE&&DRM_IOCTL_REMESA_GEARS_SCENE_TRACE!=DRM_IOCTL_REMESA_SCENE_TRACE);
  struct remesa_gears_scene_probe_request r={.version=2,.profile=1,.context=77,.budget_ms=1};
  for(unsigned i=0;i<18;i++)r.ids[i]=32+i;
- assert(remesa_gears_scene_probe_request_valid(&r));r.profile=2;r.budget_ms=10000;assert(remesa_gears_scene_probe_request_valid(&r));
+ assert(remesa_gears_scene_probe_request_valid(&r));r.budget_ms=10000;for(r.profile=1;r.profile<=4;r.profile++)assert(remesa_gears_scene_probe_request_valid(&r));r.profile=4;
 #define BAD(field,value) do{struct remesa_gears_scene_probe_request bad=r;bad.field=value;assert(!remesa_gears_scene_probe_request_valid(&bad));}while(0)
- BAD(version,1);BAD(profile,0);BAD(profile,3);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);BAD(reserved_input,1);
+ BAD(version,1);BAD(profile,0);BAD(profile,5);BAD(context,0);BAD(budget_ms,0);BAD(budget_ms,10001);BAD(reserved_input,1);
  BAD(operation,1);BAD(cookie,1);BAD(core,1);BAD(revision,1);BAD(pds_base,1);BAD(phase,1);BAD(ledger,1);BAD(error,-1);BAD(retained,1);BAD(stages,1);BAD(reserved[0],1);BAD(reserved[1],1);
 #undef BAD
  for(unsigned i=0;i<18;i++){struct remesa_gears_scene_probe_request bad=r;bad.ids[i]=0;assert(!remesa_gears_scene_probe_request_valid(&bad));for(unsigned j=0;j<18;j++)if(i!=j){bad=r;bad.ids[i]=r.ids[j];assert(!remesa_gears_scene_probe_request_valid(&bad));}}

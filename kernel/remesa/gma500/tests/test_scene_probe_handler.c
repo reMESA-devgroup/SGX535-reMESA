@@ -138,7 +138,12 @@ int main(int argc,char **argv)
  u32 ids[18]={0};struct scene_probe_selection selected={0};
 #ifdef REMESA_SCENE_CONTROLLER_WIRE_V2
  CHECK(fault<OK_INIT);wire_mode=true;expected_count=18;request.version=2;request.profile=fault==OK640?2:1;
+ #ifdef REMESA_SCENE_CONTROLLER_HOMOGENEOUS
+ request.profile+=2;
+ const struct remesa_gears_scene_probe_profile *gear=&gears_homogeneous_probe_profiles[request.profile-3];
+#else
  const struct remesa_gears_scene_probe_profile *gear=&gears_scene_probe_profiles[request.profile-1];
+#endif
  selected=(struct scene_probe_selection){gear->packet,gear->packet_bytes,18,gear->bindings};expected_bindings=selected.bindings;
 #endif
 #ifdef REMESA_SCENE_CONTROLLER_EXTENDED
@@ -160,7 +165,7 @@ int main(int argc,char **argv)
 #undef BAD
   if(expected_count==18){
 #define BAD_INTERNAL(field,value) do{struct remesa_scene_probe_request bad=request;bad.field=(value);CHECK(scene_probe_execute_selected(&dev,&file,&bad,ids,&selected)==-EINVAL);}while(0)
-   BAD_INTERNAL(version,0);BAD_INTERNAL(profile,0);BAD_INTERNAL(profile,3);BAD_INTERNAL(context,0);BAD_INTERNAL(budget_ms,0);BAD_INTERNAL(budget_ms,10001);
+   BAD_INTERNAL(version,0);BAD_INTERNAL(profile,0);BAD_INTERNAL(profile,REMESA_GEARS_SCENE_PROFILE_COUNT+1);BAD_INTERNAL(context,0);BAD_INTERNAL(budget_ms,0);BAD_INTERNAL(budget_ms,10001);
    BAD_INTERNAL(operation,1);BAD_INTERNAL(cookie,1);BAD_INTERNAL(core,1);BAD_INTERNAL(revision,1);BAD_INTERNAL(pds_base,1);BAD_INTERNAL(phase,1);BAD_INTERNAL(ledger,1);BAD_INTERNAL(error,1);BAD_INTERNAL(retained,1);BAD_INTERNAL(stages,1);BAD_INTERNAL(reserved[0],1);BAD_INTERNAL(reserved[1],1);
 #undef BAD_INTERNAL
    u32 saved=ids[17];ids[17]=0;CHECK(scene_probe_execute_selected(&dev,&file,&request,ids,&selected)==-EINVAL);

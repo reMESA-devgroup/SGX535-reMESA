@@ -3,10 +3,11 @@
 #define REMESA_GEARS_SCENE_PROBE_UAPI_H
 #include "scene_probe_uapi.h"
 /* Separate closed LAB ABI. Never reinterpret the old17-binding request or
- * its reserved words. Selectors1/2 describe exact1280x800/640x640 catalogues.
+ * its reserved words. Selectors1/2 retain the state14 catalogues; explicit
+ * selectors3/4 select state15/W2 at1280x800/640x640 respectively.
  * Matching kernel registration/catalogues and physical qualification required.
  * No caller packet, VA, CODE, pointer or execution-evidence injection. */
-#define REMESA_GEARS_SCENE_PROFILE_COUNT 2u
+#define REMESA_GEARS_SCENE_PROFILE_COUNT 4u
 struct remesa_gears_scene_probe_request {
  __u32 version,profile;
  __u64 context;
