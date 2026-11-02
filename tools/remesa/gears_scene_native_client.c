@@ -242,6 +242,41 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  }
  return result;
 }
+#ifdef REMESA_CAPTURED_SESSION_NATIVE
+static unsigned captured_sequence;
+static enum remesa_dispatch collect_captured_session(void *priv,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *receipt)
+{
+ const char *parent=out_dir;char dir[4096];
+ CHECK(captured_sequence<2&&snprintf(dir,sizeof dir,"%s/session-%06u",parent,++captured_sequence)>0);
+ CHECK(!mkdir(dir,0700));out_dir=dir;
+ uint64_t host[2]={submit->context,submit->operation};output(dir,"HOST-OP.bin",host,sizeof host);
+ enum remesa_dispatch result=remesa_linux_memory_general_scene_dispatch(priv,submit,receipt);
+ uint64_t hr[3]={receipt->context,receipt->operation,
+  (receipt->retired?1u:0u)|(receipt->published?2u:0u)|(receipt->acknowledged?4u:0u)|(receipt->failed?8u:0u)};
+ output(dir,"ADAPTER-DISPATCH.bin",&result,sizeof result);output(dir,"HOST-RECEIPT.bin",hr,sizeof hr);
+ if(result!=REMESA_NOT_ISSUED){
+  struct remesa_general_session_request wire={0};
+  CHECK(!remesa_linux_memory_general_response(priv,&wire));output(dir,"RESPONSE.bin",&wire,sizeof wire);
+  CHECK(!remesa_linux_memory_general_request(priv,&wire));output(dir,"REQUEST.bin",&wire,sizeof wire);
+  CHECK(!remesa_linux_memory_general_response(priv,&wire));
+  if(result==REMESA_ISSUED){
+   struct remesa_gears_scene_trace_request q={.version=2,.context=submit->context};
+   output(dir,"TRACE-REQUEST.bin",&q,sizeof q);
+   int rc=ioctl(borrowed_fd,DRM_IOCTL_REMESA_GEARS_SCENE_TRACE,&q);int error=rc<0?errno:rc?EIO:0;
+   output(dir,"TRACE-RESPONSE.bin",&q,sizeof q);output(dir,"TRACE-RESULT.bin",&error,sizeof error);
+   const struct remesa_scene_probe_trace *t=&q.trace.prefix;
+   if(error||q.version!=2||q.reserved||q.context!=submit->context||t->version!=2||t->bytes!=4280||
+      t->context!=submit->context||t->profile!=(submit->packet->controls.width==1280?3u:4u)||
+      t->operation!=wire.operation||t->cookie!=wire.cookie||t->phase!=9||t->ledger!=7||
+      t->stages!=15||t->error||t->retained||t->reserved||t->binding_count!=18)result=REMESA_ISSUANCE_AMBIGUOUS;
+   else dump_backing(priv,submit->packet,true);
+  }
+ }
+ int status=result==REMESA_ISSUED?0:result==REMESA_NOT_ISSUED?EOPNOTSUPP:EOWNERDEAD;
+ output(dir,"RESULT.bin",&status,sizeof status);output(dir,"DISPATCH.bin",&result,sizeof result);out_dir=parent;return result;
+}
+#endif
 #ifndef REMESA_OPENGL_HOMOGENEOUS_NATIVE
 int main(int argc,char **argv)
 {
@@ -254,7 +289,12 @@ int main(int argc,char **argv)
  struct remesa_linux_memory *memory=NULL;OK(remesa_linux_memory_begin(fd,&memory));
  struct remesa_device device={0};struct remesa_persistent_config cfg={.ops=remesa_linux_memory_ops(),.priv=memory,.context=remesa_linux_memory_context(memory),.va_start=0x20000000,.va_end=0x45000000,.byte_budget=96u*1024u*1024u,.resource_only_backend=true,.resource_limits={2048,2048,128,16u*1024u*1024u}};
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
- OK(remesa_persistent_open(&device,&cfg));OK(remesa_persistent_set_native_scene(&device,collect_native));
+ OK(remesa_persistent_open(&device,&cfg));
+#ifdef REMESA_CAPTURED_SESSION_NATIVE
+ (void)collect_native;OK(remesa_persistent_set_native_scene(&device,collect_captured_session));
+#else
+ OK(remesa_persistent_set_native_scene(&device,collect_native));
+#endif
  glsl_type_singleton_init_or_ref();struct pipe_screen *screen=remesa_screen_create(&device);CHECK(screen);OK(remesa_screen_enable_linked_attachment_storage(screen));
  struct pipe_resource *color=attachment(screen,width,height,false),*depth=attachment(screen,width,height,true);CHECK(color&&depth);
  struct pipe_context *ctx=screen->context_create(screen,NULL,0);CHECK(ctx);
@@ -284,7 +324,33 @@ int main(int argc,char **argv)
 #endif
 
  struct pipe_fence_handle *fence=NULL;
-#ifdef REMESA_CAPTURED_SCENE_NATIVE
+#ifdef REMESA_CAPTURED_SESSION_NATIVE
+ struct remesa_scene_capture capture={0};struct remesa_scene_packet packet;
+ int e=remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,&capture);
+ if(!e)e=remesa_persistent_scene_packet_snapshot(&device,capture,&packet);
+ if(!e){check_placement(memory,&packet);guards(memory);dump_backing(memory,&packet,false);}
+ struct remesa_general_session_request wire={0};
+ if(!e&&!prepare_only){
+  OK(remesa_linux_memory_general_record_enable(memory));
+  e=remesa_linux_memory_general_scene_open(memory,&packet,width==1280?3:4,2,1000,&wire);
+  output(out_dir,"OPEN-RESULT.bin",&e,sizeof e);output(out_dir,"OPEN-RESPONSE.bin",&wire,sizeof wire);
+  if(!e){OK(remesa_linux_memory_general_request(memory,&wire));output(out_dir,"OPEN-REQUEST.bin",&wire,sizeof wire);}
+  for(unsigned frame=1;!e&&frame<=2;frame++){
+   screen->fence_reference(screen,&fence,NULL);
+   e=remesa_context_submit_captured_scene(ctx,capture,&fence);
+   if(!e){
+    CHECK(fence&&screen->fence_finish(screen,ctx,fence,0));
+    OK(remesa_resource_wait_writer(ctx,color,0));OK(remesa_resource_wait_writer(ctx,depth,0));
+    size_t bytes=(size_t)width*height*4;void *pixels=malloc(bytes);CHECK(pixels);
+    e=remesa_present_snapshot(ctx,color,pixels,(size_t)width*4,bytes);
+    if(!e){char name[80];CHECK(snprintf(name,sizeof name,"session-%06u/RETAINED-COLOR-BGRA.bin",frame)>0);output(out_dir,name,pixels,bytes);}
+    free(pixels);
+   }
+  }
+  if(!e){e=remesa_linux_memory_general_close(memory,&wire);output(out_dir,"CLOSE-RESULT.bin",&e,sizeof e);output(out_dir,"CLOSE-RESPONSE.bin",&wire,sizeof wire);if(!e){OK(remesa_linux_memory_general_request(memory,&wire));output(out_dir,"CLOSE-REQUEST.bin",&wire,sizeof wire);}}
+ }
+ if(!e){e=remesa_persistent_scene_capture_release(&device,capture);if(prepare_only&&!e)e=EOPNOTSUPP;}
+#elif defined(REMESA_CAPTURED_SCENE_NATIVE)
  struct remesa_scene_capture capture={0};
  int e=remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,&capture);
  if(!e)e=remesa_context_submit_captured_scene(ctx,capture,&fence);

@@ -25,6 +25,11 @@ static void scenario(unsigned profile)
  if(!(profile&1)){p.actions.width=p.actions.height=p.controls.width=p.controls.height=640;p.controls.color_pitch=p.controls.depth_pitch=2560;}
  struct remesa_scene_packet saved=p;
  struct remesa_general_session_request response;
+ assert(remesa_linux_memory_general_response(d,&response)==ENODATA);
+ assert(remesa_linux_memory_general_request(d,&response)==ENODATA);
+ assert(!remesa_linux_memory_general_record_enable(d));
+ assert(remesa_linux_memory_general_record_enable(d)==EALREADY);
+ assert(remesa_linux_memory_general_response(d,(void *)d)==EINVAL);
  struct remesa_gpu_scene_submit s={.context=77,.operation=1,.packet=&p};
  struct remesa_gpu_scene_receipt sentinel={.context=456},r=sentinel;
  assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_NOT_ISSUED&&!calls);
@@ -47,12 +52,15 @@ static void scenario(unsigned profile)
   s.operation=i;r=sentinel;
   assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_ISSUED&&calls==i+1);
   assert(r.context==77&&r.operation==i&&r.retired&&r.published&&r.acknowledged&&!r.failed);
+  assert(!remesa_linux_memory_general_response(d,&response)&&response.action==2&&response.sequence==i&&response.operation==100+i);
+  assert(!remesa_linux_memory_general_request(d,&response)&&response.action==2&&response.sequence==i&&!response.operation&&remesa_general_session_request_valid(&response));
   assert(memcalls==m&&!memcmp(&p,&saved,sizeof p));
   r=sentinel;assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_NOT_ISSUED);
   assert(calls==i+1&&!memcmp(&r,&sentinel,sizeof r));
  }
  s.operation=4;assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_NOT_ISSUED&&calls==4);
  assert(!remesa_linux_memory_general_close(d,&response)&&calls==5&&memcalls==m);
+ assert(!remesa_linux_memory_general_response(d,&response)&&response.action==3&&response.state==3);
  assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_NOT_ISSUED&&calls==5);
  for(unsigned i=0;i<18;i++){
   assert(!ops->gpu_unmap(d,ids[i],0x40000000u+i*4096,4096));
@@ -61,6 +69,8 @@ static void scenario(unsigned profile)
  assert(!remesa_linux_memory_detach(d));
  /* A later native uncertainty cannot be converted to NOT_ISSUED, retried or freed. */
  d=setup();assert(!remesa_linux_memory_general_scene_open(d,&p,profile,3,1000,&response));
+ assert(remesa_linux_memory_general_record_enable(d)==EALREADY);
+ assert(remesa_linux_memory_general_response(d,&response)==ENODATA);
  s.operation=1;assert(remesa_linux_memory_general_scene_dispatch(d,&s,&r)==REMESA_ISSUED);
  action_fault=2;byte_fault=offsetof(struct remesa_general_session_request,ledger);
  s.operation=2;r=sentinel;

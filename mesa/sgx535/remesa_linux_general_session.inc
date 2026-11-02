@@ -16,6 +16,7 @@ static int general_exchange(struct remesa_linux_memory *d,struct remesa_general_
 {
  struct remesa_general_session_request before=*r,check;
  int rc=ioctl(d->fd,DRM_IOCTL_REMESA_GENERAL_SESSION,r);
+ if(d->general_record){d->general_request=before;d->general_response=*r;d->general_recorded=true;}
  *out=*r;check=*r;if(before.action==1)check.session=before.session;
  if(rc||memcmp(&check,&before,offsetof(struct remesa_general_session_request,operation))||
     r->error||r->reserved[0]||r->reserved[1])return private_lab_uncertain(d);
@@ -77,6 +78,27 @@ int remesa_linux_memory_general_submit(struct remesa_linux_memory *d,uint32_t bu
 {return general_next(d,budget,out,false);}
 int remesa_linux_memory_general_close(struct remesa_linux_memory *d,struct remesa_general_session_request *out)
 {return general_next(d,0,out,true);}
+int remesa_linux_memory_general_record_enable(struct remesa_linux_memory *d)
+{
+ if(!d)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_attempted||d->scene_attempted||d->general_record)return EALREADY;
+ d->general_record=true;return 0;
+}
+int remesa_linux_memory_general_response(const struct remesa_linux_memory *d,
+ struct remesa_general_session_request *out)
+{
+ if(!general_output_valid(d,out))return EINVAL;
+ if(!d->general_recorded)return ENODATA;
+ *out=d->general_response;return 0;
+}
+int remesa_linux_memory_general_request(const struct remesa_linux_memory *d,
+ struct remesa_general_session_request *out)
+{
+ if(!general_output_valid(d,out))return EINVAL;
+ if(!d->general_recorded)return ENODATA;
+ *out=d->general_request;return 0;
+}
 
 int remesa_linux_memory_general_scene_open(struct remesa_linux_memory *d,
  const struct remesa_scene_packet *packet,uint32_t profile,uint32_t maximum,uint32_t budget,

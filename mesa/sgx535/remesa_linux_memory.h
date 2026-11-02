@@ -18,6 +18,13 @@ int remesa_linux_memory_general_open(struct remesa_linux_memory *,const uint32_t
 int remesa_linux_memory_general_submit(struct remesa_linux_memory *,uint32_t budget_ms,
  struct remesa_general_session_request *);
 int remesa_linux_memory_general_close(struct remesa_linux_memory *,struct remesa_general_session_request *);
+/* Explicit fresh-endpoint LAB opt-in only. Save each actual returned wire for
+ * a separate collector, including uncertain responses. Disabled by default:
+ * normal adapter submissions do not copy diagnostic response records. Getter
+ * performs no ioctl or retry and is not completion/admission evidence alone. */
+int remesa_linux_memory_general_record_enable(struct remesa_linux_memory *);
+int remesa_linux_memory_general_response(const struct remesa_linux_memory *,struct remesa_general_session_request *);
+int remesa_linux_memory_general_request(const struct remesa_linux_memory *,struct remesa_general_session_request *);
 /* Explicit adapter of that same bounded LAB session to the real provider.
  * OPEN freezes exact capture metadata, validates backing and issues no GPU job.
  * Each dispatch issues ONE SUBMIT and returns ONE authenticated host receipt;

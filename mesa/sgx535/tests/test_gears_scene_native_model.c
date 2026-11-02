@@ -47,7 +47,12 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   unsigned fail_sequence=getenv("REMESA_GENERAL_MODEL_FAIL_SEQUENCE")?(unsigned)atoi(getenv("REMESA_GENERAL_MODEL_FAIL_SEQUENCE")):0;
   bool fail=r->action==fail_action&&(!fail_sequence||r->sequence==fail_sequence);
   if(r->action==1){
-   assert(!general_active&&!general_closed&&r->max_jobs==2&&(r->profile==5||r->profile==6));
+   assert(!general_active&&!general_closed&&r->max_jobs==2);
+#ifdef REMESA_GEARS_MODEL_HOMOGENEOUS
+   assert(r->profile==3||r->profile==4);
+#else
+   assert(r->profile==5||r->profile==6);
+#endif
    general_opened=*r;general_active=true;r->session=7;r->state=1;r->stages=16;
    r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
   }else if(r->action==2){
