@@ -145,6 +145,13 @@ struct remesa_linked_scene_request;struct remesa_scene_capture;
 int remesa_context_prepare_linked_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct remesa_scene_capture *);
+/* Explicit canonical attribute-normal gears preparation. Same cold attachment
+ * and output/serialization contract; snapshots bound constants and raw P/N,
+ * initializes the unused third float4 for the physical 48-byte fetch profile.
+ * No shader execution on CPU, normal draw/caps or native-admission change. */
+int remesa_context_prepare_gears_attribute_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *);
 /* Explicit cold-scene execution using the same bound inputs as preparation.
  * Preallocates one fence shared by COLOR/Z and the context, reserves both pass
  * transitions before dispatch, and leaves resources unchanged on NOT_ISSUED.

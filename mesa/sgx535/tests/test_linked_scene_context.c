@@ -50,6 +50,7 @@ static struct pipe_resource *attachment(struct pipe_screen *s,unsigned w,unsigne
 }
 static struct pipe_surface *surface(struct pipe_context *ctx,struct pipe_resource *res)
 {const struct pipe_surface t={.format=res->format};return ctx->create_surface(ctx,res,&t);}
+#ifndef REMESA_LINKED_SCENE_CONTEXT_FIXTURE
 int main(int argc,char **argv)
 {
  CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<26);
@@ -248,3 +249,4 @@ int main(int argc,char **argv)
  screen->destroy(screen);CHECK(f.creates==f.destroys&&f.pins==f.unpins);CHECK(!remesa_persistent_close(&d));glsl_type_singleton_decref();
  puts("PASS bound Gallium NIR/VB/FBO -> typed persistent COLOR/Z -> library scene -> retained provider fence; raw vertices exact, CPU depth path unused, normal draw/caps unchanged; MODEL_GPU0");
 }
+#endif

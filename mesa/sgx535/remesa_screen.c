@@ -1671,9 +1671,9 @@ done:
 #endif
 }
 
-int remesa_context_prepare_linked_scene(struct pipe_context *p,
+static int context_prepare_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
- const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
+ const struct remesa_linked_scene_request *options,bool gears,struct remesa_scene_capture *out)
 {
 #ifdef REMESA_WITH_NIR
  if(!p||p->draw_vbo!=draw||!info||!draw_info||!options||!out||
@@ -1681,6 +1681,10 @@ int remesa_context_prepare_linked_scene(struct pipe_context *p,
     (uintptr_t)out%_Alignof(struct remesa_scene_capture)||
     !context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
  struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(gears&&(!context_state_output_valid(ctx,out,sizeof(*out))||
+    !context_state_output_valid(ctx,options,sizeof(*options))||
+    !context_state_output_valid(ctx,info,sizeof(*info))||
+    !context_state_output_valid(ctx,draw_info,sizeof(*draw_info))))return EINVAL;
  if(!context_output_valid(ctx,options,sizeof(*options))||
     !context_output_valid(ctx,info,sizeof(*info))||!context_output_valid(ctx,draw_info,sizeof(*draw_info)))return EINVAL;
  uintptr_t at=(uintptr_t)out;
@@ -1716,6 +1720,31 @@ int remesa_context_prepare_linked_scene(struct pipe_context *p,
  int error=resource_sync(p->screen,color,UINT64_MAX);if(error)return error;
  error=resource_sync(p->screen,depth,UINT64_MAX);if(error)return error;
  struct remesa_shader_linkage link;error=remesa_context_shader_linkage_snapshot(p,&link);if(error)return error;
+ if(gears){
+  struct remesa_shader_selected_resources resources;
+  error=remesa_shader_program_gears_attribute_resources(&link.vertex,&resources);if(error)return error;
+  if(!sc->device.resource_only_backend||sc->gears_runtime)return ENOTSUP;
+  struct remesa_gears_geometry *geometry=NULL;void *parameters=NULL;uint8_t *packed=NULL;
+  error=remesa_context_gears_geometry_snapshot(p,info,draw_info,&geometry);if(error)return error;
+  struct remesa_gears_geometry_view view;
+  error=remesa_gears_geometry_inspect(geometry,&view);if(error)goto gears_done;
+  if(view.normal_from_attribute!=1||view.stride_dwords!=8||!view.vertex_count||view.vertex_count>65535||
+     view.bytes!=(size_t)view.vertex_count*32){error=ENOTSUP;goto gears_done;}
+  packed=calloc(view.vertex_count,48);if(!packed){error=ENOMEM;goto gears_done;}
+  /* The established snapshot already expands the selected index window.
+   * Preserve P/N bits and initialize the unconsumed third float4. No vertex,
+   * matrix, lighting or pixel arithmetic takes place on the CPU. */
+  for(uint32_t i=0;i<view.vertex_count;i++)memcpy(packed+(size_t)i*48,(const uint8_t *)view.vertices+(size_t)i*32,32);
+  error=remesa_context_prepare_vertex_parameters(p,requested.vertex_bank,&parameters);if(error)goto gears_done;
+  struct remesa_linked_scene_request request=requested;
+  request.color=color->bo;request.depth=depth->bo;request.width=ctx->target->width0;
+  request.height=ctx->target->height0;request.color_pitch=color->stride/4;request.linkage=&link;
+  request.geometry=(struct remesa_linked_geometry_input){.vertices=packed,.vertex_bytes=(size_t)view.vertex_count*48,.vertex_count=view.vertex_count};
+  error=remesa_persistent_gears_attribute_scene_prepare(&sc->device,&request,parameters,out);
+ gears_done:
+  if(parameters)sc->device.ops->destroy_bo(sc->device.priv,parameters);
+  free(packed);remesa_gears_geometry_destroy(geometry);return error;
+ }
  struct remesa_linked_vertex_inputs *owned=NULL;
  error=remesa_context_linked_vertex_inputs_snapshot(p,info,draw_info,&owned);if(error)return error;
  struct remesa_linked_vertex_inputs_view view;
@@ -1730,9 +1759,17 @@ int remesa_context_prepare_linked_scene(struct pipe_context *p,
  }
  remesa_linked_vertex_inputs_destroy(owned);return error;
 #else
- (void)p;(void)info;(void)draw_info;(void)options;(void)out;return ENOTSUP;
+ (void)p;(void)info;(void)draw_info;(void)options;(void)gears;(void)out;return ENOTSUP;
 #endif
 }
+int remesa_context_prepare_linked_scene(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
+{return context_prepare_scene(p,info,draw_info,options,false,out);}
+int remesa_context_prepare_gears_attribute_scene(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
+{return context_prepare_scene(p,info,draw_info,options,true,out);}
 
 int remesa_context_submit_linked_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
@@ -2503,6 +2540,9 @@ int remesa_context_window_viewport_snapshot(struct pipe_context *p,uint32_t bits
 int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_context_prepare_linked_scene(struct pipe_context *p,const struct pipe_draw_info *i,
+ const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct remesa_scene_capture *o)
+{(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
+int remesa_context_prepare_gears_attribute_scene(struct pipe_context *p,const struct pipe_draw_info *i,
  const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct remesa_scene_capture *o)
 {(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
 int remesa_context_submit_linked_scene(struct pipe_context *p,const struct pipe_draw_info *i,

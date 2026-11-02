@@ -60,11 +60,12 @@ The separate kernel fixture rejects all 2,560 single-bit CODE mutations at
 four dimensions, including 1600x768. These are model results, not GPU results.
 Previous captures and protected physical evidence are preserved.
 
-The existing closed physical profile generator and controller currently
-describe 17-buffer, 10-USE scenes. They do not authorize this 18-buffer graph.
-Before hardware, the bound geometry path must supply the explicit 48-byte
-record packing, and a separate exact profile/client/oracle set must carry the
-complete gears inputs without changing prior profiles. Generic fixture
+The [bound Gallium integration](bound-gears-scene.md) now supplies the explicit
+48-byte record packing from bound vertex and index buffers and binds the
+complete coefficient source. The existing closed physical profile generator
+and controller still describe 17-buffer, 10-USE scenes. They do not authorize
+this 18-buffer graph. Before hardware, a separate exact profile/client/oracle
+set must carry the complete gears inputs without changing prior profiles. Generic fixture
 coefficient values are not physical rendering expectations. Reuse the
 preserved positive geometry and coefficient witness for that experiment,
 qualify the whole client/controller offline, then use fresh recoverable boots
