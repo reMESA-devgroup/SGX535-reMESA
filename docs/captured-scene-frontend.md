@@ -68,7 +68,14 @@ Evidence:
 `/home/gama/sgx535-offline/captured-scene-frontend-physical-20261102/v1-1280/FINAL_PHYSICAL_RESULT.json`.
 This qualifies this single captured frontend/retained READ path. It does not
 qualify the Linux general-session adapter, repeated physical frontend jobs,
-640x640 execution of this client, ordinary GL or sustained FPS.
+ordinary GL or sustained FPS.
+
+The same client subsequently passed a fresh profile4 job at 640x640 with the
+same full retained-COLOR oracle comparison, independent COLOR/Z24/input/guard
+checks, complete cleanup and verified stock recovery. The consolidated result
+is `/home/gama/sgx535-offline/captured-scene-frontend-physical-20261102/FINAL_PAIR_RESULT.json`.
+The new [general-session homogeneous extension](general-session-homogeneous.md)
+remains a separate candidate requiring physical cold/warm qualification.
 
 The optional build without Mesa headers also compiles after including the
 complete by-value capture token for its refusal stub. The qualified full-Mesa

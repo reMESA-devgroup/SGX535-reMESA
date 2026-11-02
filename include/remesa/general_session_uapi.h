@@ -3,8 +3,8 @@
 #define REMESA_GENERAL_SESSION_UAPI_H
 #include <linux/types.h>
 #include <drm/drm.h>
-/* Separate bounded root-only LAB transport for the existing CODE344/native
- * catalogues5/6. Same default-off memory/scene controls and consumed source
+/* Separate bounded root-only LAB transport for the existing homogeneous3/4
+ * and CODE344/native5/6 catalogues. Same default-off memory/scene controls and consumed source
  * lineage; never reinterpret the old11-ID session or one-shot ABI. OPEN/CLOSE
  * are not GPU receipts. Immutable profile inputs are authenticated per SUBMIT
  * in this LAB endpoint, outside production FAST. No caller CODE/VA/packet. */
@@ -33,7 +33,7 @@ static inline int remesa_general_session_request_valid(const struct remesa_gener
     r->operation||r->cookie||r->core||r->revision||r->pds_base||r->phase||r->ledger||
     r->error||r->state||r->stages||r->reserved[0]||r->reserved[1])return 0;
  if(r->action==1){
-  if(r->session||r->sequence||(r->profile!=5&&r->profile!=6)||!r->max_jobs||r->max_jobs>64||r->budget_ms)return 0;
+  if(r->session||r->sequence||r->profile<3||r->profile>6||!r->max_jobs||r->max_jobs>64||r->budget_ms)return 0;
   for(i=0;i<18;i++){
    if(!r->ids[i])return 0;
    for(j=0;j<i;j++)if(r->ids[i]==r->ids[j])return 0;

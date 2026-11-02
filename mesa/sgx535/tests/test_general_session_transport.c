@@ -79,7 +79,7 @@ int main(void)
   for(unsigned i=0;i<4;i++){io_fault=errors[i];invoke_fault();cases++;}io_fault=0;
  }
  action_fault=0;struct remesa_linux_memory *d=setup();struct remesa_general_session_request r;
- assert(remesa_linux_memory_general_open(d,ids,4,3,&r)==EINVAL&&!calls);
+ assert(remesa_linux_memory_general_open(d,ids,2,3,&r)==EINVAL&&!calls);
  assert(remesa_linux_memory_general_open(d,ids,5,65,&r)==EINVAL&&!calls);
  uint32_t saved=ids[17];ids[17]=ids[0];assert(remesa_linux_memory_general_open(d,ids,5,3,&r)==EINVAL&&!calls);ids[17]=saved;
  assert(!remesa_linux_memory_general_open(d,ids,6,3,&r));unsigned m=memcalls;

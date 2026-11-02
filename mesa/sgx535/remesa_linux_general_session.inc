@@ -88,7 +88,7 @@ int remesa_linux_memory_general_scene_open(struct remesa_linux_memory *d,
  if(d->private_poison)return EOWNERDEAD;
  if(!remesa_scene_packet_valid(packet)||packet->owner!=d->context||
     packet->binding_count!=18||packet->use_count!=11||packet->window_count!=2||
-    (profile!=5&&profile!=6)||packet->controls.width!=((profile&1)?1280u:640u)||
+    profile<3||profile>6||packet->controls.width!=((profile&1)?1280u:640u)||
     packet->controls.height!=((profile&1)?800u:640u)||packet->controls.schema!=2||
     packet->controls.depth_finalize!=1||packet->controls.ta_bytes!=104)return EINVAL;
  uint32_t ids[18];for(unsigned i=0;i<18;i++)ids[i]=packet->bindings[i].id;

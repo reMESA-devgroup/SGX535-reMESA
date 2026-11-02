@@ -36,7 +36,10 @@ static int general_open(struct drm_device *dev,struct drm_file *file,struct reme
  if(error){kfree(s);return error;}
  p->backing_owned=true;general_session=s;scene_probe_consumed=true;
  s->serial=1;s->maximum=r->max_jobs;s->profile=r->profile;
- profile=&gears_clamped_api_probe_profiles[r->profile-5];
+ /* Reuse the exact existing one-shot catalogues, including their complete
+  * image/placement authentication. No new program bytes or mutable inputs. */
+ profile=r->profile<=4?&gears_homogeneous_probe_profiles[r->profile-3]:
+  &gears_clamped_api_probe_profiles[r->profile-5];
  s->selected=(struct scene_probe_selection){profile->packet,profile->packet_bytes,18,profile->bindings};
  mutex_lock(&endpoint_lock);
  if(endpoint!=p->memory||p->memory->private_device_lost||p->memory->file!=file){error=-ENODEV;goto unlock;}
