@@ -12,7 +12,7 @@ static void scene_replay(const char *root)
 {
  struct remesa_scene_fixture image;struct remesa_scene_packet packet;
  replay_read(root,"placement.bin",&image,sizeof image);replay_read(root,"packet.bin",&packet,sizeof packet);
- CHECK(image.version==1&&image.count==17&&packet.binding_count==17&&remesa_scene_packet_valid(&packet));
+ CHECK(image.version==1&&(image.count==17||image.count==18)&&packet.binding_count==image.count&&remesa_scene_packet_valid(&packet));
  struct test_mmu mmu={.has_clflush=true,.pd={.driver=&driver}};
  struct drm_psb_private priv={&mmu,(void*)1,{0x28000000,32,0x80000000}};
  struct drm_device dev={&priv};struct remesa_gem_memory *s=NULL;
@@ -52,7 +52,7 @@ static void scene_replay(const char *root)
   packet.windows[i].index_id=replay_id(&image,ids,packet.windows[i].index_id);
   packet.windows[i].vertex_id=replay_id(&image,ids,packet.windows[i].vertex_id);
  }
- CHECK(remesa_scene_packet_valid(&packet));dpm_model=true;capacity_gpu_count=17;replay_rules=rules;
+ CHECK(remesa_scene_packet_valid(&packet));dpm_model=true;capacity_gpu_count=image.count;replay_rules=rules;
  struct remesa_gem_scene_job *c=calloc(1,sizeof(*c));CHECK(c);
  int error=remesa_gem_scene_packet_prepare(s,&packet,&guard,c);
  printf("Mesa producer replay %ux%u: prepare=%d\n",packet.actions.width,packet.actions.height,error);fflush(stdout);CHECK(!error);

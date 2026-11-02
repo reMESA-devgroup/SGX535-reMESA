@@ -13,11 +13,21 @@
 #include "../remesa_gem_scene_job.h"
 #include "remesa_render_target.h"
 #include "remesa_ta_index.h"
+#include "remesa_usse_arithmetic.h"
+#include "remesa_usse.h"
 #include "remesa_scene_layout.h"
 #include "scene_service_model.inc"
 #include "scene_backend_model.inc"
 #include "scene_execute_model.inc"
-static bool parameter_upload_case;
+static bool parameter_upload_case,gears_fetch_case;
+static void gears_fixture(u8 *image)
+{
+ size_t n;const struct remesa_usse_cpu_gears_vertex_body body={1,9,37,REMESA_USSE_CPU_GEARS_TRIANGLES,0};
+ CHECK(!remesa_usse_cpu_gears_vertex_body_encode(&body,image,320,&n)&&n==312);
+ const struct remesa_usse_cpu_three_source tail={.source={{0,0},{2,0},{2,0}},
+  .source_extension={0,1,1},.word0_control21=1,.word1_control12_13=1,.word1_control18=1};
+ CHECK(!remesa_usse_cpu_three_source_encode(&tail,image+312,8,&n)&&n==8);
+}
 static void state_word(u8 *p,u32 word)
 {for(unsigned i=0;i<4;i++)p[i]=word>>(8*i);}
 /* Modeled inputs only. Separate tests compare validators against unchanged
@@ -166,6 +176,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  command.entries[7]=(struct remesa_gem_scene_use_entry){ids[16],0,8,3,1,0};
  command.entries[8]=(struct remesa_gem_scene_use_entry){ids[14],96,16,3,1,0};
  command.entries[9]=(struct remesa_gem_scene_use_entry){ids[14],128,8,3,1,0};
+ if(gears_fetch_case)command.entries[5]=(struct remesa_gem_scene_use_entry){ids[14],256,320,4,0,0};
  if(parameter_upload_case){
   command.controls.ta_bytes=76;command.use.entry_count=11;command.use.bytes+=sizeof(command.entries[0]);
   command.entries[10]=(struct remesa_gem_scene_use_entry){ids[10],512,8,4,0,0};
@@ -329,6 +340,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
  CHECK(remesa_gem_job_snapshot_selected(s,ticket,&snapshot,views,17,0x1ffc1)==17&&vmap_calls==maps_before+12);
  CHECK(!views[1].cpu&&!views[2].cpu&&!views[3].cpu);
  scene_images(views,uses,&use,width,height,pitch);
+ if(gears_fetch_case)gears_fixture((u8 *)views[14].cpu+256);
  if(parameter_upload_case){
   u8 *stream=(u8 *)views[6].cpu+4,*draw=views[10].cpu;
   memmove(stream+44,stream+36,32);CHECK(!remesa_ta_parameter_reference_encode(uses[10].va+832,40,stream+36));
@@ -362,8 +374,28 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    states.uploads[2].source_bytes==160&&states.uploads[2].use_id==ids[10]&&states.uploads[2].use_offset==512);
   states_saved=states;
   memset(&vertices,0xa5,sizeof vertices);vertices_saved=vertices;
-  CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-EOPNOTSUPP&&
-   !memcmp(&vertices,&vertices_saved,sizeof vertices));
+  if(!gears_fetch_case){
+   CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-ENOENT&&
+    !memcmp(&vertices,&vertices_saved,sizeof vertices));
+  }else{
+   CHECK(!remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)&&
+    vertices.count==2&&vertices.draws[1].use_offset==256&&vertices.draws[1].use_bytes==320&&vertices.draws[1].stride_bytes==48);
+   vertices_saved=vertices;
+   CHECK(!remesa_gem_scene_fragments_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments)&&fragments.count==2);
+   fragments_saved=fragments;
+   u8 *code=(u8 *)views[14].cpu+256;
+   for(unsigned byte=0;byte<320;byte++)for(unsigned bit=0;bit<8;bit++){
+    code[byte]^=1u<<bit;
+    CHECK(scene_vertices_build_checked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&vertices)==-EINVAL&&
+     !memcmp(&vertices,&vertices_saved,sizeof vertices));code[byte]^=1u<<bit;
+   }
+   /* The old ordinal formula selected this PARAM source as fragment state.
+    * Its coefficients need not resemble ISP state and must stay independent. */
+   state_word(draw+1028,0xdeadbeefu);
+   CHECK(!remesa_gem_scene_fragments_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments)&&
+    !memcmp(&fragments,&fragments_saved,sizeof fragments));state_word(draw+1028,0);
+   CHECK(!remesa_gem_scene_event_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices,&fragments,&background,&event));
+  }
   const unsigned corrupt[]={1024,1024+148,836,844,872,832+48,516};
   for(unsigned n=0;n<sizeof corrupt/sizeof corrupt[0];n++){
    draw[corrupt[n]]^=1;
@@ -509,6 +541,10 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(int argc,char **argv)
 {
+ if(argc==2&&!strcmp(argv[1],"--gears-fetch")){
+  parameter_upload_case=gears_fetch_case=true;action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
+  puts("PASS actual gears CODE320/TA/PARAM/vertex/fragment/background/event closure, all2560 CODE bit mutations refused x4sizes; modeled GPU0");return 0;
+ }
  if(argc==2&&!strcmp(argv[1],"--parameter-upload")){
   parameter_upload_case=true;action_case(640,640,0);
   puts("PASS actual retained core/private loan + ordered PARAM TA/kernel source/PDS/EE checks, address/padding/CODE/RW/cache corruption refusal, cleanup; GPU0");return 0;

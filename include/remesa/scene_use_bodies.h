@@ -25,6 +25,39 @@ static inline int remesa_scene_vertex_body(const void *input,size_t available,re
          remesa_ta_ref_word(p+8)!=words[14]||remesa_ta_ref_word(p+12)!=words[15])return EINVAL;
  return 0;
 }
+/* Exact attribute-normal gears CODE312 + typed tail8, already produced by
+ * the existing encoder and matched to the Oct24 positive physical witness.
+ * This predicate does not emit instructions or admit arbitrary programs.
+ * Its input still requires an ordered, checked source37/transfer40 upload. */
+static inline int remesa_scene_gears_attribute_vertex_body(const void *input,size_t available)
+{
+ const remesa_ta_ref_u8 *p=input;remesa_ta_ref_uptr a=(remesa_ta_ref_uptr)input;unsigned i;
+ static const remesa_scene_u32 words[80]={
+  0x01000100u,0xfa100000u,0xd08008b0u,0x00a13004u,
+  0xd0004ab0u,0x00a13004u,0x01010001u,0xfa100000u,
+  0x40801a04u,0x00a23000u,0x01000100u,0xfa100000u,
+  0xd0008cb0u,0x00a13004u,0x01010001u,0xfa100000u,
+  0x40801a04u,0x00a23000u,0x01000100u,0xfa100000u,
+  0xd000ceb0u,0x00a13004u,0x01010001u,0xfa100000u,
+  0x40001a04u,0x00a23001u,0x01000100u,0xfa100000u,
+  0xa0800200u,0x28a12000u,0x00010285u,0x00801400u,
+  0x00018300u,0x00801000u,0x00000000u,0x08801240u,
+  0x10800230u,0x00a12000u,0xd00110b0u,0x00811000u,
+  0xd0215130u,0x00811000u,0x40005a00u,0x00821000u,
+  0xd02191b0u,0x00811000u,0x40005a00u,0x00821000u,
+  0x10200030u,0x18811200u,0x50401a30u,0x00831080u,
+  0x50609a30u,0x28c31400u,0xe0800280u,0x28a12000u,
+  0x01010001u,0xfa100000u,0x70811a01u,0x00a22000u,
+  0x01000100u,0xfa100000u,0xd10044b0u,0x00a12000u,
+  0x01010001u,0xfa100000u,0x40821a04u,0x00a22000u,
+  0x01000100u,0xfa100000u,0xd100c6b0u,0x00a12000u,
+  0x01010001u,0xfa100000u,0x40821a04u,0x00a22001u,
+  0xe0e00200u,0x28811001u,0xa0200000u,0xfb275000u,
+ };
+ if(!input||available<320||a>~(remesa_ta_ref_uptr)0-320)return EINVAL;
+ for(i=0;i<80;i++)if(remesa_ta_ref_word(p+i*4)!=words[i])return EINVAL;
+ return 0;
+}
 static inline int remesa_scene_fragment_body(const void *input,size_t available,remesa_scene_u32 compiled)
 {
  const remesa_ta_ref_u8 *p=input;remesa_ta_ref_uptr a=(remesa_ta_ref_uptr)input;

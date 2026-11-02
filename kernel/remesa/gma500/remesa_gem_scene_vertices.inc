@@ -13,14 +13,10 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
 {
  struct remesa_gem_scene_vertices value={0};struct remesa_gem_scene_vertex_command command;
  struct remesa_gem_scene_use_command use_command;struct retained_job *j;
- unsigned draw,p,i,v,e,u;int error;
+ unsigned draw,p,i,v,e,u,r;bool parameters=false;int error;
  if(!out)return -EINVAL;
- /* The PARAM grammar has four references per draw; the legacy decoder below
-  * indexes triples and authenticates only the old 64-byte vertex program.
-  * Refuse before indexing or dereferencing any indirect image until the
-  * separate 320-byte program/fetch contract is integrated. */
- for(draw=0;draw<ta->reference_count;draw++)
-  if(ta->references[draw].kind==REMESA_TA_REF_DRAW_PARAMETERS)return -EOPNOTSUPP;
+ for(r=0;r<ta->reference_count;r++)
+  if(ta->references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS)parameters=true;
  j=ticket_job(loan->memory,loan->ticket);
  if((offset&3)||offset>j->command_bytes||sizeof(command)>j->command_bytes-offset)return -EINVAL;
  memcpy(&command,(const u8 *)j->commands+offset,sizeof(command));
@@ -33,8 +29,15 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
     vertex_section_overlap(offset,command.bytes,use->command_offset,use_command.bytes))return -EINVAL;
  for(draw=0;draw<command.count;draw++){
   struct remesa_gem_scene_vertex_window w;struct remesa_vertex_fetch decoded;struct remesa_vertex_indices indices;
-  unsigned initial=ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE;
-  unsigned ir=initial+draw*3+1,pr=initial+draw*3+2;u32 use_id=0,use_offset=0,use_bytes=draw?64:16;
+  unsigned ir=ta->reference_count,pr=ir;
+  u32 use_id=0,use_offset=0,use_bytes=draw?(parameters?320:64):16;
+  /* Resolve by authenticated kind/draw, never positional triples. The PARAM
+   * stream has an additional reference between state and indexed draw. */
+  for(r=0;r<ta->reference_count;r++)if(ta->references[r].draw==draw){
+   if(ta->references[r].kind==(draw?REMESA_TA_REF_DRAW_INDEX:REMESA_TA_REF_PREFIX_INDEX))ir=r;
+   if(ta->references[r].kind==(draw?REMESA_TA_REF_DRAW_VERTEX:REMESA_TA_REF_PREFIX_VERTEX))pr=r;
+  }
+  if(ir==ta->reference_count||pr==ta->reference_count||ta->references[pr].minimum_bytes<64)return -EPROTO;
   memcpy(&w,(const u8 *)j->commands+offset+sizeof(command)+draw*sizeof(w),sizeof(w));
   if(w.reserved||!w.vertex_count||w.vertex_count>65536||(!draw&&w.vertex_count!=3)||w.index_id!=ta->references[ir].id||
      w.index_offset!=ta->references[ir].byte_offset||w.index_bytes!=ta->references[ir].minimum_bytes)return -EINVAL;
@@ -58,7 +61,9 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
    for(u=0;u<count&&views[u].binding.id!=entry.id;u++);
    if(u==count)return -ENOENT;
    if(!views[u].cpu)return -EACCES;
-   error=remesa_scene_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes,draw?1:0);if(error)return -error;
+   error=draw&&parameters?
+    remesa_scene_gears_attribute_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes):
+    remesa_scene_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes,draw?1:0);if(error)return -error;
    if(entry.id==w.vertex_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.vertex_offset,w.vertex_bytes))return -EINVAL;
    if(entry.id==w.index_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.index_offset,w.index_bytes))return -EINVAL;
    use_id=entry.id;use_offset=entry.byte_offset;break;

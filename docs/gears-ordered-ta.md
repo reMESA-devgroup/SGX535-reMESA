@@ -40,18 +40,13 @@ padding, and the actual held vertex USE entry and EE8 bytes. These checks use
 the existing private MMU and retained-job prerequisites. They do not add an
 arbitrary address, shader, memory permission or execution grant.
 
-The next vertex stage is deliberately still closed to this grammar. Its old
-triple-reference indexing and 64-byte program predicate are incompatible
-with the new four-reference draw and 320-byte gears program. It now returns
-`EOPNOTSUPP` before indirect reads. Reusing the old indexing could otherwise
-interpret an index span as PDS storage. Tests verify this refusal and preserve
-the output. This boundary must be replaced by a separately validated fetch
-and exact program contract, rather than bypassed.
-
-Fragment validation also needs explicit draw-state selection: its existing
-upload-position calculation assumes no intervening PARAM upload. Neither
-the complete scene constructor nor the closed physical profile catalogue is
-extended here. The new low-level TA is not yet eligible for native execution.
+The subsequent [complete capture integration](gears-scene-capture.md) replaces
+the temporary vertex-stage refusal with kind/draw reference lookup, the exact
+320-byte program predicate and the retained 48-byte fetch contract. Fragment
+validation similarly selects the authenticated draw-state upload instead of
+relying on upload ordinals. Legacy triple indexing is not reused for PARAM
+streams. The closed physical profile catalogue still needs a separate exact
+extension before this graph can be submitted on the Mini 12.
 
 ## Verification
 

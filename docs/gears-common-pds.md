@@ -71,12 +71,13 @@ USE relocation words differ. This is offline reuse of physically exercised
 components, not physical approval of the new closure.
 
 The legacy index, draw-state and scene builders still refuse this PDS profile.
-The separate [ordered TA integration](gears-ordered-ta.md) now includes the
-owned parameter command, READ/USE closure and independent kernel PARAM checks.
-The remaining vertex/program, fragment-state selection and complete scene
-contracts must be integrated before native execution. A successful CODE/PDS
-or TA preparation cannot replace those checks. Ordinary draw/capabilities,
-the production FAST route and the working GLXGEARS path are unchanged.
+The separate [ordered TA integration](gears-ordered-ta.md) includes the owned
+parameter command, READ/USE closure and independent kernel PARAM checks.
+The [complete capture integration](gears-scene-capture.md) adds the exact
+vertex/program checks, fragment-state selection and full scene assembly.
+Bound geometry integration and separate closed physical profile qualification
+remain necessary before hardware. Ordinary draw/capabilities, the production
+FAST route and the working GLXGEARS path are unchanged.
 
 No hardware operation was performed for this integration. The failed
 clip/MATRIX_WINDOW experiment remains rejected and the last verified Mini 12

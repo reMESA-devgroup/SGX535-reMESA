@@ -18,14 +18,24 @@ static int fragment_read_view(struct remesa_gem_private *loan,const struct remes
  * The noinline boundary is intentional on the 8 KiB i486 kernel stack. */
 static __attribute__((__noinline__)) int scene_fragments_build_checked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_use *use,
- struct remesa_gem_scene_states *states,struct remesa_gem_scene_vertices *vertices,
+ struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *states,struct remesa_gem_scene_vertices *vertices,
  struct remesa_gem_scene_fragments *out)
 {
  struct remesa_gem_scene_fragments value={0};struct retained_job *j;unsigned draw,s,p,q,e,u;int error;
  if(!out)return -EINVAL;
  j=ticket_job(loan->memory,loan->ticket);value.expected_pds_window=0x20000000u;
  for(draw=0;draw<vertices->count;draw++){
-  unsigned upload=draw+(states->count==vertices->count+2);
+  unsigned upload=states->count,ref;
+  /* PARAM entries are uploads too, but are never ISP fragment state. Locate
+   * the actual checked draw/prefix state, independently of upload ordinals. */
+  for(ref=0;ref<ta->reference_count;ref++)if(ta->references[ref].draw==draw&&
+     ta->references[ref].kind==(draw?REMESA_TA_REF_DRAW_STATE:REMESA_TA_REF_PREFIX_STATE)){
+   for(upload=0;upload<states->count;upload++)
+    if(states->uploads[upload].pds_id==ta->references[ref].id&&
+       states->uploads[upload].pds_offset==ta->references[ref].byte_offset)break;
+   break;
+  }
+  if(upload==states->count)return -EPROTO;
   struct remesa_fragment_binding binding;struct remesa_fragment_task task;u32 po,qo,use_id=0,use_offset=0;
   for(s=0;s<count&&views[s].binding.id!=states->uploads[upload].source_id;s++);
   if(s==count||!views[s].cpu)return -EACCES;
@@ -63,5 +73,5 @@ int remesa_gem_scene_fragments_check_locked(struct remesa_gem_private *loan,
  int error;
  if(!out)return -EINVAL;
  error=remesa_gem_scene_vertices_check_locked(loan,views,count,actions,controls,use,vertex_offset,ta,states,vertices);if(error)return error;
- return scene_fragments_build_checked(loan,views,count,use,states,vertices,out);
+ return scene_fragments_build_checked(loan,views,count,use,ta,states,vertices,out);
 }

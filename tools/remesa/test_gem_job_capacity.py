@@ -88,6 +88,7 @@ def main():
  files += [w/'tools/remesa/stage_scene_backend.py',w/'kernel/remesa/gma500/remesa_scene_backend.inc',w/'kernel/remesa/gma500/remesa_scene_backend.h']
  files += [w/'include/remesa/scene_packet.h',w/'tools/remesa/scene_fixture.h']
  files += [w/'include/remesa/scene_use_bodies.h',w/'kernel/remesa/gma500/remesa_scene_service.h',w/'tools/remesa/stage_scene_service.py',n/'frozen_fixed_service.c',n/'frozen_kernel_contract.c']
+ if a.scene_actions:files += [w/'mesa/sgx535'/name for name in ['remesa_usse_arithmetic.c','remesa_usse_arithmetic.h','remesa_usse.c','remesa_usse.h']]
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_job.h','remesa_gem_scene_job.inc','remesa_gem_scene_execute.inc','remesa_gem_scene_packet.inc']]
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
  def run(label,cmd,ceiling):
@@ -101,14 +102,15 @@ def main():
   for name in (['test_gem_scene_actions'] if a.scene_actions else ['test_gem_dpm'] if a.dpm else ['test_gem_job_capacity','test_mmu_job_capacity']):
    exe=o/(variant+'-'+name);test=w/'kernel/remesa/gma500/tests'/(name+'.c')
    sources=[str(test)]+([str(w/'common/remesa/draw_packet.c'),str(w/'common/remesa/shader_request.c')] if name!='test_mmu_job_capacity' else [])
-   if a.scene_actions:sources += [str(o/'remesa_scene_actions.c'),str(o/'remesa_program_registers.c'),str(w/'mesa/sgx535/remesa_render_target.c'),str(w/'mesa/sgx535/remesa_ta_index.c'),str(o/'remesa_scene_service.c'),str(o/'model_frozen_contract.c')]
-   command=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-missing-field-initializers',*flags,*includes,*sources,'-o',str(exe)]
+   if a.scene_actions:sources += [str(o/'remesa_scene_actions.c'),str(o/'remesa_program_registers.c'),str(w/'mesa/sgx535/remesa_render_target.c'),str(w/'mesa/sgx535/remesa_ta_index.c'),str(w/'mesa/sgx535/remesa_usse_arithmetic.c'),str(w/'mesa/sgx535/remesa_usse.c'),str(o/'remesa_scene_service.c'),str(o/'model_frozen_contract.c')]
+   command=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-missing-field-initializers','-ffunction-sections','-fdata-sections','-Wl,--gc-sections',*flags,*includes,*sources,'-o',str(exe)]
    run(variant+'-'+name+'-build',command,768*1024**2)
    out=run(variant+'-'+name+'-run',runner+[str(exe)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
    if a.scene_actions:
     for fault in range(1,11):
      out=run(variant+'-execute-fault'+str(fault),runner+[str(exe),'--execute-fault',str(fault)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
     out=run(variant+'-parameter-upload',runner+[str(exe),'--parameter-upload'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
+    out=run(variant+'-gears-fetch',runner+[str(exe),'--gears-fetch'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
  if any(sha(Path(f))!=h for f,h in before.items()):raise RuntimeError('source changed during qualification')
  (o/'RESULT.json').write_text(json.dumps(dict(status='BOUND_SCENE_JOB_AND_GENERAL_SERVICE_MODEL_PASS' if a.scene_actions else 'COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
 if __name__=='__main__':main()

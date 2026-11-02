@@ -934,6 +934,12 @@ struct remesa_linked_scene_request {
 };
 int remesa_persistent_linked_scene_prepare(struct remesa_device *,
  const struct remesa_linked_scene_request *,struct remesa_scene_capture *);
+/* Explicit canonical attribute-normal gears variant. Caller owns the live
+ * source37/transfer40 parameter block and 48-byte raw vertex records. Success
+ * retains parameters in the capture; it does not consume their public ref.
+ * Same preparation-only, cleanup and native-admission contract as above. */
+int remesa_persistent_gears_attribute_scene_prepare(struct remesa_device *,
+ const struct remesa_linked_scene_request *,void *parameters,struct remesa_scene_capture *);
 
 
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's
