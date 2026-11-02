@@ -32,10 +32,10 @@ alive does not free its backing.
 
 This API is a building block for the general driver, not continuous OpenGL
 qualification. The current frontend still prepares its scene through the
-existing path. Normal dispatch integration, changing inputs and safe output
-read leases for presentation while a capture remains held are separate work.
-The ordinary map path continues to refuse CPU access to held scene resources;
-this change does not bypass that guard.
+existing path. Normal dispatch integration and changing inputs are separate work. The
+[subsequent COLOR READ lease](retired-scene-color-read.md) provides explicit
+retired output access while keeping the capture alive. The ordinary map path
+continues to refuse CPU access to held scene resources.
 
 ## Verification
 

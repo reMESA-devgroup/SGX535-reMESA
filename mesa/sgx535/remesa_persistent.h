@@ -944,6 +944,21 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *,
  * External serialization includes submit, native session close and release. */
 int remesa_persistent_scene_capture_submit_keep(struct remesa_device *,
  struct remesa_scene_capture,void **fence);
+/* Explicit CPU READ lease of the capture's exact COLOR allocation, after an
+ * authenticated published keep-submit. Ordinary held-object maps remain
+ * blocked. All captures sharing COLOR must agree on its role and be idle;
+ * every native job must be acknowledged. Uses the provider's synchronized
+ * cpu_map(...,false), not a direct pointer or implicit coherence exemption.
+ * A live lease prevents submission and capture release. Pair with the exact
+ * capture's color_unmap, never device.ops->unmap or a writable unmap. Pointer
+ * is valid only during the lease. Use the pre-map footprint for layout/extent.
+ * Caller initializes *out=NULL; errors leave it unchanged. Uncertain map or
+ * unmap poisons/retains the endpoint and lease; no guessed retry/cleanup.
+ * No input/DEPTH/DPM exposure, hash, pixel check or automatic presentation.
+ * External serialization is mandatory throughout the lease. */
+int remesa_persistent_scene_color_map(struct remesa_device *,
+ struct remesa_scene_capture,const void **out);
+int remesa_persistent_scene_color_unmap(struct remesa_device *,struct remesa_scene_capture);
 /* Compose existing encoders/owners for one cold linked draw into an owned
  * capture. COLOR/Z already belong to this device/frontend and stay owned by
  * the caller. This is preparation only; no dispatch, CPU vertex transforms,

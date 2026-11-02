@@ -55,7 +55,7 @@ struct memory {
  struct remesa_token token;uint32_t handle;uint64_t va;
  size_t bytes,allocated;unsigned refs,scene_holds;
  bool live,owner,pinned,gpu_mapped,reserved,cpu_mapped,readable,quarantined;
- bool depth_backing,scene_hw;
+ bool depth_backing,scene_hw,scene_color_read;
  struct remesa_scene_layout scene_layout;
  struct remesa_depth_scene_image *scene_image;
  uint8_t *control_image;
@@ -125,7 +125,8 @@ struct scene_capture {
  struct remesa_persistent_scene_footprint footprint;
  struct memory *held[REMESA_PERSISTENT_BUFFERS];
  struct memory *parents[4]; /* background,event,region,DPM; held above */
- unsigned count;uint64_t serial;bool live,submitted;
+ unsigned count;uint64_t serial,published_operation;bool live,submitted;
+ struct memory *read_color;
 };
 struct persistent {
  struct remesa_persistent_config cfg;size_t allocated;
@@ -615,6 +616,7 @@ static void unmap_bo(void *data,void *object,bool write)
 {
  struct persistent *d=data;struct memory *b=object;int e;
  if(!owns_memory(d,b) || !b->live || !b->cpu_mapped) return;
+ if(b->scene_color_read)return; /* explicit capture READ lease, never WRITE */
  e=d->cfg.ops->cpu_unmap(d->cfg.priv,b->handle,write);
  b->cpu_mapped=false;
  if(!e && write) e=d->cfg.ops->sync_for_device(d->cfg.priv,b->handle);
@@ -625,6 +627,8 @@ static void unmap_bo(void *data,void *object,bool write)
 static enum remesa_dispatch dispatch(void *data,const struct remesa_job *job)
 {
  struct persistent *d=data;struct submission *j=d->dispatching;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].scene_color_read)return REMESA_NOT_ISSUED;
  if(j&&j->scene){
   if(!d->native_scene||job->count!=j->scene_packet.binding_count)return REMESA_NOT_ISSUED;
   j->operation=job->operation;
@@ -3406,6 +3410,7 @@ static int scene_capture_lookup(struct persistent *d,struct remesa_scene_capture
  struct scene_capture *c=&d->scenes[token.slot];
  if(!c->live||c->serial!=token.serial)return ESTALE;
  if(d->failed)return EOWNERDEAD;
+ if(c->count>REMESA_PERSISTENT_BUFFERS||c->footprint.allocation_count>REMESA_PERSISTENT_BUFFERS)return EPROTO;
  for(unsigned i=0;i<c->count;i++){
   struct memory *b=c->held[i];
   if(!owns_memory(d,b)||!b->live||!b->refs||!b->scene_holds)return ESTALE;
@@ -3800,7 +3805,7 @@ static int scene_capture_submit(struct remesa_device *device,
  for(unsigned i=0;i<packet.binding_count;i++)if(uses[i].access&REMESA_ACCESS_WRITE)
   bound[i]->readable=true;
  j->released=true;c->submitted=false;
- if(keep)return 0;
+ if(keep){c->published_operation=j->operation;return 0;}
  e=remesa_persistent_scene_capture_release(device,token);
  if(e){d->failed=true;j->error=EOWNERDEAD;return EOWNERDEAD;}
  return 0;
@@ -3811,6 +3816,87 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *device,
 int remesa_persistent_scene_capture_submit_keep(struct remesa_device *device,
  struct remesa_scene_capture token,void **out)
 {return scene_capture_submit(device,token,out,true);}
+
+static int scene_color_fault(struct persistent *d)
+{
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].live)quarantine(d,&d->buffers[i]);
+ d->failed=true;return EOWNERDEAD;
+}
+static int scene_color_role(const struct scene_capture *c,const struct memory *b)
+{
+ unsigned matches=0;
+ if(c->submitted||c->footprint.allocation_count>REMESA_PERSISTENT_BUFFERS)return EBUSY;
+ for(unsigned i=0;i<c->footprint.allocation_count;i++)if(c->footprint.allocations[i].handle==b->handle){
+  if(c->footprint.allocations[i].generation!=b->token.generation||
+     c->footprint.allocations[i].gpu_va!=b->va||
+     c->footprint.allocations[i].allocation_bytes!=b->allocated||
+     c->footprint.allocations[i].logical_bytes>b->allocated||
+     c->footprint.allocations[i].roles!=REMESA_SCENE_REF_COLOR||
+     !(c->footprint.allocations[i].access&REMESA_ACCESS_WRITE))return EACCES;
+  matches++;
+ }
+ return matches==1?0:EACCES;
+}
+int remesa_persistent_scene_color_map(struct remesa_device *device,
+ struct remesa_scene_capture token,const void **out)
+{
+ if((uintptr_t)out%_Alignof(void *))return EINVAL;
+ int e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(!c->published_operation)return EAGAIN;
+ if(c->read_color||d->dispatching)return EBUSY;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++)
+  if(d->jobs[i].live&&!d->jobs[i].released)return EBUSY;
+ for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
+  if(d->buffers[i].cpu_mapped)return EBUSY;
+ struct memory *b=NULL;
+ for(unsigned i=0;i<c->footprint.allocation_count;i++)if(c->footprint.allocations[i].roles&REMESA_SCENE_REF_COLOR){
+  if(b)return EPROTO;
+  for(unsigned k=0;k<c->count;k++)if(c->held[k]->handle==c->footprint.allocations[i].handle){b=c->held[k];break;}
+  if(!b)return ESTALE;
+ }
+ if(!b)return ENODATA;
+ e=scene_color_role(c,b);if(e)return e;
+ if(!b->readable)return EAGAIN;
+ if(b->refs==UINT32_MAX)return EBUSY;
+ /* Every capture contributing a hold must agree that this is an idle COLOR,
+  * never a shader/input/DEPTH/DPM alias. No ordinary map guard is relaxed. */
+ unsigned holds=0;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++)if(d->scenes[i].live){
+  struct scene_capture *other=&d->scenes[i];
+  if(other->count>REMESA_PERSISTENT_BUFFERS)return EPROTO;
+  for(unsigned k=0;k<other->count;k++)if(other->held[k]==b){
+   e=scene_color_role(other,b);if(e)return e;holds++;
+  }
+ }
+ if(holds!=b->scene_holds)return ESTALE;
+ void *cpu=NULL;e=d->cfg.ops->cpu_map(d->cfg.priv,b->handle,false,&cpu);
+ if(e&&e!=EOWNERDEAD&&!cpu)return e; /* provider guarantees atomic refusal */
+ /* Retain the actual READ lease on all uncertain map/unmap outcomes. */
+ b->cpu_mapped=true;b->scene_color_read=true;++b->refs;c->read_color=b;
+ if(e||!cpu||remesa_persistent_shader_output_check(device,cpu,b->allocated)||
+    overlaps(out,sizeof(*out),cpu,b->allocated))return scene_color_fault(d);
+ *out=cpu;return 0;
+}
+int remesa_persistent_scene_color_unmap(struct remesa_device *device,
+ struct remesa_scene_capture token)
+{
+ if(!device||device->ops!=&device_ops||!device->priv)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(token.reserved||token.owner!=d->cfg.context||!token.serial||token.slot>=REMESA_PROVIDER_MAX_JOBS)return EINVAL;
+ struct scene_capture *c=&d->scenes[token.slot];
+ if(!c->live||c->serial!=token.serial)return ESTALE;
+ struct memory *b=c->read_color;if(!b)return ENOENT;
+ if(!owns_memory(d,b)||!b->live||b->quarantined||!b->cpu_mapped||!b->scene_color_read||
+    !b->refs||!b->scene_holds||scene_color_role(c,b))return scene_color_fault(d);
+ int e=d->cfg.ops->cpu_unmap(d->cfg.priv,b->handle,false);
+ if(e)return scene_color_fault(d);
+ c->read_color=NULL;b->cpu_mapped=false;b->scene_color_read=false;drop_memory(d,b);return 0;
+}
 
 static int linked_scene_prepare(struct remesa_device *device,
  const struct remesa_linked_scene_request *request,void *parameters,bool gears,
