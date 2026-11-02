@@ -18,6 +18,22 @@ int remesa_linux_memory_general_open(struct remesa_linux_memory *,const uint32_t
 int remesa_linux_memory_general_submit(struct remesa_linux_memory *,uint32_t budget_ms,
  struct remesa_general_session_request *);
 int remesa_linux_memory_general_close(struct remesa_linux_memory *,struct remesa_general_session_request *);
+/* Explicit adapter of that same bounded LAB session to the real provider.
+ * OPEN freezes exact capture metadata, validates backing and issues no GPU job.
+ * Each dispatch issues ONE SUBMIT and returns ONE authenticated host receipt;
+ * no replay loop, per-job INFO/hash/readback, automatic gate or retry.
+ * The caller MUST use capture_submit_keep and retain the capture until an
+ * acknowledged general_close, then release it. A normal consuming submit is
+ * incompatible with an active native session. Published COLOR uses its READ
+ * lease. Changed packets and repeated host operations are locally refused.
+ * Kernel profiles/admission and 64-job LAB bound remain unchanged. This is
+ * lifecycle integration, not production arbitrary-program GL admission.
+ * External serialization includes OPEN/dispatch/COLOR read/CLOSE/release. */
+int remesa_linux_memory_general_scene_open(struct remesa_linux_memory *,
+ const struct remesa_scene_packet *,uint32_t profile,uint32_t maximum,uint32_t budget_ms,
+ struct remesa_general_session_request *);
+enum remesa_dispatch remesa_linux_memory_general_scene_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
  * installations do not provide this resource service. Archived experimental

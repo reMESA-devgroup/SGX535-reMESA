@@ -14,7 +14,11 @@ struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_se
  unsigned private_protocol;
  struct remesa_scene_probe_request scene_response;
  unsigned scene_protocol;uint32_t gears_access[18];
- struct remesa_gears_scene_probe_request gears_response;};
+ struct remesa_gears_scene_probe_request gears_response;
+ struct remesa_scene_packet general_packet;
+ uint64_t general_host_operation;
+ uint32_t general_budget;
+ bool general_adapter_active;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -223,7 +227,6 @@ static int private_lab_uncertain(struct remesa_linux_memory *d)
  for(unsigned i=0;i<32;i++)d->objects[i].poison=true;
  return EOWNERDEAD;
 }
-#include "remesa_linux_general_session.inc"
 _Static_assert(sizeof(struct remesa_scene_probe_request)==144,"fixed scene LAB ABI");
 _Static_assert(offsetof(struct remesa_scene_probe_request,operation)==88,"scene request prefix");
 static bool scene_host_overlap(const void *a,size_t an,const void *b,size_t bn)
@@ -232,6 +235,7 @@ static bool scene_host_overlap(const void *a,size_t an,const void *b,size_t bn)
  if(an>UINTPTR_MAX-x||bn>UINTPTR_MAX-y)return true;
  return x<=y?y-x<an:x-y<bn;
 }
+#include "remesa_linux_general_session.inc"
 int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
  const struct remesa_scene_packet *packet,uint32_t profile,uint32_t budget,
  struct remesa_scene_probe_request *out)
