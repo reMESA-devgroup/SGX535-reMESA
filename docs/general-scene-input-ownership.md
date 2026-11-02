@@ -88,8 +88,9 @@ scripts, commands, original failures and source pins are retained in the
 above evidence root.
 
 The preceding [physical cold/warm OpenGL pair](opengl-general-session-client.md)
-remains valid for its original module. This new ownership contract needs a fresh
-controlled physical pair and verified stock recovery before hardware approval.
+remains valid for its original module. The corrected full-profile module has
+since passed a fresh cold/warm physical pair at both 1280x800 and 640x640,
+including verified stock recovery after each boot; see the correction below.
 The next driver work remains production dispatch and resource lifecycle,
 including authenticated update epochs for changing inputs. Complete desktop
 3D/2D, GL2.1/GLES2 support and an installable driver are still the objective.
@@ -137,3 +138,18 @@ the image SHA-256 is
 Seven module metadata tests, five identity-chain tests and four visible-HOLD
 tests pass offline. Physical qualification of this corrected image is separate;
 the earlier failed image is retained as evidence.
+
+The corrected image subsequently passed four physical GPU jobs, two per
+resolution, using the same existing OpenGL client and independent oracles.
+Core/revision identity, submission, retirement and publication matched; each
+job had zero COLOR/Z24 differences, all 13 READ inputs unchanged and four
+guards intact. Both sessions closed with complete memory cleanup and all seven
+controls N, followed by verified stock recovery. The final stock boot was
+`9ede892f-aa48-4750-8757-c001401474af`.
+
+Consolidated evidence:
+`/home/gama/sgx535-offline/general-scene-input-physical-20261102/FINAL_CORRECTED_PAIR_RESULT.json`.
+The 31 protected historical artifacts remain unchanged. These bounded tests
+qualify this kernel ownership contract and boot profile. They do not physically
+qualify the subsequent retained COLOR frontend or one-job provider adapter,
+measure sustained FPS, or establish complete GL2.1/GLES2 support.

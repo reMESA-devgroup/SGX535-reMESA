@@ -52,7 +52,8 @@ The unchanged one-shot behavior is checked separately with its original
 14 scenarios.
 
 These tests produce no pixels and supply no hardware submission, FPS or
-OpenGL conformance evidence. The new kernel READ-seal candidate still needs
-physical qualification after the reported boot error is understood. The Mini 12
-was returned to stock and its boot configuration recovered before this work;
-no new hardware test or reboot is issued here.
+OpenGL conformance evidence. The subsequent corrected kernel READ-seal build
+has since passed cold/warm physical pairs at both primary resolutions with
+stock recovery; see [immutable inputs](general-scene-input-ownership.md).
+Those tests use the earlier collector and do not physically qualify this new
+keep-capture API or its later one-job provider adapter.
