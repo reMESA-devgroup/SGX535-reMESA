@@ -28,6 +28,9 @@ lease refuses submission locally. An entered ioctl failure or malformed native
 receipt poisons the endpoint; subsequent submissions report ambiguity and no
 resource may be freed through it. No automatic retry, replay loop, per-job INFO,
 hash, readback, dump or presentation is added.
+The kernel's existing per-SUBMIT LAB input authentication remains in place.
+The adapter adds no such work itself; this is not a hash-free production path
+or a measured performance improvement.
 
 The general transport also rejects host input/output aliases with its endpoint,
 CPU leases and each other before issuing an ioctl. An output inside the opaque
