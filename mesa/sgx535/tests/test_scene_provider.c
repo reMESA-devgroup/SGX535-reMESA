@@ -40,7 +40,10 @@ static void owners_drop(struct remesa_device *d,struct graph *g)
  d->ops->destroy_bo(d->priv,g->table);d->ops->destroy_bo(d->priv,g->parameter);
  bg_drop_children(d,g->children);for(unsigned i=0;i<4;i++)d->ops->destroy_bo(d->priv,g->parts[i]);d->ops->destroy_bo(d->priv,g->event);
 }
-int main(int argc,char **argv)
+#ifndef REMESA_SCENE_PROVIDER_TEST_MAIN
+#define REMESA_SCENE_PROVIDER_TEST_MAIN main
+#endif
+int REMESA_SCENE_PROVIDER_TEST_MAIN(int argc,char **argv)
 {
  CHECK(argc==2);mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<=13);
  /* Finite initialized/finalized inputs through the existing fixture owners.

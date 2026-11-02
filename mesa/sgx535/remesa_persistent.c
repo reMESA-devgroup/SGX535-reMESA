@@ -3761,8 +3761,8 @@ static int scene_submit_fault(struct persistent *d,struct submission *j)
  for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)if(d->buffers[i].live)quarantine(d,&d->buffers[i]);
  d->failed=true;j->error=EOWNERDEAD;return EOWNERDEAD;
 }
-int remesa_persistent_scene_capture_submit(struct remesa_device *device,
- struct remesa_scene_capture token,void **out)
+static int scene_capture_submit(struct remesa_device *device,
+ struct remesa_scene_capture token,void **out,bool keep)
 {
  if((uintptr_t)out%_Alignof(void *))return EINVAL;
  int e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
@@ -3800,10 +3800,17 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *device,
  for(unsigned i=0;i<packet.binding_count;i++)if(uses[i].access&REMESA_ACCESS_WRITE)
   bound[i]->readable=true;
  j->released=true;c->submitted=false;
+ if(keep)return 0;
  e=remesa_persistent_scene_capture_release(device,token);
  if(e){d->failed=true;j->error=EOWNERDEAD;return EOWNERDEAD;}
  return 0;
 }
+int remesa_persistent_scene_capture_submit(struct remesa_device *device,
+ struct remesa_scene_capture token,void **out)
+{return scene_capture_submit(device,token,out,false);}
+int remesa_persistent_scene_capture_submit_keep(struct remesa_device *device,
+ struct remesa_scene_capture token,void **out)
+{return scene_capture_submit(device,token,out,true);}
 
 static int linked_scene_prepare(struct remesa_device *device,
  const struct remesa_linked_scene_request *request,void *parameters,bool gears,

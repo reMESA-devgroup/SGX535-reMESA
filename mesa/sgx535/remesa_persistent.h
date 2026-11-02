@@ -828,8 +828,9 @@ int remesa_persistent_scene_footprint(const struct remesa_device *,void *backgro
  * Captures keep references after frontend owner destruction. Public CPU maps
  * and legacy submission otherwise admitted return EBUSY; immutable write and
  * backend admission gates retain their existing errors. Up to eight
- * captures may coexist, including shared graphs. Release cancels an UNISSUED
- * capture only; it is never GPU completion/retirement or uncertain-job teardown.
+ * captures may coexist, including shared graphs. Release cancels an idle
+ * capture after any prior job is acknowledged; it never supplies GPU
+ * completion/retirement or uncertain-job teardown.
  * scene_capture_submit transfers these holds into an authenticated native
  * lifecycle and consumes the token only after acknowledged publication.
  * Calling release itself never acknowledges GPU execution.
@@ -931,6 +932,17 @@ int remesa_persistent_native_scene_ready(const struct remesa_device *);
  * Native authentication remains the provider's responsibility. External lock.
  */
 int remesa_persistent_scene_capture_submit(struct remesa_device *,
+ struct remesa_scene_capture,void **fence);
+/* Same exact submission/receipt/fence protocol, retaining the frozen capture
+ * and its transitive owners on success. Each call submits ONE real provider
+ * operation; it does not replay inside the callback or synthesize frames.
+ * Destroy published fences normally to reclaim bounded job slots. The caller
+ * must acknowledge close of any native backing/source session BEFORE explicit
+ * scene_capture_release. Capture release never closes a kernel session.
+ * NOT_ISSUED leaves capture untouched; uncertainty retains/poisons everything
+ * as above. No allocation, upload, diagnostic readback or capability change.
+ * External serialization includes submit, native session close and release. */
+int remesa_persistent_scene_capture_submit_keep(struct remesa_device *,
  struct remesa_scene_capture,void **fence);
 /* Compose existing encoders/owners for one cold linked draw into an owned
  * capture. COLOR/Z already belong to this device/frontend and stay owned by
