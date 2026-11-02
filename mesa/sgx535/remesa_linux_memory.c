@@ -11,6 +11,7 @@ struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poiso
 struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];
  uint64_t private_session,private_sequence,private_operation;
  uint32_t private_maximum,private_pds_id;bool private_attempted,private_active,private_poison,scene_attempted;
+ unsigned private_protocol;
  struct remesa_scene_probe_request scene_response;
  unsigned scene_protocol;uint32_t gears_access[18];
  struct remesa_gears_scene_probe_request gears_response;};
@@ -222,6 +223,7 @@ static int private_lab_uncertain(struct remesa_linux_memory *d)
  for(unsigned i=0;i<32;i++)d->objects[i].poison=true;
  return EOWNERDEAD;
 }
+#include "remesa_linux_general_session.inc"
 _Static_assert(sizeof(struct remesa_scene_probe_request)==144,"fixed scene LAB ABI");
 _Static_assert(offsetof(struct remesa_scene_probe_request,operation)==88,"scene request prefix");
 static bool scene_host_overlap(const void *a,size_t an,const void *b,size_t bn)
@@ -435,7 +437,7 @@ static int private_lab_exchange(struct remesa_linux_memory *d,
  if(r->action==REMESA_PRIVATE_SESSION_LAB_OPEN){
   if(!r->session || r->stages!=REMESA_PRIVATE_SESSION_LAB_OPENED ||
      r->operation || r->cookie || r->phase || r->ledger)return private_lab_uncertain(d);
-  d->private_session=r->session;d->private_maximum=r->max_jobs;d->private_pds_id=r->ids[0];d->private_active=true;
+  d->private_session=r->session;d->private_maximum=r->max_jobs;d->private_pds_id=r->ids[0];d->private_active=true;d->private_protocol=1;
  }else{
   if(r->stages!=15 || r->phase!=9 || r->ledger!=7 || !r->operation ||
      r->operation!=r->cookie || r->operation<=d->private_operation)return private_lab_uncertain(d);
@@ -478,6 +480,7 @@ int remesa_linux_memory_private_lab_submit(struct remesa_linux_memory *d,
  if(!d || !private_lab_output_valid(out) || !budget_ms || budget_ms>10000)return EINVAL;
  if(d->private_poison)return EOWNERDEAD;
  if(!d->private_active)return ENOENT;
+ if(d->private_protocol!=1)return EOPNOTSUPP;
  if(d->private_sequence>=d->private_maximum)return ENOSPC;
  /* Outstanding host leases must be released before execution. No per-frame
   * provider queries or full input comparisons are needed for sealed backing. */
@@ -493,6 +496,7 @@ int remesa_linux_memory_private_lab_close(struct remesa_linux_memory *d,
  if(!d || !private_lab_output_valid(out))return EINVAL;
  if(d->private_poison)return EOWNERDEAD;
  if(!d->private_active)return ENOENT;
+ if(d->private_protocol!=1)return EOPNOTSUPP;
  for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
  r.version=REMESA_PRIVATE_SESSION_LAB_VERSION;r.action=REMESA_PRIVATE_SESSION_LAB_CLOSE;
  r.context=d->context;r.session=d->private_session;r.sequence=d->private_sequence;

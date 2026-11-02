@@ -9,6 +9,15 @@
 #include "remesa/private_session_lab_uapi.h"
 #include "remesa/scene_probe_uapi.h"
 #include "remesa/gears_scene_probe_uapi.h"
+#include "remesa/general_session_uapi.h"
+struct remesa_linux_memory;
+/* Bounded LAB general/native session, distinct from retained11-ID ABI.
+ * No retry on an uncertain ioctl; all local objects then remain poisoned. */
+int remesa_linux_memory_general_open(struct remesa_linux_memory *,const uint32_t[18],
+ uint32_t profile,uint32_t maximum,struct remesa_general_session_request *);
+int remesa_linux_memory_general_submit(struct remesa_linux_memory *,uint32_t budget_ms,
+ struct remesa_general_session_request *);
+int remesa_linux_memory_general_close(struct remesa_linux_memory *,struct remesa_general_session_request *);
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
  * installations do not provide this resource service. Archived experimental

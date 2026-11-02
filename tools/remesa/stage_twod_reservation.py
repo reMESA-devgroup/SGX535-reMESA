@@ -842,11 +842,13 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '#include "remesa_private_session_lab.h"\n#include "remesa_private_session_lab_uapi.h"\n'
             '#include "remesa_scene_probe.h"\n#include "remesa_scene_probe_uapi.h"\n'
             '#include "remesa_gears_scene_probe_uapi.h"\n'
+            '#include "remesa_general_session_uapi.h"\n'
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_PROBE, remesa_scene_probe_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_TRACE, remesa_scene_trace_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_GEARS_SCENE_PROBE, remesa_gears_scene_probe_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_GEARS_SCENE_TRACE, remesa_gears_scene_trace_ioctl, DRM_ROOT_ONLY),\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_GENERAL_SESSION, remesa_general_session_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_SESSION_LAB, remesa_private_session_lab_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
@@ -859,6 +861,7 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
         result['remesa_gem_memory.c'] = private_file_lost_sources(result['remesa_gem_memory.c'])
         result['remesa_gem_memory.c'] += '#include "remesa_private_session_lab.inc"\n'
         result['remesa_gem_memory.c'] += '#include "remesa_scene_probe.inc"\n'
+        result['remesa_gem_memory.c'] += '#include "remesa_general_session.inc"\n'
         result.update(private_gem_lifetime_sources(native))
         display=(native/'gma_display.c').read_bytes()
         if hashlib.sha256(display).hexdigest()!='877140046fcea01a5e8f0face75384a3dfe2d34983539de76bcfa94ef9f5f2c4':
@@ -985,6 +988,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_session.h', 'remesa_private_session.inc',
                      'remesa_private_session_source.inc', 'remesa_private_session_scene.inc',
                      'remesa_private_session_dpm.inc',
+                     'remesa_general_session.inc',
                      'remesa_private_dpm_cache.inc',
                      'remesa_private_inputs.inc',
                      'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',
@@ -995,6 +999,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_scene_probe.h', 'remesa_scene_probe.inc', 'remesa_scene_probe_profiles.h', 'remesa_gears_scene_probe_profiles.h', 'remesa_gears_homogeneous_probe_profiles.h', 'remesa_gears_clamped_api_probe_profiles.h', 'remesa_scene_probe_request.h']:
             components[name] = (additions / name).read_bytes()
         components['remesa_scene_probe_uapi.h'] = (root / 'include/remesa/scene_probe_uapi.h').read_bytes()
+        components['remesa_general_session_uapi.h'] = (root / 'include/remesa/general_session_uapi.h').read_bytes()
         components['remesa_gears_scene_probe_uapi.h'] = (root / 'include/remesa/gears_scene_probe_uapi.h').read_text().replace('"scene_probe_uapi.h"','"remesa_scene_probe_uapi.h"').encode()
         components['remesa_gears_scene_probe_envelope.h'] = (root / 'include/remesa/gears_scene_probe_envelope.h').read_text().replace('"gears_scene_probe_uapi.h"','"remesa_gears_scene_probe_uapi.h"').encode()
         components['remesa_scene_packet.h'] = (root / 'include/remesa/scene_packet.h').read_bytes()

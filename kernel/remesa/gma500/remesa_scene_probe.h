@@ -6,4 +6,5 @@ int remesa_scene_probe_ioctl(struct drm_device *,void *,struct drm_file *);
 int remesa_scene_trace_ioctl(struct drm_device *,void *,struct drm_file *);
 int remesa_gears_scene_probe_ioctl(struct drm_device *,void *,struct drm_file *);
 int remesa_gears_scene_trace_ioctl(struct drm_device *,void *,struct drm_file *);
+int remesa_general_session_ioctl(struct drm_device *,void *,struct drm_file *);
 #endif

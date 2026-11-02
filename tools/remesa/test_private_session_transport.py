@@ -26,8 +26,8 @@ def main():
         if not(args.i486_cc and args.qemu_i386):a.error('both i486 options required')
         variants.append(('i486',str(args.i486_cc),['-O2','-static','-march=i486'],[str(args.qemu_i386)]))
     sources=[w/'mesa/sgx535'/n for n in ('remesa_linux_memory.c','remesa_retained_transport.c')]
-    tests=['test_private_session_transport.c','test_memory_upload_pages.c','test_native_copy_transport.c','test_native_fill_transport.c','test_retained_transport.c']
-    files=sources+[w/'mesa/sgx535/tests'/n for n in tests]+[Path(__file__).resolve(),w/'mesa/sgx535/remesa_linux_memory.h',w/'include/remesa/private_session_lab_uapi.h',w/'tools/remesa/prepare_mesa_loader.py']
+    tests=['test_private_session_transport.c','test_general_session_transport.c','test_memory_upload_pages.c','test_native_copy_transport.c','test_native_fill_transport.c','test_retained_transport.c']
+    files=sources+[w/'mesa/sgx535/tests'/n for n in tests]+[Path(__file__).resolve(),w/'mesa/sgx535/remesa_linux_memory.h',w/'include/remesa/private_session_lab_uapi.h',w/'include/remesa/general_session_uapi.h',w/'mesa/sgx535/remesa_linux_general_session.inc',w/'tools/remesa/prepare_mesa_loader.py']
     capture_hashes={}
     if args.capture:
         for stem in ('OPEN','frame-000001','frame-000002','CLOSE'):
