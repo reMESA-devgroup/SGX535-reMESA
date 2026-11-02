@@ -28,7 +28,10 @@ enum remesa_ir_op {
  /* Complete COL0 vec4 -> FS color with FLAT semantics. External raster state
   * must provide the independently qualified flat/provoking contract. This
   * canonical host operation never substitutes a smooth resource profile. */
- REMESA_IR_FLAT_COLOR_INPUT
+ REMESA_IR_FLAT_COLOR_INPUT,
+ /* Same fixed lighting graph, followed by COLOR0 vec4 clamp to [0,1].
+  * POSITION and all input/uniform bindings remain unchanged. */
+ REMESA_IR_GEARS_VERTEX_CLAMPED
 };
 struct remesa_ir_operand { uint32_t reg, channel; };
 struct remesa_ir_instruction {
@@ -54,6 +57,7 @@ int remesa_shader_ir_vertex_input(const struct remesa_shader_ir *,unsigned *inpu
  * Query succeeds only for that complete graph, including both exports. */
 int remesa_shader_ir_white_lambert(const struct remesa_shader_ir *);
 int remesa_shader_ir_gears_vertex(const struct remesa_shader_ir *);
+int remesa_shader_ir_gears_vertex_clamped(const struct remesa_shader_ir *);
 /* Exact semantic COL0 vec4 input -> fragment color vec4; slot1 denotes
  * semantic COL0, independently of numeric USE register0 or PDS R10. */
 int remesa_shader_ir_fragment_color_input(const struct remesa_shader_ir *);

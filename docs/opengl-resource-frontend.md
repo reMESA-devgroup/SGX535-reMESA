@@ -13,7 +13,9 @@ identity or execution evidence.
 
 The setup declares the implemented canonical shader interface: two P/N inputs,
 POSITION/COLOR0 output storage, one color varying, nine coefficient float4
-vectors and the 40-instruction vertex body. The fragment interface remains
+vectors and the original 40-instruction vertex program. The explicit frontend
+now also reserves an instruction limit of 43 for the separate COLOR clamp
+variant described in [vertex-color-clamp.md](vertex-color-clamp.md). The fragment interface remains
 one color input and one output. Sampling is still unavailable. Renderbuffer
 dimensions use a power-of-two bound within the provider's storage limits and
 the existing 2048-pixel typed target contract. New contexts opt into the cold
@@ -54,7 +56,8 @@ unchanged.
 
 The real raster state requests half-pixel centers, the bottom edge rule,
 near/far depth clipping, CCW orientation and vertex-color clamping. The current
-native adapter does not admit that complete state contract, so the API draw
+native adapter now retains this descriptor as pending metadata, but does not
+admit that complete execution contract, so the API draw
 still returns a driver refusal before reaching the native dispatcher.
 No pixels are presented or accepted as GPU output in this test.
 

@@ -721,6 +721,9 @@ int remesa_pds_selected_prepare(const struct remesa_pds_selected_request *r,
  case REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3:
   p.stage=REMESA_IR_VERTEX;p.code_bytes=16;p.use_committed_bytes=320;
   p.use_reserved_bytes=320;p.pds_reserved_bytes=192;break;
+ case REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3:
+  p.stage=REMESA_IR_VERTEX;p.code_bytes=16;p.use_committed_bytes=344;
+  p.use_reserved_bytes=352;p.pds_reserved_bytes=192;break;
  case REMESA_PDS_SELECTED_FS_INPUT_COL0:
   p.stage=REMESA_IR_FRAGMENT;p.code_bytes=12;p.use_committed_bytes=8;
   p.use_reserved_bytes=16;p.pds_reserved_bytes=64;break;

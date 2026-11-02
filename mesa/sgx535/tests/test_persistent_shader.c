@@ -24,7 +24,7 @@ enum failure {
  FAIL_DUPLICATE_CREATE,FAIL_DUPLICATE_CREATE_ERROR,FAIL_CREATE_ZERO,FAIL_READ_GAP,
  FAIL_DUPLICATE_CREATE_UNCERTAIN
 };
-struct backing { unsigned char *bytes;size_t length;bool live,pinned,lease; };
+struct backing { unsigned char *bytes;size_t length;bool live,pinned,lease,write_lease; };
 struct fixture {
  struct backing backing[64];enum failure fail;
  unsigned creates,pins,cpu_maps,cpu_unmaps,reads,writes,unpins,destroys,forbidden;
@@ -84,7 +84,7 @@ static int cpu_map(void *data,uint32_t id,bool write,void **out)
  if(write)++f->writes;else ++f->reads;
  if(!write&&selected==FAIL_READ_MAP)return ENOMEM;
  if(selected==FAIL_MAP)return ENOMEM;
- b->lease=true;
+ b->lease=true;b->write_lease=write;
  if(selected==FAIL_MAP_UNCERTAIN)return EOWNERDEAD;
  if(selected==FAIL_MAP_NULL)return 0;
  *out=b->bytes;
@@ -95,7 +95,7 @@ static int cpu_map(void *data,uint32_t id,bool write,void **out)
 }
 static int cpu_unmap(void *data,uint32_t id,bool write)
 {
- struct fixture *f=data;struct backing *b=get(f,id);(void)write;CHECK(b->lease);++f->cpu_unmaps;
+ struct fixture *f=data;struct backing *b=get(f,id);CHECK(b->lease&&write==b->write_lease);++f->cpu_unmaps;
  if(f->fail==FAIL_UNMAP_UNCERTAIN)return EOWNERDEAD;
  b->lease=false;return 0;
 }

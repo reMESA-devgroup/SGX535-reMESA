@@ -611,6 +611,24 @@ int remesa_usse_cpu_gears_vertex_body_encode(
  memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
 }
 
+int remesa_usse_cpu_color_output_clamp_encode(void *out,size_t capacity,size_t *written)
+{
+ if((uintptr_t)written%_Alignof(size_t)||!span(out,capacity)||
+    !span(written,sizeof(*written))||overlap(out,capacity,written,sizeof(*written)))return EINVAL;
+ if(capacity<REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES)return ENOSPC;
+ uint8_t bytes[REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES];size_t n;
+ struct remesa_usse_component_control control={0};
+ for(unsigned i=0;i<4;i++)control.operand[i]=(struct remesa_usse_component_operand){
+  .format=REMESA_USSE_COMPONENT_SIGNED,.value=i==3?0:1};
+ int error=remesa_usse_component_control_encode(&control,bytes,8,&n);if(error)return error;
+ struct remesa_usse_cpu_arithmetic clamp={.kind=13,.flags=0x41,.destination={1,4},
+  .source={{0,0},{1,4},{6,48}}};
+ error=remesa_usse_cpu_arithmetic_encode(&clamp,bytes+8,8,&n);if(error)return error;
+ clamp.kind=12;clamp.source[2].base=52;
+ error=remesa_usse_cpu_arithmetic_encode(&clamp,bytes+16,8,&n);if(error)return error;
+ memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
+}
+
 int remesa_usse_cpu_normalize_scale_encode(const struct remesa_usse_cpu_normalize_scale *request,
  void *output,size_t capacity,size_t *written)
 {

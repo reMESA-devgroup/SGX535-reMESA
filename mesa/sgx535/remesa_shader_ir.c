@@ -27,6 +27,14 @@ int remesa_shader_ir_gears_vertex(const struct remesa_shader_ir *p)
   * arithmetic, incomplete export, resource or runtime admission is added. */
  return memcmp(p,&expected,sizeof(expected))?ENOTSUP:0;
 }
+int remesa_shader_ir_gears_vertex_clamped(const struct remesa_shader_ir *p)
+{
+ if(!p)return EINVAL;
+ if(p->instructions[0].input_slot>1)return ENOTSUP;
+ struct remesa_shader_ir expected;gears_vertex_ir(p->instructions[0].input_slot,&expected);
+ expected.instructions[0].op=REMESA_IR_GEARS_VERTEX_CLAMPED;
+ return memcmp(p,&expected,sizeof(expected))?ENOTSUP:0;
+}
 static void white_lambert_ir(struct remesa_shader_ir *p)
 {
  *p=(struct remesa_shader_ir){.schema=REMESA_SHADER_IR_SCHEMA,.stage=REMESA_IR_VERTEX,.count=8};
@@ -89,7 +97,8 @@ int remesa_shader_ir_validate(const struct remesa_shader_ir *p)
  uint32_t all_used=0;
  if(!p)return EINVAL;
  if(!remesa_shader_ir_white_lambert(p)||!remesa_shader_ir_fragment_color_input(p)||
-    !remesa_shader_ir_gears_vertex(p)||!remesa_shader_ir_fragment_flat_color_input(p))return 0;
+    !remesa_shader_ir_gears_vertex(p)||!remesa_shader_ir_gears_vertex_clamped(p)||
+    !remesa_shader_ir_fragment_flat_color_input(p))return 0;
  if(p->schema!=REMESA_SHADER_IR_SCHEMA||
     (p->stage!=REMESA_IR_VERTEX&&p->stage!=REMESA_IR_FRAGMENT)||
     !p->count||p->count>REMESA_SHADER_IR_INSTRUCTIONS)return ENOTSUP;
@@ -167,7 +176,7 @@ int remesa_shader_ir_vertex_layout(const struct remesa_shader_ir *p,
      (uintptr_t)out<(uintptr_t)p+sizeof(*p)))return EINVAL;
  int ret=remesa_shader_ir_validate(p);if(ret)return ret;
  if(p->stage!=REMESA_IR_VERTEX)return ENOTSUP;
- if(!remesa_shader_ir_gears_vertex(p)) {
+ if(!remesa_shader_ir_gears_vertex(p)||!remesa_shader_ir_gears_vertex_clamped(p)) {
   const unsigned attribute=p->instructions[0].input_slot;
   struct remesa_shader_vertex_layout layout={.input_count=attribute?2u:1u,
    .stride_dwords=attribute?8u:4u,.position_components=4,.color_components=4,.output_dwords=8};
@@ -242,7 +251,7 @@ int remesa_shader_ir_dump(const struct remesa_shader_ir *p,char *out,size_t size
  int written=snprintf(text,sizeof(text),"reMESA host semantic IR v1 (NOT SGX instructions) stage=%s\n",p->stage==REMESA_IR_VERTEX?"vertex":"fragment");
  if(written<0||(size_t)written>=sizeof(text))return EOVERFLOW;
  used=(size_t)written;
- static const char *ops[]={"invalid","input","constant","copy","compose4","position","color","dot3","saturate","gears-vertex","flat-color-input"};
+ static const char *ops[]={"invalid","input","constant","copy","compose4","position","color","dot3","saturate","gears-vertex","flat-color-input","gears-vertex-clamped"};
  for(unsigned n=0;n<p->count;n++) {
   const struct remesa_ir_instruction *i=&p->instructions[n];
   written=snprintf(text+used,sizeof(text)-used,"%u %s dst=%u float32x%u src=%u.%u,%u.%u,%u.%u,%u.%u bits=%08x,%08x,%08x,%08x\n",n,ops[i->op],i->dst,i->components,i->src[0].reg,i->src[0].channel,i->src[1].reg,i->src[1].channel,i->src[2].reg,i->src[2].channel,i->src[3].reg,i->src[3].channel,i->bits[0],i->bits[1],i->bits[2],i->bits[3]);

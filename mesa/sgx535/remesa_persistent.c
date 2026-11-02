@@ -2012,6 +2012,11 @@ int remesa_persistent_control_verify(struct remesa_device *device,void *object)
  if(e)memory_error(d,b,e);
  return e;
 }
+static bool gears_attribute_profile(uint32_t profile)
+{
+ return profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3||
+  profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3;
+}
 static int linked_program_prepare(struct remesa_device *device,
  const struct remesa_shader_linkage *link,const uint32_t banks[2],bool gears,void **out)
 {
@@ -2196,7 +2201,7 @@ static int linked_pds_prepare(struct remesa_device *device,void *program,
  const struct linked_program *cp=code->linked_program;
  const struct linked_geometry *gp=raw->linked_geometry;
  const bool gears=parameters!=NULL;
- if(cp->resources[0].profile!=(gears?REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3:REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
+ if((gears?!gears_attribute_profile(cp->resources[0].profile):cp->resources[0].profile!=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
     cp->resources[1].profile!=REMESA_PDS_SELECTED_FS_INPUT_COL0)return ENOTSUP;
  struct memory *params=parameters;
  if(gears){
@@ -2302,7 +2307,7 @@ int remesa_persistent_gears_attribute_pds_snapshot(const struct remesa_device *d
  struct remesa_persistent_gears_attribute_pds_backing value={0};
  e=linked_pds_metadata(device->priv,object,true,&value.pds);if(e)return e;
  const struct memory *b=object,*p=b->linked_pds->parameters;
- if(!p||value.pds.plans[0].request.profile!=REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3||
+ if(!p||!gears_attribute_profile(value.pds.plans[0].request.profile)||
     p->state_kind!=REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS||p->state_parameter_dwords!=36||p->state_bytes!=160)return ENOTSUP;
  struct persistent *d=device->priv;
  value.parameters=(struct remesa_persistent_vertex_parameters_backing){
@@ -2351,7 +2356,9 @@ static int linked_state_prepare(struct remesa_device *device,void *pds,
  if(homogeneous&&(!gears||r.viewport.path!=REMESA_TA_VIEWPORT_MATRIX_WINDOW))return ENOTSUP;
  struct remesa_persistent_linked_pds_backing backing;
  e=remesa_persistent_linked_pds_snapshot(device,pds,&backing);if(e)return e;
- if(backing.plans[0].request.profile!=(gears?REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3:REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
+ if((gears?
+     (homogeneous?!gears_attribute_profile(backing.plans[0].request.profile):backing.plans[0].request.profile!=REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3):
+     backing.plans[0].request.profile!=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
     backing.plans[1].request.profile!=REMESA_PDS_SELECTED_FS_INPUT_COL0)return ENOTSUP;
  const struct remesa_ta_fragment_binding_request fragment={
   .address_window_base=backing.gpu_va&UINT64_C(0xf0000000),

@@ -5,7 +5,7 @@
 int main(void)
 {
  glsl_type_singleton_init_or_ref();
- for(unsigned mode=0;mode<19;mode++){
+ for(unsigned mode=0;mode<20;mode++){
   struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
   struct remesa_device device={0};
   struct remesa_persistent_config cfg={.ops=&target_ops,.priv=&f,.context=9800,
@@ -28,9 +28,9 @@ int main(void)
   if(mode==7)fb.zsbuf.texture=NULL;
   ctx->set_framebuffer_state(ctx,&fb);CHECK(!remesa_context_error(ctx));
   struct pipe_transfer *transfer=NULL;const struct pipe_box box={.width=1,.height=1,.depth=1};
-  if(mode==8||mode==9){
-   CHECK(ctx->texture_map(ctx,color,0,PIPE_MAP_WRITE,&box,&transfer));
-   if(mode==9){ctx->texture_unmap(ctx,transfer);transfer=NULL;}
+  if(mode==8||mode==9||mode==19){
+   CHECK(ctx->texture_map(ctx,color,0,PIPE_MAP_WRITE|(mode==19?PIPE_MAP_FLUSH_EXPLICIT:0),&box,&transfer));
+   if(mode==9||mode==19){ctx->texture_unmap(ctx,transfer);transfer=NULL;}
   }
   union pipe_color_union zero={0};unsigned mask=PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH;
   double z=1;struct pipe_scissor_state partial={.maxx=639,.maxy=640};
@@ -44,7 +44,7 @@ int main(void)
   if(mode==18)z=NAN;
   unsigned creates=f.creates,maps=f.cpu_maps;
   ctx->clear(ctx,mask,mode==4?&partial:NULL,mode==6?NULL:&zero,z,0);
-  bool rejected=(mode>=2&&mode<=9)||mode>=17;
+  bool rejected=(mode>=2&&mode<=9)||mode==17||mode==18;
   CHECK(remesa_context_error(ctx)==(rejected?(mode==6?EINVAL:mode==8?EBUSY:ENOTSUP):0));
   CHECK(f.creates==creates&&f.cpu_maps==maps&&!dispatch_calls&&!remesa_context_cpu_clear_count(ctx));
   if(transfer)ctx->texture_unmap(ctx,transfer);
@@ -95,6 +95,6 @@ int main(void)
   CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!remesa_persistent_close(&device));
  }
  glsl_type_singleton_decref();
- puts("PASS19 native clear queue ownership/atomic refusal/CPU-map exclusion/cancel/teardown cases; GPU0");
+ puts("PASS20 native clear queue ownership/atomic refusal/CPU-map exclusion/cancel/teardown cases; GPU0");
  return 0;
 }

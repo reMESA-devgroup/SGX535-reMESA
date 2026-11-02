@@ -9,6 +9,7 @@
 #include "GL/gl.h"
 #include "remesa_draw.h"
 #include "remesa_nir.h"
+#include "util/u_upload_mgr.h"
 
 static struct pipe_context *(*original_create)(struct pipe_screen *,void *,unsigned);
 static unsigned enabled_contexts;
@@ -18,6 +19,7 @@ static void *(*original_vs)(struct pipe_context *,const struct pipe_shader_state
 static void *(*original_raster)(struct pipe_context *,const struct pipe_rasterizer_state *);
 static void (*original_clear)(struct pipe_context *,unsigned,const struct pipe_scissor_state *,const union pipe_color_union *,double,unsigned);
 static unsigned observed_clear_mask;
+static void *observed_raster;
 static void observe_clear(struct pipe_context *ctx,unsigned mask,const struct pipe_scissor_state *scissor,
  const union pipe_color_union *color,double depth,unsigned stencil)
 {
@@ -30,6 +32,7 @@ static void observe_clear(struct pipe_context *ctx,unsigned mask,const struct pi
 static void *observe_raster(struct pipe_context *ctx,const struct pipe_rasterizer_state *state)
 {
  void *result=original_raster(ctx,state);
+ if(result)observed_raster=result;
  if(frontend_case>=3)printf("FIXED_RASTER case=%u accepted=%u half=%u bottom=%u clip=%u/%u cull=%u front_ccw=%u clamp=%u/%u flat=%u scissor=%u\n",
   frontend_case,result!=NULL,state->half_pixel_center,state->bottom_edge_rule,
   state->depth_clip_near,state->depth_clip_far,state->cull_face,state->front_ccw,
@@ -55,7 +58,7 @@ static void *observe_vertex(struct pipe_context *ctx,const struct pipe_shader_st
  }
  return original_vs(ctx,state);
 }
-static void inspect_fixed_inputs(struct pipe_context *ctx)
+static void inspect_fixed_inputs(struct pipe_context *ctx,struct remesa_device *device,struct fixture *fixture)
 {
  const struct remesa_pds_parameter_source_request request={0x20000000,4096,0,36,40};
  unsigned char parameters[160];size_t written=0;
@@ -80,6 +83,55 @@ static void inspect_fixed_inputs(struct pipe_context *ctx)
  CHECK(!isp_error&&isp.depth_bits_present&&isp.depth_test&&isp.depth_write&&
   isp.compare==REMESA_DEPTH_LESS&&isp.rgba_mask==15);
  printf("FIXED_INPUTS case=%u parameters=%d bytes=%zu geometry=%d viewport=%d ISP=%d\n",frontend_case,parameter_error,written,geometry_error,viewport_error,isp_error);
+ struct remesa_shader_linkage effective;CHECK(!remesa_context_shader_linkage_snapshot(ctx,&effective));
+ CHECK(!remesa_shader_ir_gears_vertex_clamped(&effective.vertex.semantic));
+ struct remesa_shader_program_report report;CHECK(!remesa_shader_program_report(&effective.vertex,&report)&&report.binary_bytes==344);
+ unsigned char code[352];CHECK(!remesa_shader_program_encode(&effective.vertex,code,sizeof code,&written)&&written==344);
+ CHECK(snprintf(name,sizeof name,"fixed-GL-CODE344-%u.bin",frontend_case)>0);fixture_write(".",name,code,written);
+ struct remesa_shader_selected_resources resources;
+ CHECK(!remesa_shader_program_gears_attribute_resources(&effective.vertex,&resources));
+ CHECK(resources.logical_use_bytes==344&&resources.reserved_use_bytes==352);
+ /* A retained half-center descriptor is metadata, never implicit execution.
+  * Exercise the pending class with all the other old guard bits zero. */
+ void *api_raster=observed_raster;CHECK(api_raster);
+ const struct pipe_rasterizer_state half_only={.fill_front=PIPE_POLYGON_MODE_FILL,
+  .fill_back=PIPE_POLYGON_MODE_FILL,.half_pixel_center=1};
+ void *pending_raster=original_raster(ctx,&half_only);CHECK(pending_raster);
+ unsigned creates=fixture->creates,maps=fixture->cpu_maps;
+ ctx->bind_rasterizer_state(ctx,pending_raster);ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);
+ CHECK(remesa_context_error(ctx)==ENOTSUP&&fixture->creates==creates&&fixture->cpu_maps==maps&&!dispatch_calls);
+ ctx->bind_rasterizer_state(ctx,api_raster);ctx->delete_rasterizer_state(ctx,pending_raster);
+ const struct remesa_linked_scene_request options={.vertex_bank=4,.pixel_bank=3,.state_bank=4,.clear_depth=1};
+ struct remesa_scene_capture capture={0};
+ /* An uploader lease must be published before native owner construction;
+  * alias checks must run before releasing its mapping/staging storage. */
+ struct pipe_resource *upload_resource=NULL;unsigned upload_offset=0;void *upload=NULL;
+ u_upload_alloc(ctx->stream_uploader,0,4096,16,&upload_offset,&upload_resource,&upload);
+ CHECK(upload_resource&&upload);memset(upload,0,4096);
+ unsigned alias_creates=fixture->creates,alias_maps=fixture->cpu_maps;
+ CHECK(remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,upload)==EINVAL);
+ CHECK(remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,upload,&capture)==EINVAL);
+ unsigned mapped_views=0;
+ for(unsigned i=0;i<fixture->creates;i++)if(fixture->backing[i].live&&fixture->backing[i].lease){
+  CHECK(remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,
+   (void *)(fixture->backing[i].bytes+16))==EINVAL);mapped_views++;
+ }
+ CHECK(!mapped_views); /* Host input maps never acquire GEM leases. */
+ CHECK(fixture->creates==alias_creates&&fixture->cpu_maps==alias_maps&&!dispatch_calls);
+ int capture_error=remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,&capture);
+ remesa_resource_reference(&upload_resource,NULL);
+ printf("FIXED_CAPTURE case=%u error=%d allocations=%u maps=%u\n",frontend_case,capture_error,fixture->creates,fixture->cpu_maps);
+ fflush(stdout);
+ CHECK(!capture_error);
+ struct remesa_scene_packet packet;struct remesa_persistent_scene_footprint footprint;
+ CHECK(!remesa_persistent_scene_packet_snapshot(device,capture,&packet));
+ CHECK(!remesa_persistent_scene_capture_snapshot(device,capture,&footprint));
+ CHECK(packet.binding_count==18&&packet.use_count==11&&!dispatch_calls&&!remesa_context_cpu_clear_count(ctx));
+ scene_capture_export(fixture,&footprint,&packet);
+ CHECK(!remesa_persistent_scene_capture_release(device,capture));
+ printf("FIXED_EFFECTIVE case=%u CODE=%zu reserved=%u captured=1 submissions=%u CPU_clears=%llu\n",frontend_case,
+  written,resources.reserved_use_bytes,dispatch_calls,(unsigned long long)remesa_context_cpu_clear_count(ctx));
+
 }
 static struct pipe_context *create_enabled(struct pipe_screen *screen,void *priv,unsigned flags)
 {
@@ -110,7 +162,7 @@ static bool validate_resources(struct st_context *st,struct pipe_frontend_drawab
  return true;
 }
 static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource *color,
- struct pipe_resource *depth)
+ struct pipe_resource *depth,struct remesa_device *device,struct fixture *fixture)
 {
  struct pipe_frontend_screen frontend={.screen=screen,.get_param=frontend_param};
  struct st_context_attribs attrs={.profile=API_OPENGL_COMPAT,.major=1,.minor=0,
@@ -166,7 +218,7 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_FRAGMENT,&fs);
  printf("FIXED_GL version=%u GL_error=%u VS_attempts=%llu VS_error=%d FS_attempts=%llu FS_error=%d pipe=%d submissions=%u\n",
   st->ctx->Version,glGetError(),(unsigned long long)vs.attempts,vs.error,(unsigned long long)fs.attempts,fs.error,remesa_context_error(st->pipe),dispatch_calls);
- inspect_fixed_inputs(st->pipe);
+ inspect_fixed_inputs(st->pipe,device,fixture);
  CHECK(!dispatch_calls&&!remesa_context_cpu_clear_count(st->pipe));
  st_api_make_current(NULL,NULL,NULL);st_destroy_context(st);
 }
@@ -200,7 +252,7 @@ int main(void)
   struct pipe_resource *color=attachment(screen,width,height,false);CHECK(color);
   if(enable>=3){
    struct pipe_resource *depth=attachment(screen,width,height,true);CHECK(depth);
-   fixed_function_scene(screen,color,depth);remesa_resource_reference(&depth,NULL);
+   fixed_function_scene(screen,color,depth,&device,&f);remesa_resource_reference(&depth,NULL);
    remesa_resource_reference(&color,NULL);screen->destroy(screen);
    CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!remesa_persistent_close(&device));
    glsl_type_singleton_decref();continue;

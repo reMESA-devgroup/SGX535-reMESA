@@ -128,6 +128,11 @@ struct remesa_usse_cpu_gears_vertex_body {
 };
 int remesa_usse_cpu_gears_vertex_body_encode(
  const struct remesa_usse_cpu_gears_vertex_body *,void *,size_t,size_t *written);
+/* Existing component control + max(COLOR0,0) + min(COLOR0,1), four lanes.
+ * Numeric output class1/base4; no temporary, tail or physical qualification.
+ * Reuses the checked POSITION/COLOR clamp records. Transactional. */
+#define REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES 24u
+int remesa_usse_cpu_color_output_clamp_encode(void *,size_t,size_t *written);
 /* Original CPU writer selectorB5, selected profile with flags0x200 and
  * zero trailing offsets. Four class8 signed scalar fields or class15 four-
  * component selectors. Field modes follow the corresponding demonstrated

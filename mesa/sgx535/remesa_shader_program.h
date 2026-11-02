@@ -25,6 +25,11 @@ struct remesa_shader_program {
  struct remesa_shader_ir semantic;
  struct remesa_usse_program usse; /* canonical zero for COMPILE_OFFLINE */
 };
+/* Owned effective VS variant for the API raster COLOR clamp. Accepts only
+ * the canonical unclamped gears graph; no NIR mutation or execution authority.
+ * Transactional, input/output overlap is rejected. */
+int remesa_shader_program_clamp_vertex_color(const struct remesa_shader_program *,
+ struct remesa_shader_program *);
 struct remesa_shader_program_report {
  enum remesa_ir_stage stage;
  enum remesa_shader_program_status status;

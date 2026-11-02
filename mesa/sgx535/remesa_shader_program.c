@@ -24,11 +24,22 @@ int remesa_shader_program_prepare(const struct remesa_shader_ir *ir,
  int error=remesa_shader_ir_validate(ir);
  if(error)return error;
  if(!remesa_shader_ir_white_lambert(ir)||!remesa_shader_ir_fragment_color_input(ir)||
-    !remesa_shader_ir_gears_vertex(ir)||!remesa_shader_ir_fragment_flat_color_input(ir))program.status=REMESA_PROGRAM_COMPILE_OFFLINE;
+    !remesa_shader_ir_gears_vertex(ir)||!remesa_shader_ir_gears_vertex_clamped(ir)||
+    !remesa_shader_ir_fragment_flat_color_input(ir))program.status=REMESA_PROGRAM_COMPILE_OFFLINE;
  else {error=remesa_usse_lower(ir,&program.usse);if(error)return error;}
  program.semantic=*ir;
  *out=program;
  return 0;
+}
+int remesa_shader_program_clamp_vertex_color(const struct remesa_shader_program *source,
+ struct remesa_shader_program *out)
+{
+ if(!source||!out||overlaps(source,sizeof(*source),out,sizeof(*out)))return EINVAL;
+ int error=remesa_shader_program_validate(source);if(error)return error;
+ if(remesa_shader_ir_gears_vertex(&source->semantic))return ENOTSUP;
+ struct remesa_shader_ir variant=source->semantic;
+ variant.instructions[0].op=REMESA_IR_GEARS_VERTEX_CLAMPED;
+ return remesa_shader_program_prepare(&variant,out);
 }
 int remesa_shader_program_prepare_color(uint32_t argb,struct remesa_shader_program *out)
 {
@@ -56,6 +67,7 @@ int remesa_shader_program_validate(const struct remesa_shader_program *program)
   int error=remesa_shader_ir_white_lambert(&program->semantic);
   if(error)error=remesa_shader_ir_fragment_color_input(&program->semantic);
   if(error)error=remesa_shader_ir_gears_vertex(&program->semantic);
+  if(error)error=remesa_shader_ir_gears_vertex_clamped(&program->semantic);
   if(error)error=remesa_shader_ir_fragment_flat_color_input(&program->semantic);
   if(error)return error;
   return memcmp(&expected,&program->usse,sizeof(expected))?EPROTO:0;
@@ -82,7 +94,9 @@ int remesa_shader_program_report(const struct remesa_shader_program *program,
  if(program->status==REMESA_PROGRAM_COMPILE_OFFLINE) {
   report.virtual_instructions=program->semantic.count;
   report.binary_error=0;report.binary_bytes=program->semantic.stage==REMESA_IR_VERTEX?
-   (!remesa_shader_ir_gears_vertex(&program->semantic)?
+   (!remesa_shader_ir_gears_vertex_clamped(&program->semantic)?
+    REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES+REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES+8u:
+    !remesa_shader_ir_gears_vertex(&program->semantic)?
     REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES+8u:REMESA_USSE_CPU_WHITE_LAMBERT_VERTEX_BYTES):REMESA_USSE_CPU_MOVE_BYTES;
  } else report.binary_error=remesa_usse_encoded_size(&program->usse,&report.binary_bytes);
  remesa_program_register_evidence(&report.register_evidence);
@@ -102,21 +116,30 @@ int remesa_shader_program_encode(const struct remesa_shader_program *program,
  int error=remesa_shader_program_validate(program);
  if(error)return error;
  if(program->status==REMESA_PROGRAM_COMPILE_OFFLINE) {
-  if(!remesa_shader_ir_gears_vertex(&program->semantic)) {
+  if(!remesa_shader_ir_gears_vertex(&program->semantic)||!remesa_shader_ir_gears_vertex_clamped(&program->semantic)) {
    /* The full semantic profile fixes these bindings. The selected-resource
     * planner still rejects it until the actual VS parameter upload exists. */
    const struct remesa_ir_instruction *i=&program->semantic.instructions[0];
    const struct remesa_usse_cpu_gears_vertex_body request={i->input_slot,i->bits[0],i->bits[1],i->bits[3],0};
-   uint8_t bytes[REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES+8u];size_t n;
-   if(capacity<sizeof(bytes))return ENOSPC;
+   const bool clamped=!remesa_shader_ir_gears_vertex_clamped(&program->semantic);
+   const size_t length=REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES+8u+
+    (clamped?REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES:0u);
+   uint8_t bytes[REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES+REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES+8u];size_t n;
+   if(capacity<length)return ENOSPC;
    error=remesa_usse_cpu_gears_vertex_body_encode(&request,bytes,sizeof(bytes),&n);
    if(error)return error;
    if(n!=REMESA_USSE_CPU_GEARS_VERTEX_BODY_BYTES)return EPROTO;
+   size_t at=n;
+   if(clamped){
+    error=remesa_usse_cpu_color_output_clamp_encode(bytes+at,sizeof(bytes)-at,&n);if(error)return error;
+    if(n!=REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES)return EPROTO;
+    at+=n;
+   }
    const struct remesa_usse_cpu_three_source tail={.source={{0,0},{2,0},{2,0}},
     .source_extension={0,1,1},.word0_control21=1,.word1_control12_13=1,.word1_control18=1};
-   error=remesa_usse_cpu_three_source_encode(&tail,bytes+n,8,&n);if(error)return error;
+   error=remesa_usse_cpu_three_source_encode(&tail,bytes+at,8,&n);if(error)return error;
    if(n!=8)return EPROTO;
-   memcpy(out,bytes,sizeof(bytes));*written=sizeof(bytes);return 0;
+   memcpy(out,bytes,length);*written=length;return 0;
   }
   if(program->semantic.stage==REMESA_IR_FRAGMENT) {
    if(capacity<REMESA_USSE_CPU_MOVE_BYTES)return ENOSPC;
@@ -1230,10 +1253,13 @@ static int selected_resources(const struct remesa_shader_program *program,
  struct remesa_shader_selected_resources r={.host_alignment=32};
  if(gears){
   if(program->status!=REMESA_PROGRAM_COMPILE_OFFLINE||
-     remesa_shader_ir_gears_vertex(&program->semantic)||
+     (remesa_shader_ir_gears_vertex(&program->semantic)&&remesa_shader_ir_gears_vertex_clamped(&program->semantic))||
      program->semantic.instructions[0].input_slot!=1)return ENOTSUP;
-  r.profile=REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3;
-  r.logical_use_bytes=320;r.reserved_use_bytes=320;
+  const bool clamped=!remesa_shader_ir_gears_vertex_clamped(&program->semantic);
+  r.profile=clamped?REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3:
+   REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3;
+  r.logical_use_bytes=320u+(clamped?REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES:0u);
+  r.reserved_use_bytes=(r.logical_use_bytes+31u)&~31u;
   error=remesa_shader_ir_vertex_layout(&program->semantic,&r.vertex);if(error)return error;
  }else if(program->status==REMESA_PROGRAM_COMPILE_OFFLINE&&
     !remesa_shader_ir_white_lambert(&program->semantic)) {
@@ -1258,7 +1284,7 @@ static int selected_resources(const struct remesa_shader_program *program,
  /* Host correlation consumes complete canonical semantic fields and actual
   * emitted bytes in LE order; never treat the noncryptographic hash as proof
   * of mapping ownership or replace exact program comparisons with it. */
- unsigned char bytes[320];size_t length;
+ unsigned char bytes[320u+REMESA_USSE_CPU_COLOR_OUTPUT_CLAMP_BYTES];size_t length;
  error=remesa_shader_program_encode(program,bytes,sizeof(bytes),&length);if(error)return error;
  if(length!=r.logical_use_bytes)return EPROTO;
  uint64_t h=0;unsigned index=0;
@@ -1289,7 +1315,8 @@ int remesa_shader_program_prepare_selected_pds(const struct remesa_shader_progra
     overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
  struct remesa_shader_selected_resources r;
  int error=selected_resources(program,&r,
-  request->profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3);if(error)return error;
+  (request->profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3||
+   request->profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3));if(error)return error;
  if(request->profile!=r.profile)return ENOTSUP;
  if(request->semantic_identity!=r.semantic_identity)return ESTALE;
  struct remesa_pds_selected_plan p;

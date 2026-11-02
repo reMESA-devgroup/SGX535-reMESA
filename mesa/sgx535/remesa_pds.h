@@ -311,7 +311,10 @@ enum remesa_pds_selected_profile {
   * temporaries, input P/N in the retained three-float4 record. Same original
   * compiled producer fields as its archived physical witness, not a generic
   * resource planner or approval of arbitrary programs/temporary counts. */
- REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3=4
+ REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3=4,
+ /* Separate CPU variant: existing lighting plus COLOR clamp, CODE344 in a
+  * reserved352-byte USE span. No physical launch qualification. */
+ REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3=5
 };
 struct remesa_pds_selected_request {
  uint32_t profile,use_bank;
