@@ -41,7 +41,8 @@ triangles with culling disabled make front-face selection immaterial.
 `tools/remesa/test_homogeneous_w2_recipe.py` checks those premises against the
 sealed old and actual-API input bytes. This offline proof does not establish
 generic clipping, universal edge rules or physical execution of CODE344.
-The complete new shader/API recipe still requires its own physical run.
+The subsequent [native API client](opengl-native-client.md) physically
+qualified this finite recipe at both sizes; the CPU proof alone does not.
 
 ## Existing execution and lifetime contracts
 
@@ -74,7 +75,7 @@ bound scene, clear, host-storage and frontend lifecycle regressions.
 
 These callbacks model hardware; they leave the modeled render buffers
 unrendered. They provide no GPU submission, pixel readback, FPS, general
-OpenGL2.1/GLES2 qualification or complete-driver claim. The next integration
-is the [real Linux/GEM API client](opengl-native-client.md), followed by a
-separately supervised fresh physical boot using the existing recovery and
-one-shot controls.
+OpenGL2.1/GLES2 qualification or complete-driver claim. The subsequent
+[real Linux/GEM API client](opengl-native-client.md) passed physical execution
+at both sizes on separate fresh boots, preserving the existing recovery and
+one-shot controls. General repeated rendering remains separate.

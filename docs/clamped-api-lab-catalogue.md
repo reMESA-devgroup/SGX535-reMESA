@@ -6,7 +6,8 @@ tested state15/W2 inputs. Their three generated catalogue headers are unchanged.
 New selectors5/6 identify the actual Mesa API captures at 1280×800 and 640×640,
 with CODE344, aligned USE capacity352 and authenticated state15.
 
-These are input candidates awaiting physical qualification. The input files
+These exact inputs now have finite physical qualification through the
+[actual API client](opengl-native-client.md). The input files
 come from actual Mesa matrix/material/light and raw vertex/normal arrays,
 compiled through the existing shader path into the complete owned scene.
 They contain no expected framebuffer uploaded as rendered output. The API's

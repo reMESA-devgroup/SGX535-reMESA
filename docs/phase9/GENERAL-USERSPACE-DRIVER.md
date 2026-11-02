@@ -1145,3 +1145,22 @@ records the live evidence and concrete missing contracts. Future physical
 integration should exercise the normal desktop, window/text/scroll/damage
 operations and simultaneous3D through the common backend, with recoverable
 configuration; isolated colors remain diagnostics only.
+
+
+## Actual OpenGL to the native scene executor (2026-11-02)
+
+The newer native eighteen-binding executor now has physical API evidence at
+1280×800 and640×640: real Mesa glClear/glDrawArrays/glFlush/glReadPixels, one
+GPU submission per fresh boot, zero COLOR/defined-Z24 mismatches, authenticated
+SGX535 rev121 retirement and intact inputs/guards. This reuses the existing
+vertex matrix/lighting/COLOR-clamp, PDS, TA and ISP components. The previous
+OpenGL triangle, GLX swap and original restricted GLXGears proofs are preserved.
+[Native OpenGL client](../opengl-native-client.md) records the two cases and
+absolute evidence paths. These finite W2 scenes are not a sustained FPS test
+or general OpenGL2.1/GLES2/desktop qualification. Both boots returned to stock.
+
+The next integration should reuse the already physically qualified private
+multi-job session and C transport for this newer scene closure. Keep its
+eleven-ID ABI and the one-shot LAB gates unchanged. Attachment clear/load
+semantics, general shader/state/API coverage, normal DRI routing, shared
+desktop ownership and installable-driver completeness remain required.
