@@ -100,3 +100,7 @@ The next executor integration should reuse the already physically qualified
 one-shot gates must remain intact while adapting the eighteen-binding scene
 and attachment lifetime/clear/load contracts. Clearing a consumed flag is not
 a continuous renderer.
+
+The [kernel session adapter](general-scene-session.md) now connects the existing
+source ownership to general scene execution. It adds no public endpoint; the
+post-retirement DPM/scratch initialization contract remains the next blocker.

@@ -56,4 +56,14 @@ int remesa_private_session_execute(struct remesa_gem_memory *,const void *,
  struct remesa_gem_private *,struct sgx535_gma500_owner *,
  struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,
  const struct remesa_memory_view *,unsigned,unsigned,unsigned);
+struct remesa_gem_scene_job;
+/* Same file/backing/source lease, separately validated general scene job.
+ * Does not reinterpret the retained eleven-role seals or ABI. Caller retains
+ * DRM entry, authenticates final inputs and prepares a fresh actual scene job.
+ * Success keeps source ownership; caller still releases/retire the job.
+ * Any entered executor error poisons the source, quarantines the ticket and
+ * retains HELD job/arguments. No rearm, cold-clear exemption or new ioctl. */
+int remesa_private_session_scene_execute(struct remesa_gem_memory *,const void *,
+ struct remesa_gem_scene_job *,struct sgx535_gma500_fixed_backend *,
+ struct remesa_stream_observation *,unsigned,unsigned);
 #endif

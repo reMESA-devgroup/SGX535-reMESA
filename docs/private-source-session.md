@@ -78,3 +78,9 @@ does not replace initial content authentication or qualified GPU permissions.
 A bounded [userspace LAB controller](private-session-lab.md) now connects these
 helpers to explicit OPEN/SUBMIT/CLOSE requests. Offline results do not qualify
 its new physical multi-job behavior or make it a production render ABI.
+
+The later [general scene session adapter](general-scene-session.md) reuses this
+source/backing ownership for separately authenticated native scene jobs. It
+preserves the retained eleven-role grammar and old LAB interfaces. The cold
+DPM zero-origin requirement still prevents reuse of rendered scratch; retaining
+a source lease alone does not qualify another general frame.

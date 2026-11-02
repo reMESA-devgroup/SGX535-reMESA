@@ -81,6 +81,7 @@ static int job(u64 operation)
  if(!e){CHECK(loan.execution_retired&&obs.finished);s.jobs[0].live=false;s.bo[0].holds=0;}
  return e;
 }
+#ifndef REMESA_PRIVATE_SESSION_SOURCE_FIXTURE
 int main(void)
 {
  CHECK(!backing_fixture_main());fresh_boot();
@@ -121,3 +122,4 @@ int main(void)
  printf("PASS %u source/backing-session checks; three modeled jobs/one lease, no rearm, GPU0\n",checks);
  return 0;
 }
+#endif
