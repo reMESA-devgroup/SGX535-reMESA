@@ -33,10 +33,13 @@ def packet_matches(raw,expected,context,ids):
  for at in offsets:struct.pack_into('<I',normalized,at,mapping[struct.unpack_from('<I',expected,at)[0]])
  if normalized!=raw:raise ValueError('bound packet differs from exact profile')
 
-def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homogeneous=False):
- if plan['profile'] not in ((3,4) if homogeneous else (1,2)):raise ValueError('explicit bound Gallium catalogue mode/profile mismatch')
+def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homogeneous=False,clamped_api=False):
+ if homogeneous and clamped_api:raise ValueError('ambiguous explicit client mode')
+ if plan['profile'] not in ((5,6) if clamped_api else (3,4) if homogeneous else (1,2)):raise ValueError('explicit native catalogue mode/profile mismatch')
+ source_owners=2 if clamped_api else 3
  if p.sha(client.read_bytes())!=client_sha:raise ValueError('native client binary changed')
  report={'status':'PREPARING','identity':p.device_identity(device),'plan':plan,'hardware_driver_qualified':False,'requires_independent_pixel_oracle':True,'submission_path':'BOUND_GALLIUM_NIR_REAL_LINUX_MEMORY_PROVIDER','native_client_sha256':client_sha,'reference_images_uploaded_by_collector':False,'probe_ioctl_calls':0}
+ if clamped_api:report['submission_path']='OPENGL_STATE_TRACKER_REAL_LINUX_MEMORY_PROVIDER'
  def save():(output/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n')
  save();fd=os.open(device,os.O_RDWR|os.O_CLOEXEC);memory=None;complete=False;remaining=[]
  try:
@@ -54,15 +57,15 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homog
   if len(placement)!=776 or struct.unpack_from('<II',placement)!=(1,18):raise ValueError('placement header')
   bindings=[(b['va'],b['bytes'],ids[i],b['access']) for i,b in enumerate(plan['bindings'])]
   if [struct.unpack_from('<QQII',placement,8+i*24) for i in range(18)]!=bindings:raise ValueError('placement differs from closed profile')
-  owners=inventory((output/'INVENTORY-OWNERS.bin').read_bytes(),context,21)
-  before=(output/'INVENTORY-BEFORE.bin').read_bytes();all_objects=inventory(before,context,25)
+  owners=inventory((output/'INVENTORY-OWNERS.bin').read_bytes(),context,18+source_owners)
+  before=(output/'INVENTORY-BEFORE.bin').read_bytes();all_objects=inventory(before,context,22+source_owners)
   if before!=(output/'INVENTORY-AFTER.bin').read_bytes():raise ValueError('collection ownership changed')
   byid={e[2]:e for e in all_objects}
   if any(byid.get(rid)!=(va,n,rid,1) for va,n,rid,_ in bindings+owners):raise ValueError('held owners differ from bindings')
   extras=[e for e in owners if e[2] not in ids]
-  if len(extras)!=3:raise ValueError('missing body/DPM/source VB')
+  if len(extras)!=source_owners:raise ValueError('missing body/DPM/source owners')
   vb=[e for e in extras if e[0]==0x20000000 and e[1]==4096]
-  if len(vb)!=1:raise ValueError('source VB ownership')
+  if len(vb)!=(0 if clamped_api else 1):raise ValueError('source VB ownership')
   guard_ids=struct.unpack('<4I',(output/'GUARD_IDS.bin').read_bytes());guard_va=struct.unpack('<4Q',(output/'GUARD_VA.bin').read_bytes())
   expected_guards=[]
   for lo,hi in [(0x20000000,0x28000000),(0x30000000,0x40000000),(0x40000000,0xe0000000)]:
@@ -87,13 +90,14 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homog
    for when in ['before','after']:
     if (output/f'{when}-id-{rid}.bin').read_bytes()!=b'\xa5'*4096:raise ValueError('guard changed')
    (output/f'guard-{i}-readback.bin').write_bytes(b'\xa5'*4096)
-  report['guards_intact']=True;report['non_GPU_or_source_buffers_intact']=3
-  remaining=inventory((output/'INVENTORY-REMAINING.bin').read_bytes(),context,7)
-  expected_remaining=set(guard_ids)|{ids[plan['color_index']],ids[plan['depth_index']],vb[0][2]}
+  report['guards_intact']=True;report['non_GPU_or_source_buffers_intact']=source_owners
+  remaining=inventory((output/'INVENTORY-REMAINING.bin').read_bytes(),context,4+source_owners)
+  expected_remaining=set(guard_ids)|{ids[plan['color_index']],ids[plan['depth_index']]}
+  if not clamped_api:expected_remaining.add(vb[0][2])
   if {e[2] for e in remaining}!=expected_remaining or any(byid[rid]!=(va,n,rid,flags) for va,n,rid,flags in remaining):raise ValueError('unexpected remaining ownership')
   memory=p.Memory(fd,context);memory.ids=expected_remaining
   info=memory.info();report['provider_info']=list(info)
-  if info[3:5]!=(7,7) or any(info[k] for k in [6,7,8]):raise RuntimeError('remaining endpoint holds')
+  if info[3:5]!=(4+source_owners,4+source_owners) or any(info[k] for k in [6,7,8]):raise RuntimeError('remaining endpoint holds')
   report['object_info']=[]
   for va,n,rid,_ in remaining:
    info=memory.info(rid);report['object_info'].append({'id':rid,'info':list(info)})
@@ -107,6 +111,12 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homog
   if len(query)!=4296 or original!=scene_trace.QUERY.pack(2,0,context,bytes(4280)) or query[:16]!=original[:16] or (output/'TRACE-RESULT.bin').read_bytes()!=bytes(4):raise ValueError('trace request/owner/status')
   report['trace']=scene_trace.decode(query[16:],context,report['receipt'],plan)
   if [b['id'] for b in report['trace']['bindings']]!=ids:raise ValueError('trace binding identity')
+  if clamped_api:
+   raw_report=(output/'OPENGL-REPORT.bin').read_bytes();width,height=map(int,plan['size'].split('x'))
+   if len(raw_report)!=56 or struct.unpack('<12IQ',raw_report)!=(1,1,13,0,1,0,0,1,0,1,width*height*4,0,0):raise ValueError('incomplete actual OpenGL draw/readback report')
+   gl_pixels=(output/'GL-READPIXELS-BGRA.bin').read_bytes();color=(output/f"after-id-{ids[plan['color_index']]}.bin").read_bytes();stride=width*4
+   if len(gl_pixels)!=len(color) or gl_pixels!=b''.join(color[y*stride:(y+1)*stride] for y in range(height-1,-1,-1)):raise ValueError('GL readback differs from retired COLOR/origin contract')
+   report['OpenGL']={'computed_version':13,'GLSL_version':0,'glDrawArrays_called':True,'glReadPixels_bytes':len(gl_pixels),'retired_COLOR_vertical_flip_match':True,'CPU_clears':0,'OpenGL21_qualified':False}
   complete=True;report['status']='RECEIPT_AND_READBACK_COLLECTED_ORACLE_PENDING'
  except BaseException as e:report['status']='FAILED';report['error']=type(e).__name__+': '+str(e);raise
  finally:
@@ -123,12 +133,13 @@ def collect(device,output,plan,images,client,expected_fixture,client_sha,*,homog
  return report
 
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--size',choices=['1280x800','640x640'],required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--client',type=Path,required=True);parser.add_argument('--client-sha256',required=True);parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--execute',action='store_true');parser.add_argument('--homogeneous',action='store_true',help='Explicit state15/W2 profiles3/4, matching client and kernel required');a=parser.parse_args()
- plan,images=scene.load_profile(a.catalogue,a.size,a.asset_root,homogeneous=a.homogeneous)
- if plan['profile'] not in ((3,4) if a.homogeneous else (1,2)):parser.error('explicit catalogue/profile mismatch')
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--catalogue',type=Path,required=True);parser.add_argument('--size',choices=['1280x800','640x640'],required=True);parser.add_argument('--asset-root',type=Path);parser.add_argument('--client',type=Path,required=True);parser.add_argument('--client-sha256',required=True);parser.add_argument('--device',type=Path,default=Path('/dev/dri/card0'));parser.add_argument('--output',type=Path,required=True);parser.add_argument('--execute',action='store_true');parser.add_argument('--homogeneous',action='store_true',help='Explicit state15/W2 profiles3/4, matching client and kernel required');parser.add_argument('--opengl',action='store_true',help='Explicit actual OpenGL CODE344 profiles5/6, matching client and kernel required');a=parser.parse_args()
+ if a.homogeneous and a.opengl:parser.error('choose one explicit client mode')
+ plan,images=scene.load_profile(a.catalogue,a.size,a.asset_root,homogeneous=a.homogeneous,clamped_api=a.opengl)
+ if plan['profile'] not in ((5,6) if a.opengl else (3,4) if a.homogeneous else (1,2)):parser.error('explicit catalogue/profile mismatch')
  a.output.mkdir(parents=True,exist_ok=False)
  if not a.execute:(a.output/'PLAN.json').write_text(json.dumps(plan,indent=2)+'\n');print('PLAN_ONLY_NO_DEVICE_OPEN');return
  entry=next(f for f in json.loads(a.catalogue.read_text())['profiles'] if f['size']==a.size)
  fixture=a.asset_root/a.size if a.asset_root else Path(entry['packet_path']).parent
- print(collect(a.device,a.output,plan,images,a.client.resolve(),fixture,a.client_sha256,homogeneous=a.homogeneous)['status'])
+ print(collect(a.device,a.output,plan,images,a.client.resolve(),fixture,a.client_sha256,homogeneous=a.homogeneous,clamped_api=a.opengl)['status'])
 if __name__=='__main__':main()

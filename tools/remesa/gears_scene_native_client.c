@@ -18,7 +18,9 @@
 #include "pipe/p_state.h"
 #include "nir_builder.h"
 #include "util/u_inlines.h"
+#ifndef REMESA_OPENGL_HOMOGENEOUS_NATIVE
 #include "../../mesa/sgx535/tests/authored_gears_vertex_nir_fixture.h"
+#endif
 #include <sys/ioctl.h>
 #include <assert.h>
 #include <errno.h>
@@ -29,6 +31,9 @@
 #include <time.h>
 #define CHECK(x) assert(x)
 #define OK(x) do{int e=(x);if(e){fprintf(stderr,"line%u error%d\n",__LINE__,e);return 1;}}while(0)
+#ifndef REMESA_NATIVE_CLIENT_SOURCE_OWNERS
+#define REMESA_NATIVE_CLIENT_SOURCE_OWNERS 3u
+#endif
 uint32_t nir_debug=NIR_DEBUG_EXTENDED_VALIDATION;
 _Static_assert(sizeof(struct remesa_linux_memory_inventory)==784,"LAB host inventory record");
 static void output(const char *dir,const char *name,const void *data,size_t bytes)
@@ -49,6 +54,7 @@ static void expected_packet(const char *path,const struct remesa_scene_packet *p
  for(unsigned i=0;i<expected.window_count;i++){expected.windows[i].index_id=translate(old,p,expected.windows[i].index_id);expected.windows[i].vertex_id=translate(old,p,expected.windows[i].vertex_id);}
  assert(!memcmp(&expected,p,sizeof expected));
 }
+#ifndef REMESA_OPENGL_HOMOGENEOUS_NATIVE
 static nir_shader *linked_shader(unsigned fragment)
 {
  if(!fragment)return make(true,0);
@@ -62,6 +68,7 @@ static nir_shader *linked_shader(unsigned fragment)
  }
  nir_validate_shader(b.shader,"bound raw attribute transport");return b.shader;
 }
+#endif
 
 static struct pipe_resource *attachment(struct pipe_screen *s,unsigned w,unsigned h,bool depth)
 {
@@ -81,7 +88,7 @@ static void check_placement(struct remesa_linux_memory *m,const struct remesa_sc
  struct remesa_scene_fixture expected,actual={.version=1,.count=18};
  CHECK(fread(&expected,1,sizeof expected,f)==sizeof expected&&fgetc(f)==EOF&&!fclose(f));
  CHECK(expected.version==1&&expected.count==18);
- struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==21);
+ struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==18+REMESA_NATIVE_CLIENT_SOURCE_OWNERS);
  for(unsigned i=0;i<18;i++){
   unsigned found=0;
   for(unsigned k=0;k<inv.count;k++)if(inv.entries[k].id==p->bindings[i].id){
@@ -118,7 +125,7 @@ static void guards(struct remesa_linux_memory *m)
 }
 static void dump_backing(struct remesa_linux_memory *m,const struct remesa_scene_packet *p,bool after)
 {
- struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==25);
+ struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==22+REMESA_NATIVE_CLIENT_SOURCE_OWNERS);
  output(out_dir,after?"INVENTORY-AFTER.bin":"INVENTORY-BEFORE.bin",&inv,sizeof inv);
  for(unsigned i=0;i<inv.count;i++){
   CHECK(inv.entries[i].flags==REMESA_MEMORY_INVENTORY_LIVE);
@@ -136,7 +143,7 @@ static void dump_backing(struct remesa_linux_memory *m,const struct remesa_scene
   }
  }
  struct remesa_memory_info info;CHECK(!remesa_linux_memory_info(m,0,&info));
- CHECK(info.objects==25&&info.pinned_objects==25&&!info.leases&&!info.held_jobs&&!info.quarantined);
+ CHECK(info.objects==22+REMESA_NATIVE_CLIENT_SOURCE_OWNERS&&info.pinned_objects==info.objects&&!info.leases&&!info.held_jobs&&!info.quarantined);
  output(out_dir,after?"INFO-AFTER.bin":"INFO-BEFORE.bin",&info,sizeof info);
 }
 static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *receipt)
@@ -144,7 +151,9 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  struct remesa_linux_memory *m=priv;CHECK(submit&&submit->packet&&submit->context==remesa_linux_memory_context(m));
  timings[1]=ns();check_placement(m,submit->packet);guards(m);dump_backing(m,submit->packet,false);timings[2]=ns();
  if(prepare_only)return REMESA_NOT_ISSUED;
-#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+#ifdef REMESA_OPENGL_HOMOGENEOUS_NATIVE
+ enum remesa_dispatch result=remesa_linux_memory_gears_clamped_api_lab_dispatch(m,submit,receipt);
+#elif defined(REMESA_GEARS_HOMOGENEOUS_NATIVE)
  enum remesa_dispatch result=remesa_linux_memory_gears_homogeneous_lab_dispatch(m,submit,receipt);
 #else
  enum remesa_dispatch result=remesa_linux_memory_gears_scene_lab_dispatch(m,submit,receipt);
@@ -173,6 +182,7 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  }
  return result;
 }
+#ifndef REMESA_OPENGL_HOMOGENEOUS_NATIVE
 int main(int argc,char **argv)
 {
  if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute"))){
@@ -234,3 +244,4 @@ int main(int argc,char **argv)
   * Retired temporary owners have already been collected before destruction. */
  return 0;
 }
+#endif

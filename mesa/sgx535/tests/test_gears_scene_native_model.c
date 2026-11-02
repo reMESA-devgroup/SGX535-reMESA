@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: MIT. Actual native client/transport; synthetic kernel
- * memory and receipts only. Never generates pixels or emulates the GPU. */
+ * memory and receipts only. No vertex/raster execution or GPU emulation.
+ * Optional synthetic row tags check readback copying/origin, not rendering. */
 #include "../../../tools/remesa/scene_fixture.h"
 #define __wrap_ioctl previous_gears_memory_ioctl
 #include "test_scene_native_client_model.c"
@@ -9,13 +10,18 @@ static unsigned reads_retired;
 static struct remesa_gears_scene_probe_request model_receipt;
 static struct remesa_scene_fixture model_placement;
 static bool model_check_registered;
+#ifdef REMESA_GEARS_MODEL_OPENGL
+#define MODEL_SOURCE_OWNERS 2u
+#else
+#define MODEL_SOURCE_OWNERS 3u
+#endif
 static void check_model_exit(void)
 {
  unsigned live=0;for(unsigned k=0;k<count;k++)if(bo[k].bytes){live++;assert(bo[k].pin&&bo[k].va&&!bo[k].lease);}
  assert(submissions<=1);
  if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT")||getenv("REMESA_GEARS_MODEL_IOCTL_ERROR")){
-  assert(submissions==1&&live==25&&!reads_retired&&!teardown_gears);
- }else assert(live==7);
+  assert(submissions==1&&live==22+MODEL_SOURCE_OWNERS&&!reads_retired&&!teardown_gears);
+ }else assert(live==4+MODEL_SOURCE_OWNERS);
 }
 
 int __wrap_ioctl(int fd,unsigned long command,...)
@@ -24,7 +30,9 @@ int __wrap_ioctl(int fd,unsigned long command,...)
  va_list ap;va_start(ap,command);void *arg=va_arg(ap,void *);va_end(ap);assert(fd==99);
  if(command==DRM_IOCTL_REMESA_GEARS_SCENE_PROBE){
   struct remesa_gears_scene_probe_request *r=arg;assert(!submissions++&&r->version==2&&r->context==77&&r->profile>=1&&r->profile<=REMESA_GEARS_SCENE_PROFILE_COUNT&&!r->reserved_input);
-#ifdef REMESA_GEARS_MODEL_HOMOGENEOUS
+#ifdef REMESA_GEARS_MODEL_OPENGL
+  assert(r->profile==5||r->profile==6);
+#elif defined(REMESA_GEARS_MODEL_HOMOGENEOUS)
   assert(r->profile==3||r->profile==4);
 #else
   assert(r->profile==1||r->profile==2);
@@ -35,6 +43,16 @@ int __wrap_ioctl(int fd,unsigned long command,...)
    const unsigned id=r->ids[i],k=id-32;assert(id==model_placement.bindings[i].id&&k<count&&bo[k].pin&&!bo[k].lease&&bo[k].va==model_placement.bindings[i].address&&bo[k].size==model_placement.bindings[i].bytes);
    if(model_placement.bindings[i].access==1){assert(snprintf(path,sizeof path,"%s/model-bo-%u.bin",dir,i)>0);f=fopen(path,"wbx");assert(f&&fwrite(bo[k].bytes,1,bo[k].size,f)==bo[k].size&&!fclose(f));}
   }
+#ifdef REMESA_GEARS_MODEL_OPENGL
+  if(getenv("REMESA_OPENGL_MODEL_ROW_TAGS")){
+   assert(!getenv("REMESA_GEARS_MODEL_BAD_RECEIPT")&&!getenv("REMESA_GEARS_MODEL_IOCTL_ERROR"));
+   unsigned width=r->profile==5?1280:640,height=r->profile==5?800:640;
+   /* First frontend allocation is the still-owned COLOR attachment. This
+    * asymmetric storage payload exists only in the linked syscall model. */
+   assert(bo[0].size==(size_t)width*height*4&&bo[0].va==0x40001000);
+   for(unsigned y=0;y<height;y++){uint32_t tag=0xff000000u|y;memcpy(bo[0].bytes+4u*width*y,&tag,4);}
+  }
+#endif
   r->operation=r->cookie=1;r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;r->phase=9;r->ledger=7;r->stages=15;model_receipt=*r;returned_gears=true;
   if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT"))r->phase=8;
   if(getenv("REMESA_GEARS_MODEL_IOCTL_ERROR")){errno=EINTR;return -1;}
@@ -53,7 +71,20 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   if(r->id){unsigned k=r->id-32;assert(k<count&&bo[k].bytes);info.object_bytes=bo[k].size;info.gpu_va=bo[k].va;info.object_pinned=bo[k].pin;info.verified_pages=info.object_mapped_pages=bo[k].va?bo[k].size/4096:0;info.object_lease=bo[k].lease;}
   memcpy(r->data,&info,sizeof info);return 0;
  }
- if(r->action==REMESA_MEM_READ&&returned_gears){assert(!teardown_gears);reads_retired++;}
+ if(r->action==REMESA_MEM_READ&&returned_gears){
+#ifdef REMESA_GEARS_MODEL_OPENGL
+  /* Actual glReadPixels follows temporary-owner release. It may read only
+   * the still-owned COLOR attachment after a valid modeled retirement. */
+  assert(!getenv("REMESA_GEARS_MODEL_BAD_RECEIPT")&&!getenv("REMESA_GEARS_MODEL_IOCTL_ERROR"));
+  if(teardown_gears){
+   unsigned matches=0;for(unsigned i=0;i<18;i++)if(model_receipt.ids[i]==r->id&&model_placement.bindings[i].access==3)matches++;
+   assert(matches==1&&r->id==32);
+  }
+#else
+  assert(!teardown_gears);
+#endif
+  reads_retired++;
+ }
  if(r->action==REMESA_MEM_UNMAP||r->action==REMESA_MEM_UNPIN||r->action==REMESA_MEM_DESTROY){
   unsigned k=r->id-32;assert(k<count&&bo[k].bytes&&!bo[k].lease);if(returned_gears){assert(reads_retired);teardown_gears=true;}
   if(r->action==REMESA_MEM_UNMAP){assert(bo[k].va);bo[k].va=0;}

@@ -75,5 +75,6 @@ bound scene, clear, host-storage and frontend lifecycle regressions.
 These callbacks model hardware; they leave the modeled render buffers
 unrendered. They provide no GPU submission, pixel readback, FPS, general
 OpenGL2.1/GLES2 qualification or complete-driver claim. The next integration
-is the real Linux/GEM API client, followed by a separately supervised fresh
-physical boot using the existing recovery and one-shot controls.
+is the [real Linux/GEM API client](opengl-native-client.md), followed by a
+separately supervised fresh physical boot using the existing recovery and
+one-shot controls.
