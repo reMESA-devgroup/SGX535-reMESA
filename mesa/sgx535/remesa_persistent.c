@@ -47,7 +47,7 @@ struct linked_background {
  uint8_t known[64];
 };
 struct linked_pds {
- struct memory *program,*geometry;
+ struct memory *program,*geometry,*parameters;
  struct remesa_pds_selected_plan plans[2];
  uint8_t known[288];
 };
@@ -482,8 +482,9 @@ static void dispose(struct persistent *d,struct memory *b)
   quarantine(d,b);return;
  }
  struct shader_upload *dependency=b->shader_dependency;
- struct memory *linked_dependencies[REMESA_LINKED_BODY_MAX_DRAWS+13]={NULL,NULL,b->linked_dependency};
+ struct memory *linked_dependencies[REMESA_LINKED_BODY_MAX_DRAWS+14]={NULL,NULL,b->linked_dependency};
  if(b->linked_pds){linked_dependencies[0]=b->linked_pds->program;linked_dependencies[1]=b->linked_pds->geometry;}
+ if(b->linked_pds)linked_dependencies[REMESA_LINKED_BODY_MAX_DRAWS+13]=b->linked_pds->parameters;
  if(b->linked_body)for(unsigned i=0;i<b->linked_body->dependency_count;i++)
   linked_dependencies[3+i]=b->linked_body->dependencies[i];
  if(b->linked_ta){linked_dependencies[REMESA_LINKED_BODY_MAX_DRAWS+4]=b->linked_ta->prefix;
@@ -498,7 +499,7 @@ static void dispose(struct persistent *d,struct memory *b)
  d->allocated-=b->allocated;free(b->scene_image);free(b->control_image);free(b->linked_program);
  free(b->linked_geometry);free(b->linked_pds);free(b->linked_body);free(b->zclear_prefix);free(b->linked_ta);
  free(b->linked_targets);free(b->linked_background);free(b->linked_dpm);memset(b,0,sizeof(*b));
- for(unsigned i=0;i<REMESA_LINKED_BODY_MAX_DRAWS+13;i++)if(linked_dependencies[i]){
+ for(unsigned i=0;i<REMESA_LINKED_BODY_MAX_DRAWS+14;i++)if(linked_dependencies[i]){
   struct memory *held=linked_dependencies[i];
   if(!held->live||!held->refs){quarantine(d,held);d->failed=true;continue;}
   drop_memory(d,held);
@@ -2011,8 +2012,8 @@ int remesa_persistent_control_verify(struct remesa_device *device,void *object)
  if(e)memory_error(d,b,e);
  return e;
 }
-int remesa_persistent_linked_program_prepare(struct remesa_device *device,
- const struct remesa_shader_linkage *link,const uint32_t banks[2],void **out)
+static int linked_program_prepare(struct remesa_device *device,
+ const struct remesa_shader_linkage *link,const uint32_t banks[2],bool gears,void **out)
 {
  if(!link||!banks||!out||(uintptr_t)banks%_Alignof(uint32_t)||
     overlaps(out,sizeof(*out),link,sizeof(*link))||
@@ -2020,6 +2021,7 @@ int remesa_persistent_linked_program_prepare(struct remesa_device *device,
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
  e=remesa_shader_linkage_validate(link);if(e)return e;
+ if(gears&&remesa_shader_ir_fragment_color_input(&link->fragment.semantic))return ENOTSUP;
  const uint32_t bank[2]={banks[0],banks[1]};uint32_t registers[2];
  for(unsigned i=0;i<2;i++){e=remesa_use_base_offset(bank[i],&registers[i]);if(e)return e;}
  if(registers[0]==registers[1])return EBUSY;
@@ -2028,7 +2030,8 @@ int remesa_persistent_linked_program_prepare(struct remesa_device *device,
  /* This is a software staging bound, not an SGX instruction/resource limit. */
  uint8_t image[512]={0};size_t offset[2],length[2],used=0;
  for(unsigned i=0;i<2;i++){
-  e=remesa_shader_program_selected_resources(programs[i],&resources[i]);if(e)return e;
+  e=gears&&!i?remesa_shader_program_gears_attribute_resources(programs[i],&resources[i]):
+   remesa_shader_program_selected_resources(programs[i],&resources[i]);if(e)return e;
   if(resources[i].host_alignment!=32||!resources[i].logical_use_bytes||!resources[i].reserved_use_bytes||
      resources[i].logical_use_bytes>resources[i].reserved_use_bytes)return EPROTO;
   used=(used+31u)&~(size_t)31u;offset[i]=used;
@@ -2064,6 +2067,12 @@ fail:
  if(b->live){*out=b;return EOWNERDEAD;}
  return e;
 }
+int remesa_persistent_linked_program_prepare(struct remesa_device *device,
+ const struct remesa_shader_linkage *link,const uint32_t banks[2],void **out)
+{return linked_program_prepare(device,link,banks,false,out);}
+int remesa_persistent_gears_attribute_program_prepare(struct remesa_device *device,
+ const struct remesa_shader_linkage *link,const uint32_t banks[2],void **out)
+{return linked_program_prepare(device,link,banks,true,out);}
 int remesa_persistent_linked_program_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_linked_program_backing *out)
 {
@@ -2174,8 +2183,8 @@ int remesa_persistent_linked_geometry_snapshot(const struct remesa_device *devic
  if(!b->raw_geometry||!b->linked_geometry)return EINVAL;
  linked_geometry_metadata(d,b,out);return 0;
 }
-int remesa_persistent_linked_pds_prepare(struct remesa_device *device,void *program,
- void *geometry,void **out)
+static int linked_pds_prepare(struct remesa_device *device,void *program,
+ void *geometry,void *parameters,void **out)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
@@ -2186,8 +2195,18 @@ int remesa_persistent_linked_pds_prepare(struct remesa_device *device,void *prog
     !raw->linked_geometry||!raw->raw_geometry)return EINVAL;
  const struct linked_program *cp=code->linked_program;
  const struct linked_geometry *gp=raw->linked_geometry;
- if(cp->resources[0].profile!=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3||
+ const bool gears=parameters!=NULL;
+ if(cp->resources[0].profile!=(gears?REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3:REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
     cp->resources[1].profile!=REMESA_PDS_SELECTED_FS_INPUT_COL0)return ENOTSUP;
+ struct memory *params=parameters;
+ if(gears){
+  struct remesa_persistent_vertex_parameters_backing pb;
+  e=remesa_persistent_vertex_parameters_snapshot(device,params,&pb);if(e)return e;
+  if(params==code||params==raw||pb.coefficient_dwords!=36||pb.effective_source_dwords!=37||pb.transfer_dwords!=40)return ENOTSUP;
+  for(unsigned i=0;i<2;i++)if(pb.image.use_entry.register_offset==cp->entry[i].register_offset&&
+   pb.image.use_entry.register_word!=cp->entry[i].register_word)return EBUSY;
+  if(params->refs==UINT32_MAX)return EBUSY;
+ }
  if(code->refs==UINT32_MAX||raw->refs==UINT32_MAX)return EBUSY;
  if(d->linked_pds_serial==UINT64_MAX)return EOVERFLOW;
  struct linked_pds *owned=calloc(1,sizeof(*owned));if(!owned)return ENOMEM;
@@ -2196,6 +2215,7 @@ int remesa_persistent_linked_pds_prepare(struct remesa_device *device,void *prog
  if(e){free(owned);return d->failed||d->allocated!=before?EOWNERDEAD:e;}
  struct memory *b=object;b->shader_pds=true;b->linked_pds=owned;
  owned->program=code;owned->geometry=raw;code->refs++;raw->refs++;
+ if(params){owned->parameters=params;params->refs++;}
  const uint64_t serial=++d->linked_pds_serial;
  uint8_t image[288]={0};
  for(unsigned i=0;i<2;i++){
@@ -2242,6 +2262,12 @@ fail:
  if(b->quarantined){*out=b;return EOWNERDEAD;}
  destroy_bo(d,b);if(b->live){*out=b;return EOWNERDEAD;}return e;
 }
+int remesa_persistent_linked_pds_prepare(struct remesa_device *device,void *program,
+ void *geometry,void **out)
+{return linked_pds_prepare(device,program,geometry,NULL,out);}
+int remesa_persistent_gears_attribute_pds_prepare(struct remesa_device *device,
+ void *program,void *geometry,void *parameters,void **out)
+{if(!parameters)return EINVAL;return linked_pds_prepare(device,program,geometry,parameters,out);}
 static int linked_pds_metadata(struct persistent *d,struct memory *b,bool owner,
  struct remesa_persistent_linked_pds_backing *out)
 {
@@ -2250,6 +2276,7 @@ static int linked_pds_metadata(struct persistent *d,struct memory *b,bool owner,
  const struct linked_pds *p=b->linked_pds;
  e=linked_live(d,p->program,false);if(e)return e;
  e=linked_live(d,p->geometry,false);if(e)return e;
+ if(p->parameters){e=linked_live(d,p->parameters,false);if(e)return e;}
  struct remesa_persistent_linked_pds_backing value={.owner=d->cfg.context,
   .generation=b->token.generation,.gpu_va=b->va,.handle=b->handle,.allocation_bytes=b->allocated};
  for(unsigned i=0;i<2;i++){
@@ -2267,6 +2294,26 @@ int remesa_persistent_linked_pds_snapshot(const struct remesa_device *device,voi
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  return linked_pds_metadata(device->priv,object,true,out);
+}
+int remesa_persistent_gears_attribute_pds_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_gears_attribute_pds_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct remesa_persistent_gears_attribute_pds_backing value={0};
+ e=linked_pds_metadata(device->priv,object,true,&value.pds);if(e)return e;
+ const struct memory *b=object,*p=b->linked_pds->parameters;
+ if(!p||value.pds.plans[0].request.profile!=REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3||
+    p->state_kind!=REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS||p->state_parameter_dwords!=36||p->state_bytes!=160)return ENOTSUP;
+ struct persistent *d=device->priv;
+ value.parameters=(struct remesa_persistent_vertex_parameters_backing){
+  .image={.owner=d->cfg.context,.generation=p->token.generation,.gpu_va=p->va,
+   .handle=p->handle,.allocation_bytes=p->allocated,.state_bytes=p->state_bytes,
+   .use_offset=p->state_use_offset,.use_bytes=8,.pds_offset=p->state_pds_offset,.pds_bytes=60,
+   .ta_offset=p->state_ta_offset,.ta_bytes=8,.use_entry=p->state_use_entry},
+  .coefficient_dwords=36,.effective_source_dwords=37,.transfer_dwords=40};
+ memcpy(value.parameters.image.pds_known_mask,p->state_pds_known,60);
+ value.input_dwords=8;value.temporary_dwords=11;value.output_dwords=8;
+ *out=value;return 0;
 }
 
 int remesa_persistent_linked_index_encode(const struct remesa_device *device,void *pds,

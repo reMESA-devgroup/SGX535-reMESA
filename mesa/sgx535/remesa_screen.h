@@ -86,6 +86,13 @@ struct remesa_pds_parameter_source_request;
  * Outputs are disjoint from owned context objects and unchanged on error. */
 int remesa_context_vertex_parameter_source(struct pipe_context *,
  const struct remesa_pds_parameter_source_request *,void *,size_t,size_t *);
+/* Snapshot the bound complete gears VS constant block into the common owned
+ * parameter object. Resource-only persistent device required; uses the source
+ * resolver above, preserving user snapshots and synchronized resource reads.
+ * No caller VA, transform, program/PDS launch, scene or GPU submission. Empty
+ * output required; uncertain ownership follows the persistent constructor. */
+int remesa_context_prepare_vertex_parameters(struct pipe_context *,uint32_t use_bank,
+ void **bo);
 struct pipe_draw_info; struct pipe_draw_start_count_bias;
 struct remesa_gears_geometry;
 /* Own a packed pre-VS triangle stream for the currently bound complete gears

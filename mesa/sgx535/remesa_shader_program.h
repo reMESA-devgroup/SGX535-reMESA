@@ -365,6 +365,12 @@ struct remesa_shader_selected_resources {
 };
 int remesa_shader_program_selected_resources(const struct remesa_shader_program *,
  struct remesa_shader_selected_resources *);
+/* Separate exact positive physical gears profile; default selected_resources
+ * keeps refusing both gears variants. Attribute normal only, CODE320, existing
+ * PDS input record48 (P/N plus retained unused float4), no generic task fields,
+ * W/viewport/FLAT or execution claim. Caller must retain parameter source37/40. */
+int remesa_shader_program_gears_attribute_resources(const struct remesa_shader_program *,
+ struct remesa_shader_selected_resources *);
 int remesa_shader_program_prepare_selected_pds(const struct remesa_shader_program *,
  const struct remesa_pds_selected_request *,struct remesa_pds_selected_plan *);
 /* Missing default three-attribute transport and admitted draw packet are

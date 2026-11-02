@@ -431,6 +431,11 @@ struct remesa_shader_linkage;
  */
 int remesa_persistent_linked_program_prepare(struct remesa_device *,
  const struct remesa_shader_linkage *,const uint32_t banks[2],void **bo);
+/* Separate exact gears attribute-normal VS320 + smooth COL0 FS8 pair.
+ * Uses existing original encoders and archived physical producer profile;
+ * default linked-program admission stays unchanged. No job/GL capability. */
+int remesa_persistent_gears_attribute_program_prepare(struct remesa_device *,
+ const struct remesa_shader_linkage *,const uint32_t banks[2],void **bo);
 struct remesa_persistent_linked_program_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle;
@@ -469,6 +474,13 @@ int remesa_persistent_linked_geometry_snapshot(const struct remesa_device *,void
  * their original references. It grants no native job/execution permission. */
 int remesa_persistent_linked_pds_prepare(struct remesa_device *,void *program,
  void *geometry,void **bo);
+/* Explicit gears PDS closure, including immutable source37/transfer40 owner.
+ * Geometry retains the physical48-byte input record; its first two float4s
+ * supply POSITION/NORMAL. Raw bytes are not transformed. Retains all three
+ * owners, validates parameter/VS/FS bank compatibility, and never grants a
+ * scene/index/draw/execute contract. Legacy builders refuse this profile. */
+int remesa_persistent_gears_attribute_pds_prepare(struct remesa_device *,
+ void *program,void *geometry,void *parameters,void **bo);
 struct remesa_persistent_linked_pds_backing {
  uint64_t owner,generation,gpu_va;
  uint32_t handle;
@@ -481,6 +493,16 @@ struct remesa_persistent_linked_pds_backing {
 };
 int remesa_persistent_linked_pds_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_pds_backing *);
+struct remesa_persistent_gears_attribute_pds_backing {
+ struct remesa_persistent_linked_pds_backing pds;
+ struct remesa_persistent_vertex_parameters_backing parameters;
+ uint32_t input_dwords,temporary_dwords,output_dwords;
+};
+/* Complete metadata closure, including held parameters after public deletion.
+ * No provider reads; reports exact selected requirements, not a generic task
+ * formula. The legacy scene/index APIs continue to reject this PDS profile. */
+int remesa_persistent_gears_attribute_pds_snapshot(const struct remesa_device *,
+ void *bo,struct remesa_persistent_gears_attribute_pds_backing *);
 /* Encode the existing POSITION4+COLOR0 triangle command from a live PDS
  * closure. No caller-supplied VA, descriptor word, stride or output format.
  * Bounds are the immutable index payload, not the allocation's spare capacity.

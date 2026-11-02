@@ -1222,13 +1222,20 @@ static void selected_hash_word(uint64_t *h,uint32_t word,unsigned *index)
   *h=(*h<<7)|(*h>>57);*h^=((word>>(8*b))&255u)+(uint64_t)(*index)++;
  }
 }
-int remesa_shader_program_selected_resources(const struct remesa_shader_program *program,
- struct remesa_shader_selected_resources *out)
+static int selected_resources(const struct remesa_shader_program *program,
+ struct remesa_shader_selected_resources *out,bool gears)
 {
  if(!program||!out||overlaps(program,sizeof(*program),out,sizeof(*out)))return EINVAL;
  int error=remesa_shader_program_validate(program);if(error)return error;
  struct remesa_shader_selected_resources r={.host_alignment=32};
- if(program->status==REMESA_PROGRAM_COMPILE_OFFLINE&&
+ if(gears){
+  if(program->status!=REMESA_PROGRAM_COMPILE_OFFLINE||
+     remesa_shader_ir_gears_vertex(&program->semantic)||
+     program->semantic.instructions[0].input_slot!=1)return ENOTSUP;
+  r.profile=REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3;
+  r.logical_use_bytes=320;r.reserved_use_bytes=320;
+  error=remesa_shader_ir_vertex_layout(&program->semantic,&r.vertex);if(error)return error;
+ }else if(program->status==REMESA_PROGRAM_COMPILE_OFFLINE&&
     !remesa_shader_ir_white_lambert(&program->semantic)) {
   r.profile=REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3;
   r.logical_use_bytes=64;r.reserved_use_bytes=144;
@@ -1251,7 +1258,7 @@ int remesa_shader_program_selected_resources(const struct remesa_shader_program 
  /* Host correlation consumes complete canonical semantic fields and actual
   * emitted bytes in LE order; never treat the noncryptographic hash as proof
   * of mapping ownership or replace exact program comparisons with it. */
- unsigned char bytes[64];size_t length;
+ unsigned char bytes[320];size_t length;
  error=remesa_shader_program_encode(program,bytes,sizeof(bytes),&length);if(error)return error;
  if(length!=r.logical_use_bytes)return EPROTO;
  uint64_t h=0;unsigned index=0;
@@ -1269,13 +1276,20 @@ int remesa_shader_program_selected_resources(const struct remesa_shader_program 
  for(size_t n=0;n<length;n++){h=(h<<7)|(h>>57);h^=(uint64_t)bytes[n]+index++;}
  r.semantic_identity=h?h:1;*out=r;return 0;
 }
+int remesa_shader_program_selected_resources(const struct remesa_shader_program *program,
+ struct remesa_shader_selected_resources *out)
+{return selected_resources(program,out,false);}
+int remesa_shader_program_gears_attribute_resources(const struct remesa_shader_program *program,
+ struct remesa_shader_selected_resources *out)
+{return selected_resources(program,out,true);}
 int remesa_shader_program_prepare_selected_pds(const struct remesa_shader_program *program,
  const struct remesa_pds_selected_request *request,struct remesa_pds_selected_plan *out)
 {
  if(!program||!request||!out||overlaps(program,sizeof(*program),out,sizeof(*out))||
     overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
  struct remesa_shader_selected_resources r;
- int error=remesa_shader_program_selected_resources(program,&r);if(error)return error;
+ int error=selected_resources(program,&r,
+  request->profile==REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3);if(error)return error;
  if(request->profile!=r.profile)return ENOTSUP;
  if(request->semantic_identity!=r.semantic_identity)return ESTALE;
  struct remesa_pds_selected_plan p;

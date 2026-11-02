@@ -1478,6 +1478,33 @@ int remesa_context_vertex_parameter_source(struct pipe_context *p,
 #endif
 }
 
+int remesa_context_prepare_vertex_parameters(struct pipe_context *p,uint32_t bank,void **out)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw||!out||(uintptr_t)out%_Alignof(void *)||
+    !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!sc->device.resource_only_backend||sc->gears_runtime)return ENOTSUP;
+ int e=remesa_persistent_shader_output_check(&sc->device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ uint32_t offset;e=remesa_use_base_offset(bank,&offset);if(e)return e;
+ struct vertex *v=ctx->bound_vertex;
+ if(!v||v->deleted||remesa_shader_ir_gears_vertex(&v->program.semantic))return ENOTSUP;
+ const uint32_t count=v->program.semantic.instructions[0].bits[0]*4u,transfer=(count+4u)&~3u;
+ const struct remesa_pds_parameter_source_request request={0x20000000,4096,0,count,transfer};
+ uint8_t source[176];size_t written;
+ e=remesa_context_vertex_parameter_source(p,&request,source,sizeof source,&written);if(e)return e;
+ if(written!=transfer*4u||count>40)return EPROTO;
+ uint32_t coefficients[40];
+ for(unsigned i=0;i<count;i++)coefficients[i]=(uint32_t)source[4+4*i]|
+  (uint32_t)source[5+4*i]<<8|(uint32_t)source[6+4*i]<<16|(uint32_t)source[7+4*i]<<24;
+ return remesa_persistent_vertex_parameter_block_prepare(&sc->device,coefficients,count,transfer,bank,out);
+#else
+ (void)p;(void)bank;(void)out;return ENOTSUP;
+#endif
+}
 int remesa_context_gears_geometry_snapshot(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  struct remesa_gears_geometry **out)
@@ -2465,6 +2492,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+int remesa_context_prepare_vertex_parameters(struct pipe_context *p,uint32_t bank,void **out)
+{(void)p;(void)bank;(void)out;return ENOTSUP;}
 int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *p,struct remesa_vertex_parameter_values *out)
 {(void)p;(void)out;return ENOTSUP;}
 int remesa_context_linked_isp_snapshot(struct pipe_context *p,struct remesa_isp_opaque_triangle_request *out)

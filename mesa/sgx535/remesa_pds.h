@@ -306,7 +306,12 @@ int remesa_pds_encode(const struct remesa_usse_program *,const struct remesa_pds
 enum remesa_pds_selected_profile {
  REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3=1,
  REMESA_PDS_SELECTED_FS_INPUT_COL0=2,
- REMESA_PDS_SELECTED_FS_CONSTANT_DRIVER_BG0=3
+ REMESA_PDS_SELECTED_FS_CONSTANT_DRIVER_BG0=3,
+ /* Existing physical positive gears attribute-normal body320, eleven numeric
+  * temporaries, input P/N in the retained three-float4 record. Same original
+  * compiled producer fields as its archived physical witness, not a generic
+  * resource planner or approval of arbitrary programs/temporary counts. */
+ REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3=4
 };
 struct remesa_pds_selected_request {
  uint32_t profile,use_bank;
