@@ -69,14 +69,14 @@ It does not transfer the donor's ownership/cache rules into the new executor.
 | Pool identity | Sealed fixed eleven-role stream | Explicit packet IDs and narrowed private mappings |
 | Between-frame writes | Pool write exclusion for stream lifetime | Explicit general-ID pool seal implemented; kernel-only, not physically qualified |
 | Warm admission | Typed `ta_reuse` policy after initial three frames | Cold `zero_pristine` claim; second preparation returns `-ENODATA` |
-| Cache ownership | Tracks CPU cached/dirty and GPU dirty separately | Conservative full publication and post-GPU flushes |
+| Cache ownership | Tracks CPU cached/dirty and GPU dirty separately | Same tracking integrated for sealed pool IDs; offline checked, not physically qualified |
 | REGION preparation | Separate per-frame clear | Cold zero-origin requirement; publication consumes it |
 | Source lifetime | Retained stream | Existing source-session adapter, not a new user endpoint |
 
 The [general pool write exclusion](general-dpm-write-exclusion.md) now carries
 the first part of the donor contract using explicit IDs and generations.
-The next implementation must carry its cache ownership into that session.
-A warm claim must be a separate capability backed by successful
+Its [cache ownership](general-dpm-cache-ownership.md) is now integrated too.
+The remaining warm claim must be a separate capability backed by successful
 prior retirement under that same lease. It must not set `zero_pristine=true`,
 accept arbitrary modified pools, reinterpret the eleven-role ABI or clear64MiB
 per frame. CPU access, source/file/device loss and ambiguous execution must

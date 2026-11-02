@@ -40,7 +40,12 @@ int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,
  }
  j->state=REMESA_JOB_COMPLETE;
  for(i=0;i<c->count;i++)if(loan->rules[i].access&REMESA_MMU_GPU_WRITE){
-  struct backing *backing=&s->bo[j->ids[i]&31];drm_clflush_pages(backing->pages,backing->inserted);
+  struct backing *backing=&s->bo[j->ids[i]&31];
+#ifdef REMESA_PRIVATE_DPM_CACHE
+  private_dpm_complete(s,backing);
+#else
+  drm_clflush_pages(backing->pages,backing->inserted);
+#endif
  }
  dma_rmb();j->state=REMESA_JOB_VISIBLE;
  error=remesa_stream_source_finish_nohash(source_owner,observation);if(error)goto quarantine;

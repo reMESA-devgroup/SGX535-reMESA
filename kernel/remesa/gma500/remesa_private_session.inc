@@ -45,7 +45,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
   error=-EBUSY;goto unlock;
  }
  /* Validate the complete seal before clearing any part of it. Source close,
-  * job retirement and all CPU aliases were checked above; no cache/GPU work. */
+  * job retirement and all CPU leases were checked above. */
  if(s->private_dpm_ids[0]||s->private_dpm_ids[1]){
   if(s->private_work_owned||s->pds_write_guard){error=-EIO;goto unlock;}
   for(i=0;i<5;i++)if(s->private_input_ids[i]){error=-EIO;goto unlock;}
@@ -79,6 +79,11 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
   memset(s->private_input_ids,0,sizeof(s->private_input_ids));s->pds_write_guard=NULL;
  }else if(s->pds_write_guard){error=-EIO;goto unlock;}
  memset(s->private_work_ids,0,sizeof(s->private_work_ids));s->private_work_owned=false;
+#ifdef REMESA_PRIVATE_DPM_CACHE
+ /* Source closed and every job/lease gone. Restore CPU coherence before
+  * dropping domain classification, including pools never read back. */
+ for(i=0;i<2;i++)if(s->private_dpm_ids[i])ta_for_cpu(&s->bo[s->private_dpm_ids[i]&31]);
+#endif
  memset(s->private_dpm_ids,0,sizeof(s->private_dpm_ids));
  s->private_session=NULL;error=0;
  unlock:mutex_unlock(&s->lock);

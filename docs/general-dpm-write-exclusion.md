@@ -35,14 +35,15 @@ was incompatible with importing the donor FAST cache/reuse policy. This new
 exclusion closes that gap without reinterpreting the old eleven-role ABI.
 
 Pool ownership is separate from initialization and CPU/GPU residency. The
-general executor still requires its cold DPM claim and conservative cache
-maintenance. Publication still consumes `zero_pristine`; the seal does not
+general executor still requires its cold DPM claim. The separate cache
+integration below changes ownership transfers. Publication still consumes `zero_pristine`; the seal does not
 restore it. The tests explicitly demonstrate that ownership validation can
 remain valid while a later cold claim returns `-ENODATA`. No warm capability,
 new physical admission, per-frame clear or cache exemption is created here.
 
-The next component is the donor's separate CPU-cached/CPU-dirty/GPU-dirty
-tracking and a retirement-bound warm claim under this exclusion. Actual CPU
+The donor's [CPU-cached/CPU-dirty/GPU-dirty tracking](general-dpm-cache-ownership.md)
+is now integrated under this exclusion. A retirement-bound warm claim remains.
+Actual CPU
 reads must regain coherent ownership; source/file/device loss or ambiguous
 execution must prevent reuse. REGION initialization remains separate. See
 [the donor comparison](general-dpm-reuse-contract.md).

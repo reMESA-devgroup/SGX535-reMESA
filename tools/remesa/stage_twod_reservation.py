@@ -560,6 +560,17 @@ def private_file_lost_sources(memory):
         ' u32 private_dpm_ids[2]; /* general table/parameter write exclusion */\n'
         ' bool private_device_lost; /* monotonic; do not reclaim after unplug */\n')
     memory = replace_once(memory,
+        'static bool ta_domain(const struct remesa_gem_memory *s,const struct backing *b)\n'
+        '{return s->ta_cache_domains && s->ta_pools_sealed && is_managed_ta_pool(b);}',
+        '#define REMESA_PRIVATE_DPM_CACHE 1\n'
+        'static bool private_dpm_domain(const struct remesa_gem_memory *,const struct backing *);\n'
+        'static bool ta_domain(const struct remesa_gem_memory *s,const struct backing *b)\n'
+        '{return (s->ta_cache_domains && s->ta_pools_sealed && is_managed_ta_pool(b)) || private_dpm_domain(s,b);}')
+    memory = replace_once(memory,
+        'static int act(struct remesa_gem_memory *s,struct remesa_memory_request *r)\n',
+        '#include "remesa_private_dpm_cache.inc"\n'
+        'static int act(struct remesa_gem_memory *s,struct remesa_memory_request *r)\n')
+    memory = replace_once(memory,
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n',
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n'
         ' if(s->private_device_lost){mutex_unlock(&s->lock);return -ENODEV;}\n'
@@ -973,6 +984,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_session.h', 'remesa_private_session.inc',
                      'remesa_private_session_source.inc', 'remesa_private_session_scene.inc',
                      'remesa_private_session_dpm.inc',
+                     'remesa_private_dpm_cache.inc',
                      'remesa_private_inputs.inc',
                      'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',
                      'remesa_private_session_lab.inc',
