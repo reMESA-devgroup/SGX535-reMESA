@@ -105,6 +105,10 @@ int main(int argc,char **argv)
  CHECK(!remesa_context_enable_homogeneous_draw_lab(ctx));
  CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==EALREADY);
  CHECK(f.creates==before_enable&&f.cpu_maps==maps_before_enable&&!bound_submit_calls);
+ const struct pipe_rasterizer_state canonical_raster={.fill_front=PIPE_POLYGON_MODE_FILL,
+  .fill_back=PIPE_POLYGON_MODE_FILL};
+ void *draw_raster=ctx->create_rasterizer_state(ctx,&canonical_raster);CHECK(draw_raster);
+ ctx->bind_rasterizer_state(ctx,draw_raster);
 #endif
  const struct pipe_framebuffer_state fb={.width=width,.height=height,.nr_cbufs=1,.cbufs={{.texture=color,.format=PIPE_FORMAT_B8G8R8A8_UNORM}},.zsbuf={.texture=depth,.format=PIPE_FORMAT_Z24X8_UNORM}};
  ctx->set_framebuffer_state(ctx,&fb);CHECK(!remesa_context_error(ctx));
@@ -193,6 +197,8 @@ int main(int argc,char **argv)
  CHECK(!ctx->create_rasterizer_state(ctx,&unsupported));
  ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);CHECK(remesa_context_error(ctx)==ENOTSUP&&!bound_submit_calls);
  ctx->bind_rasterizer_state(ctx,NULL);
+ ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);CHECK(remesa_context_error(ctx)==ENOTSUP&&!bound_submit_calls);
+ ctx->bind_rasterizer_state(ctx,draw_raster);
  CHECK(f.creates==before_invalid&&f.cpu_maps==maps_before_invalid);
 #endif
  if(mode==14){
@@ -202,6 +208,7 @@ int main(int argc,char **argv)
  int error=bound_execute_scene(ctx,&info,&draw,&options,&fence);
  if(mode==13||mode==15||mode==16){
   CHECK(error==EOWNERDEAD&&!fence&&bound_submit_calls==(mode==13?0:1));
+  if(mode==15||mode==16)CHECK(remesa_persistent_native_scene_ready(&d)==EOWNERDEAD);
   CHECK(remesa_resource_wait_writer(ctx,color,0)==EOWNERDEAD&&remesa_resource_wait_writer(ctx,depth,0)==EOWNERDEAD);
   unsigned calls=bound_submit_calls;CHECK(bound_execute_scene(ctx,&info,&draw,&options,&fence)==EOWNERDEAD&&bound_submit_calls==calls);
   ctx->flush(ctx,&fence,0);CHECK(!fence&&remesa_persistent_close(&d)==EBUSY);

@@ -189,6 +189,13 @@ int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *,
  * backend is still required. Existing COLOR/Z contents remain unsupported.
  * No resource IO or submission occurs when enabling. Serialized API entry. */
 int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *);
+/* Before children/resources, after linked attachment storage admission.
+ * Enables a named LAB frontend with the implemented P/N/COLOR0/coefficient
+ * shader limits and bounded renderbuffer dimensions. New contexts opt into
+ * the cold draw adapter. No GL version override, accelerated-cap claim,
+ * kernel gate or native recipe admission follows. Default screen unchanged.
+ * Caller serializes setup; enabled storage alone cannot authorize rendering. */
+int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *);
 
 struct remesa_shader_host_pipeline_request;
 struct remesa_shader_host_pipeline;

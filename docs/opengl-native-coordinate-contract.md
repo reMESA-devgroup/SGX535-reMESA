@@ -17,6 +17,11 @@ reciprocal instructions. The recording backend still refuses the draw. This
 is frontend evidence, not binary delivery, pixel rendering or GPU approval.
 The cap toggle exists only in this test; production capabilities stay unchanged.
 
+The later [native resource frontend](opengl-resource-frontend.md) separately
+declares the implemented shader limits in an explicit LAB screen setup.
+It fixes the zero-input linker refusal without changing this viewport hint
+or forcing an OpenGL version.
+
 Evidence:
 `/home/gama/sgx535-offline/opengl-native-coordinate-contract-20261102/v1`.
 The `current-driver` result links the current screen object. Earlier failed

@@ -115,3 +115,8 @@ The [frontend coordinate audit](opengl-native-coordinate-contract.md) also
 corrects the earlier assumption about `viewport_transform_lowered`: that hint
 does not inject viewport arithmetic here. General shader/state/API coverage,
 pass preservation and continuous production submission remain additional work.
+
+The [resource frontend integration](opengl-resource-frontend.md) now records
+actual fixed-function OpenGL shader generation and bound input snapshots on
+this backend. Its generated CODE matches the qualified witness; the complete
+API draw still refuses the unintegrated raster contract before native dispatch.

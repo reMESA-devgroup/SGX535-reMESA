@@ -1,0 +1,205 @@
+/* SPDX-License-Identifier: MIT
+ * Real Mesa frontend on the native-resource screen. GEM/receipt hooks are
+ * modeled; no capability/version override and no GPU result is fabricated.
+ */
+#define REMESA_LINKED_SCENE_CONTEXT_FIXTURE
+#include "test_linked_scene_context.c"
+#include "remesa/opengl_lab_context.h"
+#include "state_tracker/st_context.h"
+#include "GL/gl.h"
+#include "remesa_draw.h"
+#include "remesa_nir.h"
+
+static struct pipe_context *(*original_create)(struct pipe_screen *,void *,unsigned);
+static unsigned enabled_contexts;
+static bool automatic_context;
+static unsigned frontend_case,vertex_attempt;
+static void *(*original_vs)(struct pipe_context *,const struct pipe_shader_state *);
+static void *(*original_raster)(struct pipe_context *,const struct pipe_rasterizer_state *);
+static void *observe_raster(struct pipe_context *ctx,const struct pipe_rasterizer_state *state)
+{
+ void *result=original_raster(ctx,state);
+ if(frontend_case>=3)printf("FIXED_RASTER case=%u accepted=%u half=%u bottom=%u clip=%u/%u cull=%u front_ccw=%u clamp=%u/%u flat=%u scissor=%u\n",
+  frontend_case,result!=NULL,state->half_pixel_center,state->bottom_edge_rule,
+  state->depth_clip_near,state->depth_clip_far,state->cull_face,state->front_ccw,
+  state->clamp_vertex_color,state->clamp_fragment_color,state->flatshade,state->scissor);
+ return result;
+}
+static void *observe_vertex(struct pipe_context *ctx,const struct pipe_shader_state *state)
+{
+ CHECK(state&&state->type==PIPE_SHADER_IR_NIR&&state->ir.nir);
+ char name[80];CHECK(snprintf(name,sizeof name,"resource-vs-%u-%u.nir.txt",frontend_case,vertex_attempt++)>0);
+ FILE *file=fopen(name,"wx");CHECK(file);nir_print_shader(state->ir.nir,file);CHECK(!fclose(file));
+ if(frontend_case>=3){
+  struct remesa_nir_gears_vertex_profile profile;
+  CHECK(!remesa_nir_gears_vertex(state->ir.nir,&profile));
+  CHECK(profile.normal_from_attribute==1&&profile.uniform_vectors==9);
+  struct remesa_shader_ir ir;struct remesa_shader_program program;
+  CHECK(!remesa_shader_ir_lower(state->ir.nir,&ir));
+  CHECK(!remesa_shader_program_prepare(&ir,&program));
+  unsigned char code[336];size_t written=0;
+  CHECK(!remesa_shader_program_encode(&program,code,sizeof code,&written)&&written==320);
+  CHECK(snprintf(name,sizeof name,"fixed-GL-CODE320-%u.bin",frontend_case)>0);
+  fixture_write(".",name,code,written);remesa_shader_program_finish(&program);
+ }
+ return original_vs(ctx,state);
+}
+static void inspect_fixed_inputs(struct pipe_context *ctx)
+{
+ const struct remesa_pds_parameter_source_request request={0x20000000,4096,0,36,40};
+ unsigned char parameters[160];size_t written=0;
+ int parameter_error=remesa_context_vertex_parameter_source(ctx,&request,parameters,sizeof parameters,&written);
+ char name[80];
+ if(!parameter_error){CHECK(snprintf(name,sizeof name,"fixed-GL-PARAM-%u.bin",frontend_case)>0);fixture_write(".",name,parameters,written);}
+ /* Inspect the bindings left by the known glDrawArrays(TRIANGLES,0,3).
+  * This is a separate host snapshot, not a replacement draw or GPU proof. */
+ const struct pipe_draw_info info={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};
+ const struct pipe_draw_start_count_bias draw={.count=3};
+ struct remesa_gears_geometry *geometry=NULL;
+ int geometry_error=remesa_context_gears_geometry_snapshot(ctx,&info,&draw,&geometry);
+ if(!geometry_error){
+  struct remesa_gears_geometry_view view;CHECK(!remesa_gears_geometry_inspect(geometry,&view));
+  CHECK(snprintf(name,sizeof name,"fixed-GL-PN-%u.bin",frontend_case)>0);fixture_write(".",name,view.vertices,view.bytes);
+ }
+ remesa_gears_geometry_destroy(geometry);
+ unsigned char viewport[28];
+ int viewport_error=remesa_context_window_viewport_encode(ctx,24,viewport);
+ if(!viewport_error){CHECK(snprintf(name,sizeof name,"fixed-GL-VIEWPORT-%u.bin",frontend_case)>0);fixture_write(".",name,viewport,sizeof viewport);}
+ struct remesa_isp_opaque_triangle_request isp={0};int isp_error=remesa_context_linked_isp_snapshot(ctx,&isp);
+ CHECK(!isp_error&&isp.depth_bits_present&&isp.depth_test&&isp.depth_write&&
+  isp.compare==REMESA_DEPTH_LESS&&isp.rgba_mask==15);
+ printf("FIXED_INPUTS case=%u parameters=%d bytes=%zu geometry=%d viewport=%d ISP=%d\n",frontend_case,parameter_error,written,geometry_error,viewport_error,isp_error);
+}
+static struct pipe_context *create_enabled(struct pipe_screen *screen,void *priv,unsigned flags)
+{
+ struct pipe_context *ctx=original_create(screen,priv,flags);CHECK(ctx);
+ CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==(automatic_context?EALREADY:0));enabled_contexts++;original_vs=ctx->create_vs_state;ctx->create_vs_state=observe_vertex;
+ original_raster=ctx->create_rasterizer_state;ctx->create_rasterizer_state=observe_raster;
+ return ctx;
+}
+
+struct resource_drawable {struct pipe_frontend_drawable base;struct pipe_resource *color,*depth;};
+static bool no_present(struct st_context *st,struct pipe_frontend_drawable *base,enum st_attachment_type attachment)
+{(void)st;(void)base;CHECK(attachment==ST_ATTACHMENT_FRONT_LEFT);return false;}
+static int frontend_param(struct pipe_frontend_screen *screen,enum st_manager_param param)
+{(void)screen;(void)param;return 0;}
+static bool validate_resources(struct st_context *st,struct pipe_frontend_drawable *base,
+ const enum st_attachment_type *attachments,unsigned count,struct pipe_resource **out,
+ struct pipe_resource **resolve)
+{
+ (void)st;struct resource_drawable *d=(struct resource_drawable *)base;
+ for(unsigned i=0;i<count;i++){
+  struct pipe_resource *r=attachments[i]==ST_ATTACHMENT_FRONT_LEFT?d->color:
+   attachments[i]==ST_ATTACHMENT_DEPTH_STENCIL?d->depth:NULL;
+  if(!r)return false;
+  out[i]=NULL;remesa_resource_reference(&out[i],r);
+ }
+ if(resolve)*resolve=NULL;
+ return true;
+}
+static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource *color,
+ struct pipe_resource *depth)
+{
+ struct pipe_frontend_screen frontend={.screen=screen,.get_param=frontend_param};
+ struct st_context_attribs attrs={.profile=API_OPENGL_COMPAT,.major=1,.minor=0,
+  .visual={.buffer_mask=ST_ATTACHMENT_FRONT_LEFT_MASK,.color_format=PIPE_FORMAT_B8G8R8A8_UNORM,
+   .depth_stencil_format=PIPE_FORMAT_Z24X8_UNORM}};
+ enum st_context_error error=ST_CONTEXT_SUCCESS;
+ struct st_context *st=st_api_create_context(&frontend,&attrs,&error,NULL);CHECK(st);
+ struct resource_drawable drawable={.base={.stamp=1,.ID=9,.fscreen=&frontend,
+  .visual=&attrs.visual,.validate=validate_resources},.color=color,.depth=depth};
+ drawable.base.flush_front=no_present; /* Required frontend hook; no presentation. */
+ CHECK(st_api_make_current(st,&drawable.base,&drawable.base));
+#define REMESA_GL_PROC(ret,name,args) typedef ret (GLAPIENTRY *name##_fn)args;name##_fn name=(name##_fn)_mesa_glapi_get_proc_address(#name);CHECK(name)
+ REMESA_GL_PROC(void,glEnable,(GLenum));REMESA_GL_PROC(void,glDisable,(GLenum));
+ REMESA_GL_PROC(void,glMatrixMode,(GLenum));REMESA_GL_PROC(void,glLoadIdentity,(void));
+ REMESA_GL_PROC(void,glLoadMatrixf,(const GLfloat *));REMESA_GL_PROC(void,glViewport,(GLint,GLint,GLsizei,GLsizei));
+ REMESA_GL_PROC(void,glLightfv,(GLenum,GLenum,const GLfloat *));REMESA_GL_PROC(void,glLightModelfv,(GLenum,const GLfloat *));
+ REMESA_GL_PROC(void,glMaterialfv,(GLenum,GLenum,const GLfloat *));REMESA_GL_PROC(void,glMaterialf,(GLenum,GLenum,GLfloat));
+ REMESA_GL_PROC(void,glVertexPointer,(GLint,GLenum,GLsizei,const void *));
+ REMESA_GL_PROC(void,glNormalPointer,(GLenum,GLsizei,const void *));
+ REMESA_GL_PROC(void,glEnableClientState,(GLenum));REMESA_GL_PROC(void,glDrawArrays,(GLenum,GLint,GLsizei));
+ REMESA_GL_PROC(void,glFlush,(void));REMESA_GL_PROC(GLenum,glGetError,(void));
+#undef REMESA_GL_PROC
+ const char *witness=getenv("REMESA_BOUND_GEARS_WITNESS_DIR");CHECK(witness);
+ GLfloat coefficients[36],vertices[3][8];char path[4096];
+ CHECK(snprintf(path,sizeof path,"%s/coefficients-source.bin",witness)>0);
+ FILE *file=fopen(path,"rb");CHECK(file&&fread(coefficients,1,sizeof coefficients,file)==sizeof coefficients&&fgetc(file)==EOF&&!fclose(file));
+ CHECK(snprintf(path,sizeof path,"%s/vertices-source.bin",witness)>0);
+ file=fopen(path,"rb");CHECK(file&&fread(vertices,1,sizeof vertices,file)==sizeof vertices&&fgetc(file)==EOF&&!fclose(file));
+ const GLfloat one[4]={1,1,1,1},zero[4]={0,0,0,0};
+ const GLfloat light[4]={coefficients[32],coefficients[33],coefficients[34],0};
+ glMatrixMode(GL_MODELVIEW);glLoadIdentity();glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+ glLightModelfv(GL_LIGHT_MODEL_AMBIENT,coefficients);
+ glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT,one);glMaterialfv(GL_FRONT_AND_BACK,GL_DIFFUSE,one);
+ glMaterialfv(GL_FRONT_AND_BACK,GL_SPECULAR,one);glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,zero);
+ glMaterialf(GL_FRONT_AND_BACK,GL_SHININESS,0);
+ glLightfv(GL_LIGHT0,GL_AMBIENT,coefficients+4);glLightfv(GL_LIGHT0,GL_DIFFUSE,coefficients+8);
+ glLightfv(GL_LIGHT0,GL_SPECULAR,coefficients+12);glLightfv(GL_LIGHT0,GL_POSITION,light);
+ glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);glEnable(GL_NORMALIZE);glEnable(GL_DEPTH_TEST);glDisable(GL_DITHER);
+ glViewport(0,0,color->width0,color->height0);CHECK(glGetError()==GL_NO_ERROR);
+ glVertexPointer(4,GL_FLOAT,sizeof vertices[0],vertices);
+ glNormalPointer(GL_FLOAT,sizeof vertices[0],vertices[0]+4);
+ glEnableClientState(GL_VERTEX_ARRAY);glEnableClientState(GL_NORMAL_ARRAY);
+ glDrawArrays(GL_TRIANGLES,0,3);glFlush();
+ struct remesa_shader_compile_status vs={0},fs={0};
+ (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_VERTEX,&vs);
+ (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_FRAGMENT,&fs);
+ printf("FIXED_GL version=%u GL_error=%u VS_attempts=%llu VS_error=%d FS_attempts=%llu FS_error=%d pipe=%d submissions=%u\n",
+  st->ctx->Version,glGetError(),(unsigned long long)vs.attempts,vs.error,(unsigned long long)fs.attempts,fs.error,remesa_context_error(st->pipe),dispatch_calls);
+ inspect_fixed_inputs(st->pipe);
+ CHECK(!dispatch_calls&&!remesa_context_cpu_clear_count(st->pipe));
+ st_api_make_current(NULL,NULL,NULL);st_destroy_context(st);
+}
+
+int main(void)
+{
+ for(unsigned enable=0;enable<5;enable++) {
+  frontend_case=enable;vertex_attempt=0;
+  glsl_type_singleton_init_or_ref();
+  struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
+  struct remesa_device device={0};
+  struct remesa_persistent_config cfg={.ops=&target_ops,.priv=&f,.context=9600,
+   .va_start=0x20000000,.va_end=0x45000000,.byte_budget=96u*1024u*1024u,
+   .resource_only_backend=true,.resource_limits={2048,2048,128,16u*1024u*1024u}};
+  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};
+  cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};
+  cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
+  CHECK(!remesa_persistent_open(&device,&cfg));
+  CHECK(!remesa_persistent_set_native_scene(&device,context_native));
+  struct pipe_screen *screen=remesa_screen_create(&device);CHECK(screen);
+  CHECK(!remesa_screen_enable_linked_attachment_storage(screen));
+  CHECK(!screen->caps.graphics&&!screen->caps.accelerated);
+  automatic_context=enable>=2;
+  if(automatic_context){
+   CHECK(!remesa_screen_enable_homogeneous_frontend_lab(screen));
+   CHECK(screen->caps.graphics&&!screen->caps.accelerated);
+   CHECK(screen->shader_caps[PIPE_SHADER_VERTEX].max_inputs==2);
+  }
+  if(enable){original_create=screen->context_create;screen->context_create=create_enabled;}
+  unsigned width=enable==3?1280:enable==4?640:32,height=enable==3?800:enable==4?640:32;
+  struct pipe_resource *color=attachment(screen,width,height,false);CHECK(color);
+  if(enable>=3){
+   struct pipe_resource *depth=attachment(screen,width,height,true);CHECK(depth);
+   fixed_function_scene(screen,color,depth);remesa_resource_reference(&depth,NULL);
+   remesa_resource_reference(&color,NULL);screen->destroy(screen);
+   CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!remesa_persistent_close(&device));
+   glsl_type_singleton_decref();continue;
+  }
+  struct remesa_opengl_lab_report report={0};unsigned char pixels[4096];memset(pixels,0xa5,sizeof pixels);
+  int error=remesa_opengl_lab_draw_arrays_quarter(screen,color,&report,pixels,sizeof pixels);
+  printf("RESOURCE_GL enable=%u setup=%d context=%u GL=%u GLSL=%u fbo=%x linked=%u called=%u VS=%u FS=%u pipe=%u submissions=%u\n",
+   enable,error,report.context_created,report.computed_version,report.glsl_version,
+   report.fbo_status,report.program_linked,report.program_draw_called,
+   report.program_vs_error,report.program_fs_error,report.program_draw_pipe_error,dispatch_calls);
+  printf("SHADER_LOG %s\nPROGRAM_LOG %s\n",report.shader_log,report.program_log);
+  fflush(stdout);
+  CHECK(!dispatch_calls);
+  for(unsigned i=0;i<sizeof pixels;i++)CHECK(pixels[i]==0xa5);
+  CHECK(!report.readback_bytes);
+  remesa_resource_reference(&color,NULL);screen->destroy(screen);
+  CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!remesa_persistent_close(&device));
+  glsl_type_singleton_decref();
+ }
+ CHECK(enabled_contexts);return 0;
+}

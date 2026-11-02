@@ -38,6 +38,8 @@ struct screen {
  struct pipe_screen base; struct remesa_device device; unsigned refs; bool closing;
  int (*release_device)(struct remesa_device *);int release_error;bool release_pending;
  uint64_t resource_cookie;bool cpu_depth24_lab,gears_runtime,linked_attachment_storage;
+ bool homogeneous_frontend_lab;
+ uint32_t homogeneous_frontend_dimension;
  remesa_copy_region_fn native_copy;
  remesa_fill_region_fn native_fill;
 };
@@ -154,9 +156,10 @@ static void set_capabilities(struct screen *sc)
 {
  struct pipe_caps caps={0}; struct pipe_shader_caps shader={0};
  /* Narrow Gallium contract only; this does not advertise an OpenGL version. */
- caps.graphics=!sc->device.resource_only_backend;
+ caps.graphics=!sc->device.resource_only_backend||sc->homogeneous_frontend_lab;
  caps.accelerated=!sc->device.resource_only_backend&&!sc->device.retained_fragment_carrier&&sc->device.qualified_hardware_backend ? 1 : 0;
  caps.max_render_targets=1; caps.max_texture_2d_size=sc->cpu_depth24_lab?4096:32;
+ if(sc->homogeneous_frontend_lab)caps.max_texture_2d_size=sc->homogeneous_frontend_dimension;
  /* Binding/storage limits; the legacy draw admission below remains one
   * element/one VB. The complete gears capture has separate validation. */
  caps.max_vertex_buffers=2; caps.max_vertex_attrib_stride=2048;
@@ -177,6 +180,7 @@ static void set_capabilities(struct screen *sc)
   * Fragment coordinates/interpolation are rejected by the NIR recognizer;
   * their convention flags must not advertise unqualified GPU semantics. */
  caps.max_varyings=0; caps.vendor_id=0x8086; caps.device_id=0x8108;
+ if(sc->homogeneous_frontend_lab)caps.max_varyings=1; /* COLOR0, alongside POSITION. */
  /* Mesa uses this historical hint for gl_Position transform-feedback
   * preservation. It does not insert nir_lower_viewport_transform here;
   * this driver never calls that pass. Stream output remains unsupported. */
@@ -186,15 +190,27 @@ static void set_capabilities(struct screen *sc)
   shader.max_instructions=1; shader.max_inputs=1; shader.max_outputs=1;
   shader.supported_irs=1u<<PIPE_SHADER_IR_NIR;
  }
+ if(sc->homogeneous_frontend_lab){
+  /* Implemented canonical vertex program: CODE320/8, P/N inputs,
+   * POSITION+COLOR0 outputs and nine float4 coefficient vectors. This is
+   * an opt-in frontend for the existing strict recognizer, not general GLSL. */
+  shader.max_instructions=40;shader.max_inputs=2;shader.max_outputs=2;
+  shader.max_const_buffer0_size=144;shader.max_const_buffers=1;
+  shader.supported_irs=1u<<PIPE_SHADER_IR_NIR;
+ }
 #endif
  /* Gallium places tessellation and geometry stages between VS and FS.
   * Advertising those stages makes Mesa call unsupported lifecycle hooks. */
  memcpy((void *)&sc->base.shader_caps[PIPE_SHADER_VERTEX],&shader,sizeof(shader));
  shader.max_inputs=0;
+ if(sc->homogeneous_frontend_lab){
+  shader.max_instructions=1;shader.max_inputs=1;shader.max_outputs=1;
+  shader.max_const_buffer0_size=0;shader.max_const_buffers=0;
+ }
  memcpy((void *)&sc->base.shader_caps[PIPE_SHADER_FRAGMENT],&shader,sizeof(shader));
  memcpy((void *)&sc->base.caps,&caps,sizeof(caps));
 }
-static const char *name(struct pipe_screen *p) { return s(p)->device.retained_fragment_carrier ? "reMESA original FS + retained VS/PDS (LAB)" : s(p)->device.resource_only_backend ? "reMESA GEM resources (DRAW DISABLED)" : s(p)->device.offline_test_backend ? "reMESA recording backend (NO SGX)" : "reMESA SGX535"; }
+static const char *name(struct pipe_screen *p) { return s(p)->homogeneous_frontend_lab ? "reMESA SGX535 homogeneous scene (LAB)" : s(p)->device.retained_fragment_carrier ? "reMESA original FS + retained VS/PDS (LAB)" : s(p)->device.resource_only_backend ? "reMESA GEM resources (DRAW DISABLED)" : s(p)->device.offline_test_backend ? "reMESA recording backend (NO SGX)" : "reMESA SGX535"; }
 static const char *vendor(struct pipe_screen *p) { (void)p;return "reMESA"; }
 #ifdef REMESA_WITH_NIR
 static const struct nir_shader_compiler_options *compiler_options(struct pipe_screen *p,enum pipe_shader_type stage)
@@ -2086,7 +2102,8 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
   if(ctx->failed_submission){err=EOWNERDEAD;goto done;}
   if(!draws->count||!info->instance_count||!ctx->sample_enabled){err=0;goto done;}
   if(ctx->invalid_scissor)goto done;
-  for(unsigned kind=0;kind<FIXED_COUNT;kind++)if(ctx->invalid_fixed[kind])goto done;
+  for(unsigned kind=0;kind<FIXED_COUNT;kind++)
+   if(ctx->invalid_fixed[kind]||!ctx->bound_fixed[kind])goto done;
   struct fixed *state=ctx->bound_fixed[FIXED_RASTER];
   /* The closed native scene has no cull/scissor/clip lowering. Never ignore
    * an API raster state merely because its shader/geometry is recognized. */
@@ -2428,6 +2445,9 @@ static struct pipe_context *create_context(struct pipe_screen *p,void *priv,unsi
   PIPE_BIND_CONSTANT_BUFFER,PIPE_USAGE_STREAM,0);
  if(!ctx->base.const_uploader){destroy_context(&ctx->base);return NULL;}
 #endif
+ if(s(p)->homogeneous_frontend_lab&&remesa_context_enable_homogeneous_draw_lab(&ctx->base)){
+  destroy_context(&ctx->base);return NULL;
+ }
  return &ctx->base;
 }
 static void destroy_screen(struct pipe_screen *p)
@@ -2497,6 +2517,30 @@ int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *p)
     !sc->device.ops->allocate_depth_attachment||!sc->device.ops->prepare_linked_scene)return ENOTSUP;
  int error=sc->device.ops->validate_attachment_storage(&sc->device);if(error)return error;
  sc->linked_attachment_storage=true;return 0;
+}
+int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *p)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->destroy!=destroy_screen)return EINVAL;
+ struct screen *sc=s(p);
+ if(sc->closing)return ESHUTDOWN;
+ if(!sc->device.resource_only_backend||!sc->linked_attachment_storage||sc->gears_runtime||
+    sc->cpu_depth24_lab||!sc->device.ops->submit_linked_scene||!sc->device.ops->release_linked_scene)return ENOTSUP;
+ if(sc->homogeneous_frontend_lab)return EALREADY;
+ if(__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||
+    __atomic_load_n(&sc->resource_cookie,__ATOMIC_RELAXED))return EBUSY;
+ int ready=remesa_persistent_native_scene_ready(&sc->device);if(ready)return ready;
+ uint32_t width=sc->device.resource_limits.max_width?sc->device.resource_limits.max_width:32;
+ uint32_t height=sc->device.resource_limits.max_height?sc->device.resource_limits.max_height:32;
+ uint32_t bound=width<height?width:height,dimension=32;
+ if(bound<32)return ENOTSUP;
+ if(bound>2048)bound=2048; /* Existing typed render-target contract. */
+ while(dimension<=bound/2)dimension*=2;
+ sc->homogeneous_frontend_dimension=dimension;
+ sc->homogeneous_frontend_lab=true;set_capabilities(sc);return 0;
+#else
+ (void)p;return ENOTSUP;
+#endif
 }
 int remesa_screen_enable_cpu_depth24_lab(struct pipe_screen *p)
 {
@@ -2635,6 +2679,8 @@ int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *p,const s
 int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t bits,unsigned char out[28])
 {(void)p;(void)bits;(void)out;return ENOTSUP;}
 int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *p)
+{(void)p;return ENOTSUP;}
+int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}
 int remesa_context_gears_bottom_left(struct pipe_context *p,bool *b){(void)p;(void)b;return ENOTSUP;}

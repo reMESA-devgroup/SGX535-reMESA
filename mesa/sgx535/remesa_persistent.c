@@ -3739,6 +3739,13 @@ int remesa_persistent_set_native_scene(struct remesa_device *device,remesa_gpu_s
     d->scene_serial||d->shader_generation||d->allocated||d->shaders)return EBUSY;
  d->native_scene=fn;return 0;
 }
+int remesa_persistent_native_scene_ready(const struct remesa_device *device)
+{
+ if(!device||device->ops!=&device_ops||!device->priv)return EINVAL;
+ const struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ return d->native_scene?0:EOPNOTSUPP;
+}
 static int scene_submit_fault(struct persistent *d,struct submission *j)
 {
  (void)remesa_provider_fault(&d->provider,j->fence,d->cfg.context,j->operation);

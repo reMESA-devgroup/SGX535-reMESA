@@ -914,6 +914,10 @@ int remesa_persistent_scene_capture_release(struct remesa_device *,
 /* Install only on a fresh endpoint, before any allocation/job/capture/shader.
  * Does not enable ordinary draw or alter resource-only/qualification flags. */
 int remesa_persistent_set_native_scene(struct remesa_device *,remesa_gpu_scene_fn);
+/* Pure host configuration check, no IO/allocation or execution authority.
+ * Requires this provider's exact device; poisoned owners remain refused.
+ * Configured callback is not independent physical/kernel qualification. */
+int remesa_persistent_native_scene_ready(const struct remesa_device *);
 /* Submit the actual frozen graph through the existing provider registry and
  * fence lifecycle, never the legacy single-target dispatch. A successful
  * synchronous callback is independently checked for exact context/operation,
