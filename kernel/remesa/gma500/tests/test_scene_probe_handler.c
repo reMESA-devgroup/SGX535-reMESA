@@ -16,6 +16,7 @@ static struct remesa_twod_reservation *current_guard;
 static const struct remesa_scene_probe_profile *expected_profile;
 static void *images[18];
 static unsigned expected_count=17,expected_reads;
+static bool wire_mode;
 static const struct remesa_scene_probe_binding *expected_bindings;
 #ifdef REMESA_SCENE_CONTROLLER_EXTENDED
 #include "scene_probe_extended_fixture.h"
@@ -117,6 +118,16 @@ int remesa_gem_private_release(struct remesa_gem_private *loan)
 int remesa_gem_job_retire(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
 {CHECK(endpoint_lock.held&&t.operation==91&&s->jobs[0].live&&!s->executor&&!current_guard->held);if(fault==JOB_DROP)return -EIO;s->jobs[0].live=false;for(unsigned i=0;i<expected_count;i++)s->bo[i].holds=0;return 0;}
 #include "../remesa_scene_probe.inc"
+static int invoke_gears_wire(struct drm_device *dev,struct drm_file *file,struct remesa_scene_probe_request *n,const u32 *ids)
+{
+ struct remesa_gears_scene_probe_request r={.version=n->version,.profile=n->profile,.context=n->context,.budget_ms=n->budget_ms,
+  .operation=n->operation,.cookie=n->cookie,.core=n->core,.revision=n->revision,.pds_base=n->pds_base,.phase=n->phase,.ledger=n->ledger,
+  .error=n->error,.retained=n->retained,.stages=n->stages,.reserved={n->reserved[0],n->reserved[1]}};
+ memcpy(r.ids,ids,sizeof(r.ids));struct remesa_gears_scene_probe_request before=r;
+ int e=remesa_gears_scene_probe_ioctl(dev,&r,file);CHECK(!memcmp(&r,&before,96));
+ n->operation=r.operation;n->cookie=r.cookie;n->core=r.core;n->revision=r.revision;n->pds_base=r.pds_base;n->phase=r.phase;n->ledger=r.ledger;
+ n->error=r.error;n->retained=r.retained;n->stages=r.stages;return e;
+}
 int main(int argc,char **argv)
 {
  CHECK(argc==2);fault=(unsigned)strtoul(argv[1],NULL,10);CHECK(fault<CASE_COUNT);
@@ -125,6 +136,11 @@ int main(int argc,char **argv)
  struct remesa_scene_probe_request request={.version=1,.profile=fault==OK640_MATRIX?10:fault>=OK_MATRIX?9:fault==OK640?2:fault==OK_INIT?3:fault==OK640_INIT?4:fault==OK_FINAL?5:fault==OK640_FINAL?6:fault==OK640_GALLIUM?8:fault>=OK_GALLIUM?7:1,.context=77,.budget_ms=1000};
  endpoint=&memory;expected_profile=&scene_probe_profiles[request.profile-1];expected_bindings=expected_profile->bindings;scene_probe_enabled=true;
  u32 ids[18]={0};struct scene_probe_selection selected={0};
+#ifdef REMESA_SCENE_CONTROLLER_WIRE_V2
+ CHECK(fault<OK_INIT);wire_mode=true;expected_count=18;request.version=2;request.profile=fault==OK640?2:1;
+ const struct remesa_gears_scene_probe_profile *gear=&gears_scene_probe_profiles[request.profile-1];
+ selected=(struct scene_probe_selection){gear->packet,gear->packet_bytes,18,gear->bindings};expected_bindings=selected.bindings;
+#endif
 #ifdef REMESA_SCENE_CONTROLLER_EXTENDED
  CHECK(fault<OK_INIT);expected_count=18;request.version=2;request.profile=fault==OK640?2:1;
  selected=(struct scene_probe_selection){fault==OK640?extended_packet1:extended_packet0,sizeof(extended_packet0),18,
@@ -153,6 +169,11 @@ int main(int argc,char **argv)
    bad=selected;bad.binding_count=16;CHECK(scene_probe_execute_selected(&dev,&file,&request,ids,&bad)==-EINVAL);
    bad=selected;bad.packet_bytes--;CHECK(scene_probe_execute_selected(&dev,&file,&request,ids,&bad)==-EINVAL);
   }
+  if(wire_mode){
+   struct remesa_gears_scene_probe_request bad={.version=2,.profile=1,.context=77,.budget_ms=1000};memcpy(bad.ids,ids,sizeof bad.ids);
+   bad.reserved_input=1;CHECK(remesa_gears_scene_probe_ioctl(&dev,&bad,&file)==-EINVAL);bad.reserved_input=0;
+   bad.ids[17]=0;CHECK(remesa_gears_scene_probe_ioctl(&dev,&bad,&file)==-EINVAL);bad.ids[17]=ids[0];CHECK(remesa_gears_scene_probe_ioctl(&dev,&bad,&file)==-EINVAL);
+  }
   CHECK(!allocs&&!reads);request.reserved[0]=1;
  }
  unsigned target=expected_count==18?17:0;
@@ -166,7 +187,7 @@ int main(int argc,char **argv)
  if(fault==ZERO)memory.bo[rw].zero_pristine=false;if(fault==CPU_ALIAS)memory.bo[rw].cached_job_view=(void*)1;
  if(fault==STREAM)memory.stream_bound=true;if(fault==EXECUTOR)memory.executor=(void*)1;if(fault==TA)memory.ta_cache_domains=true;
  if(fault==CEILING)memory.root.end--;if(fault==LIVE)memory.jobs[1].live=true;
- int error=expected_count==18?scene_probe_execute_selected(&dev,&file,&request,ids,&selected):remesa_scene_probe_ioctl(&dev,&request,&file);
+ int error=wire_mode?invoke_gears_wire(&dev,&file,&request,ids):expected_count==18?scene_probe_execute_selected(&dev,&file,&request,ids,&selected):remesa_scene_probe_ioctl(&dev,&request,&file);
  CHECK(!endpoint_lock.held&&!memory.lock.held&&!scene_probe_lock.held);
  if(fault==CAP)CHECK(error==-EPERM&&!reads&&!allocs);
  if(fault==DISABLED||fault==MEMDISABLED)CHECK(error==-EOPNOTSUPP&&!reads&&!allocs);
@@ -177,6 +198,17 @@ int main(int argc,char **argv)
   struct remesa_scene_trace_request *query=calloc(1,sizeof(*query));CHECK(query);
   unsigned before_reads=reads;query->version=1;query->context=77;
   if(expected_count==18){
+   struct remesa_gears_scene_trace_request *full=calloc(1,sizeof(*full));CHECK(full);full->version=2;full->context=77;
+   CHECK(!remesa_gears_scene_trace_ioctl(&dev,full,&file));
+   CHECK(full->trace.prefix.version==2&&full->trace.prefix.bytes==4280&&full->trace.prefix.binding_count==18&&
+    !memcmp(&full->trace.prefix,&scene_probe_trace,sizeof(scene_probe_trace))&&!memcmp(&full->trace.last_binding,&scene_probe_trace_last,sizeof(scene_probe_trace_last)));
+   CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EINVAL);
+   memset(&full->trace,0,sizeof full->trace);full->context=78;CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EACCES);full->context=77;
+   struct drm_file wrong_file={2};CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&wrong_file)==-EACCES);
+   administrator=false;CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EPERM);administrator=true;
+   full->version=1;CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EINVAL);full->version=2;
+   full->reserved=1;CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EINVAL);full->reserved=0;
+   ((u8 *)&full->trace)[4279]=1;CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EINVAL);free(full);
    struct remesa_scene_probe_trace zero={0};
    CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EOVERFLOW&&!memcmp(&query->trace,&zero,sizeof zero));
    CHECK(scene_probe_trace.binding_count==18&&scene_probe_trace_last.id==ids[17]&&
@@ -198,6 +230,10 @@ int main(int argc,char **argv)
   query->reserved=1;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL);query->reserved=0;
   ((u8*)&query->trace)[4255]=1;CHECK(remesa_scene_trace_ioctl(&dev,query,&file)==-EINVAL);memset(&query->trace,0,sizeof(query->trace));
   CHECK(!remesa_scene_trace_ioctl(&dev,query,&file)&&reads==before_reads);
+  if(expected_count==17){
+   struct remesa_gears_scene_trace_request *other=calloc(1,sizeof(*other));CHECK(other);other->version=2;other->context=77;
+   CHECK(remesa_gears_scene_trace_ioctl(&dev,other,&file)==-ENODATA);free(other);
+  }
   }free(query);
 
  }else CHECK(error||request.error);
@@ -212,6 +248,16 @@ int main(int argc,char **argv)
   CHECK(request.retained&&memory.private_session==scene_probe_retained&&allocs>frees);
   if(fault==SOURCE_END||fault==BACKING_END)CHECK(!memory.jobs[0].live); /* lease alone must retain endpoint */
  }else CHECK(!request.retained&&allocs==frees);
+ if(scene_probe_consumed&&expected_count==18){
+  struct remesa_gears_scene_trace_request *full=calloc(1,sizeof(*full));CHECK(full);full->version=2;full->context=77;
+  struct remesa_scene_trace_request *old=calloc(1,sizeof(*old));CHECK(old);old->version=1;old->context=77;
+  if(memory.file==&file&&!memory.private_device_lost){
+   CHECK(remesa_scene_trace_ioctl(&dev,old,&file)==-EOVERFLOW);
+   CHECK(!remesa_gears_scene_trace_ioctl(&dev,full,&file)&&full->trace.prefix.version==2&&full->trace.prefix.bytes==4280&&
+    full->trace.prefix.error==request.error&&full->trace.prefix.retained==request.retained);
+  }else CHECK(remesa_gears_scene_trace_ioctl(&dev,full,&file)==-EACCES);
+  free(old);free(full);
+ }
  if(scene_probe_consumed){struct remesa_scene_probe_request retry={.version=1,.profile=1,.context=77,.budget_ms=1000};for(unsigned i=0;i<17;i++)retry.ids[i]=32+i;CHECK(remesa_scene_probe_ioctl(&dev,&retry,&file)==-EBUSY);}
  printf("PASS scene admission case%u retained=%u reads=%u hashes=%u executions=%u GPU0\n",fault,request.retained,reads,hashes,executions);return 0;
 }

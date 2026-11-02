@@ -5,6 +5,8 @@
 #include "remesa_twod_reservation.h"
 #include "remesa_scene_probe_request.h"
 #include "remesa_scene_probe_profiles.h"
+#include "remesa_gears_scene_probe_profiles.h"
+#include "remesa_gears_scene_probe_envelope.h"
 #include "remesa_private_session.h"
 static DEFINE_MUTEX(scene_probe_lock);
 static bool scene_probe_enabled;
@@ -21,6 +23,7 @@ struct remesa_scene_probe {
 static struct remesa_scene_probe *scene_probe_retained;
 static bool scene_probe_consumed;
 static struct remesa_scene_probe_trace scene_probe_trace;
+static unsigned scene_probe_trace_protocol;
 /* Complete internal snapshot for the extra owner; the old trace ioctl must
  * refuse an 18-binding result rather than silently truncate it. */
 static struct remesa_scene_trace_binding scene_probe_trace_last;
@@ -61,7 +64,10 @@ static void scene_probe_save_trace(const struct remesa_scene_probe *p,
  BUILD_BUG_ON(sizeof(p->job.service_plan.load)!=sizeof(t->load_actions));
  BUILD_BUG_ON(sizeof(p->job.service_plan.ta)!=sizeof(t->ta_actions));
  BUILD_BUG_ON(sizeof(p->job.service_plan.raster)!=sizeof(t->raster_actions));
- memset(t,0,sizeof(*t));memset(&scene_probe_trace_last,0,sizeof(scene_probe_trace_last));t->version=1;t->bytes=sizeof(*t);
+ scene_probe_trace_protocol=capacity==18?2:1;
+ memset(t,0,sizeof(*t));memset(&scene_probe_trace_last,0,sizeof(scene_probe_trace_last));
+ t->version=scene_probe_trace_protocol;
+ t->bytes=scene_probe_trace_protocol==2?sizeof(struct remesa_gears_scene_trace):sizeof(*t);
  t->profile=r->profile;t->stages=r->stages;t->phase=r->phase;t->ledger=r->ledger;
  t->error=r->error;t->retained=r->retained;t->context=r->context;
  t->operation=r->operation;t->cookie=r->cookie;
@@ -102,7 +108,7 @@ int remesa_scene_trace_ioctl(struct drm_device *dev,void *data,struct drm_file *
  mutex_lock(&scene_probe_lock);mutex_lock(&endpoint_lock);
  if(!endpoint||endpoint->dev!=dev||endpoint->file!=file||endpoint->private_device_lost||endpoint->context!=r->context)error=-EACCES;
  else if(!scene_probe_trace.version||scene_probe_trace.context!=r->context)error=-ENODATA;
- else if(scene_probe_trace.binding_count>17)error=-EOVERFLOW;
+ else if(scene_probe_trace_protocol!=1||scene_probe_trace.binding_count>17)error=-EOVERFLOW;
  else r->trace=scene_probe_trace;
  mutex_unlock(&endpoint_lock);mutex_unlock(&scene_probe_lock);return error;
 }
@@ -244,4 +250,47 @@ int remesa_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *
   selected=(struct scene_probe_selection){p->packet,p->packet_bytes,17,p->bindings};
  }
  return scene_probe_execute_selected(dev,file,r,r?r->ids:NULL,&selected);
+}
+
+/* Separate wire ABI. Both protocols share source leases, admission, trace lock
+ * and the single consumed attempt. The caller never supplies a descriptor. */
+int remesa_gears_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+{
+ struct remesa_gears_scene_probe_request *r=data;
+ struct remesa_scene_probe_request normalized={0};struct scene_probe_selection selected;
+ const struct remesa_gears_scene_probe_profile *profile;u32 ids[18];unsigned i;int error;
+ BUILD_BUG_ON(sizeof(*r)!=152);BUILD_BUG_ON(offsetof(struct remesa_gears_scene_probe_request,operation)!=96);
+ BUILD_BUG_ON(sizeof(gears_scene_probe_profiles)/sizeof(gears_scene_probe_profiles[0])!=REMESA_GEARS_SCENE_PROFILE_COUNT);
+ if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
+ if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
+ if(!remesa_gears_scene_probe_request_valid(r))return -EINVAL;
+ normalized.version=2;normalized.profile=r->profile;normalized.context=r->context;normalized.budget_ms=r->budget_ms;
+ for(i=0;i<18;i++)ids[i]=r->ids[i];
+ memcpy(normalized.ids,ids,sizeof(normalized.ids));
+ profile=&gears_scene_probe_profiles[r->profile-1];
+ selected=(struct scene_probe_selection){profile->packet,profile->packet_bytes,18,profile->bindings};
+ error=scene_probe_execute_selected(dev,file,&normalized,ids,&selected);
+ if(error)return error;
+ /* Explicit field translation: the two wire result offsets differ. */
+ r->operation=normalized.operation;r->cookie=normalized.cookie;r->core=normalized.core;
+ r->revision=normalized.revision;r->pds_base=normalized.pds_base;r->phase=normalized.phase;
+ r->ledger=normalized.ledger;r->error=normalized.error;r->retained=normalized.retained;r->stages=normalized.stages;
+ return 0;
+}
+int remesa_gears_scene_trace_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+{
+ struct remesa_gears_scene_trace_request *r=data;int error=0;
+ BUILD_BUG_ON(sizeof(*r)!=4296);BUILD_BUG_ON(sizeof(r->trace)!=4280);
+ BUILD_BUG_ON(offsetof(struct remesa_gears_scene_trace,last_binding)!=4256);
+ if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
+ if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
+ if(!remesa_gears_scene_trace_request_valid(r))return -EINVAL;
+ mutex_lock(&scene_probe_lock);mutex_lock(&endpoint_lock);
+ if(!endpoint||endpoint->dev!=dev||endpoint->file!=file||endpoint->private_device_lost||endpoint->context!=r->context)error=-EACCES;
+ else if(!scene_probe_trace.version||scene_probe_trace.context!=r->context||scene_probe_trace_protocol!=2)error=-ENODATA;
+ else if(scene_probe_trace.binding_count>18)error=-EOVERFLOW;
+ else{
+  r->trace.prefix=scene_probe_trace;r->trace.last_binding=scene_probe_trace_last;
+ }
+ mutex_unlock(&endpoint_lock);mutex_unlock(&scene_probe_lock);return error;
 }

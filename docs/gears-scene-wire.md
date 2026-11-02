@@ -1,9 +1,10 @@
 # Separate 18-binding LAB wire format and userspace transport
 
 The gears scene now has a separate userspace wire definition and Linux
-transport. The original 17-binding UAPI remains unchanged. Kernel registration,
-the exact 18-binding catalogue and the physical collector are still required
-before this interface can be used on the Mini 12.
+transport. The original 17-binding UAPI remains unchanged. The separately
+[staged kernel handlers and positive-witness catalogue](gears-kernel-wire.md)
+now implement this format. The physical client, collector and recovery image
+still require qualification before using it on the Mini 12.
 
 The new request is 152 bytes, with 18 IDs, explicit zero input padding and
 the result beginning at offset 96. Its version is 2; selectors 1 and 2 are
@@ -51,15 +52,14 @@ all 18 zero/duplicate IDs, every trace input byte, local leases and aliases,
 last-owner corruption, response preservation, dispatch and protocol separation.
 The old wire sizes and all 31 protected evidence files are preserved.
 
-These tests model syscalls and do not open a device. They do not demonstrate
-a new GPU draw. The current module does not register these new commands; an
-unsupported ioctl is treated conservatively as entered uncertainty. Verify
-the matching module/catalogue before any physical attempt.
+These transport tests model syscalls and do not open a device. They do not
+demonstrate a new GPU draw. An unsupported ioctl is treated conservatively as
+entered uncertainty. Verify the matching staged module/catalogue before any
+physical attempt; compiling a module does not install it.
 
-Next connect the new ABI to the already validated shared controller, stage
-and register it separately, and provide complete versioned trace publication
-for both success and failure. Preserve the original ABI, ten profiles and
-single-attempt gates. Then qualify the native client with the preserved
+The kernel integration connects the ABI to the shared controller and provides
+versioned trace publication for success and failure, preserving the original
+ABI, ten profiles and single-attempt gates. Next qualify the native client with the preserved
 positive geometry/coefficient witness and independently pinned oracles before
 fresh recoverable hardware tests. Ordinary OpenGL/GLES admission and complete
 driver installation remain separate unfinished work.
