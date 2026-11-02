@@ -57,6 +57,7 @@ separate qualified transport/profile/client/oracle set must precede a fresh
 recoverable Mini 12 experiment. The canonical program and preserved positive
 geometry/coefficient witness should be reused.
 
-This does not yet add context-level submission for the new profile, ordinary
-OpenGL/GLES admission, clipping/perspective/texture support or an installable
-complete driver. No FPS or physical qualification is claimed here.
+The [shared fence submission integration](bound-gears-submit.md) now provides
+context-level submission for this explicit profile. Ordinary OpenGL/GLES
+admission, clipping/perspective/texture support and an installable complete
+driver remain unfinished. No FPS or physical qualification is claimed here.

@@ -162,6 +162,12 @@ int remesa_context_prepare_gears_attribute_scene(struct pipe_context *,
 int remesa_context_submit_linked_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
+/* Canonical gears counterpart: same shared COLOR/Z/context fence and failure
+ * contract, using the explicit bound gears preparation. Native authentication
+ * remains mandatory; does not enable normal draw/caps or a kernel gate. */
+int remesa_context_submit_gears_attribute_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
 
 struct remesa_shader_host_pipeline_request;
 struct remesa_shader_host_pipeline;
