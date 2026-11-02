@@ -16,6 +16,17 @@ static bool automatic_context;
 static unsigned frontend_case,vertex_attempt;
 static void *(*original_vs)(struct pipe_context *,const struct pipe_shader_state *);
 static void *(*original_raster)(struct pipe_context *,const struct pipe_rasterizer_state *);
+static void (*original_clear)(struct pipe_context *,unsigned,const struct pipe_scissor_state *,const union pipe_color_union *,double,unsigned);
+static unsigned observed_clear_mask;
+static void observe_clear(struct pipe_context *ctx,unsigned mask,const struct pipe_scissor_state *scissor,
+ const union pipe_color_union *color,double depth,unsigned stencil)
+{
+ observed_clear_mask|=mask;
+ original_clear(ctx,mask,scissor,color,depth,stencil);
+ printf("FIXED_CLEAR case=%u mask=%x depth=%g error=%d CPU_clears=%llu\n",frontend_case,mask,depth,
+  remesa_context_error(ctx),(unsigned long long)remesa_context_cpu_clear_count(ctx));
+}
+
 static void *observe_raster(struct pipe_context *ctx,const struct pipe_rasterizer_state *state)
 {
  void *result=original_raster(ctx,state);
@@ -75,6 +86,7 @@ static struct pipe_context *create_enabled(struct pipe_screen *screen,void *priv
  struct pipe_context *ctx=original_create(screen,priv,flags);CHECK(ctx);
  CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==(automatic_context?EALREADY:0));enabled_contexts++;original_vs=ctx->create_vs_state;ctx->create_vs_state=observe_vertex;
  original_raster=ctx->create_rasterizer_state;ctx->create_rasterizer_state=observe_raster;
+ original_clear=ctx->clear;ctx->clear=observe_clear;observed_clear_mask=0;
  return ctx;
 }
 
@@ -102,7 +114,7 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 {
  struct pipe_frontend_screen frontend={.screen=screen,.get_param=frontend_param};
  struct st_context_attribs attrs={.profile=API_OPENGL_COMPAT,.major=1,.minor=0,
-  .visual={.buffer_mask=ST_ATTACHMENT_FRONT_LEFT_MASK,.color_format=PIPE_FORMAT_B8G8R8A8_UNORM,
+  .visual={.buffer_mask=ST_ATTACHMENT_FRONT_LEFT_MASK|ST_ATTACHMENT_DEPTH_STENCIL_MASK,.color_format=PIPE_FORMAT_B8G8R8A8_UNORM,
    .depth_stencil_format=PIPE_FORMAT_Z24X8_UNORM}};
  enum st_context_error error=ST_CONTEXT_SUCCESS;
  struct st_context *st=st_api_create_context(&frontend,&attrs,&error,NULL);CHECK(st);
@@ -120,6 +132,8 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  REMESA_GL_PROC(void,glNormalPointer,(GLenum,GLsizei,const void *));
  REMESA_GL_PROC(void,glEnableClientState,(GLenum));REMESA_GL_PROC(void,glDrawArrays,(GLenum,GLint,GLsizei));
  REMESA_GL_PROC(void,glFlush,(void));REMESA_GL_PROC(GLenum,glGetError,(void));
+ REMESA_GL_PROC(void,glClear,(GLbitfield));REMESA_GL_PROC(void,glClearColor,(GLfloat,GLfloat,GLfloat,GLfloat));
+ REMESA_GL_PROC(void,glClearDepth,(GLdouble));
 #undef REMESA_GL_PROC
  const char *witness=getenv("REMESA_BOUND_GEARS_WITNESS_DIR");CHECK(witness);
  GLfloat coefficients[36],vertices[3][8];char path[4096];
@@ -141,6 +155,11 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  glVertexPointer(4,GL_FLOAT,sizeof vertices[0],vertices);
  glNormalPointer(GL_FLOAT,sizeof vertices[0],vertices[0]+4);
  glEnableClientState(GL_VERTEX_ARRAY);glEnableClientState(GL_NORMAL_ARRAY);
+ glClearColor(0,0,0,0);glClearDepth(1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+ CHECK(!remesa_context_error(st->pipe)&&!remesa_context_cpu_clear_count(st->pipe));
+ CHECK(remesa_resource_wait_writer(st->pipe,color,0)==EBUSY);
+ printf("FIXED_CLEAR_MASK case=%u observed=%x expected=%x depth_wait=%d\n",frontend_case,observed_clear_mask,PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH,remesa_resource_wait_writer(st->pipe,depth,0));
+ fflush(stdout);CHECK(remesa_resource_wait_writer(st->pipe,depth,0)==EBUSY);
  glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  struct remesa_shader_compile_status vs={0},fs={0};
  (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_VERTEX,&vs);

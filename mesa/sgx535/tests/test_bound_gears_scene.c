@@ -173,6 +173,15 @@ int main(int argc,char **argv)
   puts("PASS homogeneous context refuses missing/invalid/overridden bound state before resource IO or dispatch; GPU0");return 0;
  }
 #endif
+ #ifdef REMESA_BOUND_GEARS_DRAW_VBO
+ if(mode!=6){
+  union pipe_color_union zero={0};unsigned before=f.cpu_maps;
+  ctx->clear(ctx,PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH,NULL,&zero,1,0);
+  CHECK(!remesa_context_error(ctx)&&f.cpu_maps==before&&!remesa_context_cpu_clear_count(ctx));
+  CHECK(remesa_resource_wait_writer(ctx,color,0)==EBUSY);
+  CHECK(remesa_resource_wait_writer(ctx,depth,0)==EBUSY);
+ }
+#endif
  struct remesa_scene_capture capture={0},saved=capture;unsigned creates=f.creates,maps=f.cpu_maps;
  void *aliases[]={ctx,vs,fs,el,color,depth,vb,&info,&draw,&options};
  for(unsigned a=0;a<sizeof aliases/sizeof aliases[0];a++)CHECK(bound_prepare_scene(ctx,&info,&draw,&options,aliases[a])==EINVAL);
@@ -203,7 +212,13 @@ int main(int argc,char **argv)
 #endif
  if(mode==14){
   CHECK(bound_execute_scene(ctx,&info,&draw,&options,&fence)==EOPNOTSUPP&&!fence&&bound_submit_calls==1);
-  CHECK(!remesa_resource_wait_writer(ctx,color,0)&&!remesa_resource_wait_writer(ctx,depth,0));bound_submit_mode=0;
+  #ifdef REMESA_BOUND_GEARS_DRAW_VBO
+  CHECK(remesa_resource_wait_writer(ctx,color,0)==EBUSY&&remesa_resource_wait_writer(ctx,depth,0)==EBUSY);
+  ctx->flush(ctx,&fence,0);CHECK(!fence&&remesa_context_error(ctx)==ENOTSUP);
+#else
+  CHECK(!remesa_resource_wait_writer(ctx,color,0)&&!remesa_resource_wait_writer(ctx,depth,0));
+#endif
+  bound_submit_mode=0;
  }
  int error=bound_execute_scene(ctx,&info,&draw,&options,&fence);
  if(mode==13||mode==15||mode==16){

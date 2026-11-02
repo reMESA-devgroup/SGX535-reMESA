@@ -73,3 +73,38 @@ data, frontend admission/lifetime tests and legacy regressions. These tests
 model GEM and native receipts and perform zero GPU operations. Earlier
 physical `glDrawArrays`, GLXGears and native homogeneous scene results remain
 valid within their recorded scopes.
+
+## Cold clear scheduling
+
+The explicit native draw adapter now queues a full-target zero COLOR / unit Z
+clear against fresh owned attachments. It reuses the clear already emitted by
+the native scene; it does not map or fill either attachment on the CPU. Both
+plans are validated before either resource acquires a pending owner. Partial,
+nonzero, stencil and load/preserve requests remain refused.
+
+Pending intent owns references independently of framebuffer bindings. Normal
+and unsynchronized CPU maps, transfer/native-copy access and other contexts
+cannot observe unissued pixels. A successful native submission consumes the
+intent only after its existing authenticated retirement/publication receipt.
+A definite nonissue keeps it pending for a safe later submission; uncertainty
+keeps the existing sticky failure and quarantine rules. Destroying the owning
+context cancels unissued intent and marks affected resources `ECANCELED`, so
+shared users cannot mistake old backing for cleared pixels.
+
+A flush containing only pending clear work returns no completion fence and
+records `ENOTSUP`: a standalone clear executor is still needed. It cannot reuse
+an older fence to claim completion. Existing draw/raster admission remains
+independent, and repeated passes with prior contents remain refused. This is
+an integration component, not a claim of complete GL clear semantics.
+
+The actual Mesa test calls `glClear(COLOR|DEPTH)` before `glDrawArrays` at both
+1280×800 and 640×640. It asserts zero CPU clears and blocked access to both
+supplied attachments. The drawable must declare
+`ST_ATTACHMENT_DEPTH_STENCIL_MASK`; without it Mesa can create an internal Z
+buffer instead of requesting the supplied one. The corrected fixture includes
+this attachment and preserves the failed diagnostic runs.
+
+Evidence: `/home/gama/sgx535-offline/native-clear-integration-20261102/v1`.
+All new runs are offline/GPU0. Successful modeled draws are compared against
+the unchanged direct-scene packet and all 13 READ images; earlier physical
+clear/submission evidence is preserved, not counted as a new API test.

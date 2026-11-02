@@ -72,6 +72,7 @@ struct resource {
  struct pipe_resource base; void *bo; size_t bytes; unsigned maps;unsigned stride;
  struct remesa_texture_layout layout;
  struct pipe_fence_handle *writer; int write_error; bool has_contents;
+ struct context *native_clear_owner; /* Unissued clear; never CPU-readable. */
  struct remesa_render_pass pass;struct remesa_pass_ticket ticket;
 };
 enum fixed_kind { FIXED_BLEND,FIXED_DSA,FIXED_RASTER,FIXED_COUNT };
@@ -95,6 +96,7 @@ struct context {
  int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies,native_fills;
  bool failed_submission;
  bool homogeneous_draw_lab;
+ struct pipe_resource *native_clear_color,*native_clear_depth;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
  struct remesa_draw_rejection_status draw_rejections;
@@ -175,7 +177,7 @@ static void set_capabilities(struct screen *sc)
  /* clear() clips and validates a rectangular CPU write after synchronizing
   * the resource writer. Let Mesa use that callback instead of lowering a
   * scissored clear to an unsupported shader draw. This is not a GPU clear. */
- caps.clear_scissored=true;
+ caps.clear_scissored=!sc->homogeneous_frontend_lab; /* Native cold clear is full-target only. */
  /* Position is a built-in VS output, not an interpolated user varying.
   * Fragment coordinates/interpolation are rejected by the NIR recognizer;
   * their convention flags must not advertise unqualified GPU semantics. */
@@ -314,7 +316,7 @@ static bool finish(struct pipe_screen *p,struct pipe_context *ctx,struct pipe_fe
  * writer belongs to the resource, not whichever context currently binds it.
  * Conservatively require CPU publication for both host access and reuse; no
  * inferred GPU-only visibility or implicit failure recovery is permitted. */
-static int resource_sync(struct pipe_screen *p,struct resource *b,uint64_t timeout)
+static int resource_sync_writer(struct pipe_screen *p,struct resource *b,uint64_t timeout)
 {
  int error;
  if(b->write_error) return b->write_error;
@@ -331,6 +333,26 @@ static int resource_sync(struct pipe_screen *p,struct resource *b,uint64_t timeo
   b->write_error=error;remesa_render_pass_fail(&b->pass,&b->ticket,error);
  }
  return error;
+}
+/* A queued clear has no published pixels or hardware fence yet. All other
+ * contexts and CPU/native transfer paths must wait for the owning draw. */
+static int resource_sync(struct pipe_screen *p,struct resource *b,uint64_t timeout)
+{
+ if(b->write_error)return b->write_error;
+ if(b->native_clear_owner)return EBUSY;
+ return resource_sync_writer(p,b,timeout);
+}
+static void finish_native_clear(struct context *ctx,bool cancelled)
+{
+ struct pipe_resource **slots[]={&ctx->native_clear_color,&ctx->native_clear_depth};
+ for(unsigned i=0;i<2;i++)if(*slots[i]){
+  struct resource *b=r(*slots[i]);
+  if(b->native_clear_owner==ctx){
+   if(cancelled&&!b->write_error)b->write_error=ECANCELED;
+   b->native_clear_owner=NULL;
+  }
+  remesa_resource_reference(slots[i],NULL);
+ }
 }
 static void invalidate_resource(struct pipe_context *p,struct pipe_resource *res)
 {
@@ -376,6 +398,7 @@ static void *map(struct pipe_context *p,struct pipe_resource *b,unsigned level,u
  /* Mesa's upload manager maps fresh/disjoint stream storage unsynchronized.
   * Never wait under that flag and never use it to ignore a retained writer:
   * reject instead, preserving publication, quarantine and backing ownership. */
+ if(r(b)->native_clear_owner){error=r(b)->write_error?r(b)->write_error:EBUSY;goto fail;}
  if(usage&PIPE_MAP_UNSYNCHRONIZED) {
   if(r(b)->writer||r(b)->write_error){error=r(b)->write_error?r(b)->write_error:EBUSY;goto fail;}
  } else {
@@ -1294,7 +1317,7 @@ static int texture_storage(void *owner,struct pipe_resource *resource,
  if(!resource || resource->screen!=screen || !out) return EINVAL;
  if(s(screen)->closing) return ESHUTDOWN;
  if(r(resource)->write_error) return r(resource)->write_error;
- if(r(resource)->maps) return EBUSY;
+ if(r(resource)->maps||r(resource)->native_clear_owner) return EBUSY;
  if(!r(resource)->bo || !r(resource)->pass.resource_cookie) return ESTALE;
  if(level>=r(resource)->layout.count)return EINVAL;
  const struct remesa_texture_level *mip=&r(resource)->layout.levels[level];
@@ -1752,8 +1775,15 @@ static int context_prepare_scene(struct pipe_context *p,
   state_error=window_viewport_request(ctx,24,&requested.state.viewport);
   if(state_error)return state_error;
  }
- int error=resource_sync(p->screen,color,UINT64_MAX);if(error)return error;
- error=resource_sync(p->screen,depth,UINT64_MAX);if(error)return error;
+ if(homogeneous){
+  if((color->native_clear_owner&&color->native_clear_owner!=ctx)||
+     (depth->native_clear_owner&&depth->native_clear_owner!=ctx)||
+     (ctx->native_clear_color&&ctx->native_clear_color!=ctx->target)||
+     (ctx->native_clear_depth&&ctx->native_clear_depth!=ctx->depth_target))return EBUSY;
+  if(depth->native_clear_owner&&requested.clear_depth!=1.0)return ENOTSUP;
+ }
+ int error=homogeneous?resource_sync_writer(p->screen,color,UINT64_MAX):resource_sync(p->screen,color,UINT64_MAX);if(error)return error;
+ error=homogeneous?resource_sync_writer(p->screen,depth,UINT64_MAX):resource_sync(p->screen,depth,UINT64_MAX);if(error)return error;
  struct remesa_shader_linkage link;error=remesa_context_shader_linkage_snapshot(p,&link);if(error)return error;
  if(gears){
   struct remesa_shader_selected_resources resources;
@@ -1889,7 +1919,9 @@ static int context_submit_scene(struct pipe_context *p,
  color->has_contents=depth->has_contents=true;
  f->refs=1;f->screen=sc;f->backend=backend;screen_hold(sc);
  fence_ref(p->screen,&color->writer,f);fence_ref(p->screen,&depth->writer,f);
- fence_ref(p->screen,&ctx->last,f);*out=f;return 0;
+ fence_ref(p->screen,&ctx->last,f);
+ if(homogeneous)finish_native_clear(ctx,false);
+ *out=f;return 0;
 }
 
 int remesa_context_submit_linked_scene(struct pipe_context *p,
@@ -1968,10 +2000,50 @@ static int clear_resource(struct pipe_context *p,struct pipe_resource *target,
  error=remesa_render_pass_cpu_write(&r(target)->pass);if(error){r(target)->write_error=error;return error;}
  r(target)->has_contents=true;++ctx->cpu_clears;return 0;
 }
+/* The native cold scene already clears COLOR=0 and Z=1 on the GPU.
+ * Record matching API intent without touching backing. An independently
+ * admitted draw must actually issue/retire that scene before publication. */
+static int queue_native_clear(struct context *ctx,unsigned buffers,
+ const struct pipe_scissor_state *scissor,const union pipe_color_union *color,double depth)
+{
+ struct pipe_screen *screen=ctx->base.screen;
+ if(s(screen)->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!buffers)return 0;
+ if(buffers&~(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))return ENOTSUP;
+ if(!ctx->target||!ctx->depth_target)return ENOTSUP;
+ unsigned w=ctx->target->width0,h=ctx->target->height0;
+ if(scissor&&(scissor->minx||scissor->miny||scissor->maxx!=w||scissor->maxy!=h))return ENOTSUP;
+ if((buffers&PIPE_CLEAR_DEPTH)&&depth!=1.0)return ENOTSUP;
+ if(buffers&PIPE_CLEAR_COLOR0){
+  if(!color)return EINVAL;
+  for(unsigned i=0;i<4;i++)if(color->f[i]!=0.0f)return ENOTSUP;
+ }
+ struct pipe_resource *targets[]={ctx->target,ctx->depth_target};
+ struct pipe_resource **slots[]={&ctx->native_clear_color,&ctx->native_clear_depth};
+ const unsigned masks[]={PIPE_CLEAR_COLOR0,PIPE_CLEAR_DEPTH};
+ /* Validate the whole pair before changing either pending owner/reference. */
+ for(unsigned i=0;i<2;i++){
+  struct resource *b=r(targets[i]);
+  if((*slots[i]&&*slots[i]!=targets[i])||
+     (b->native_clear_owner&&b->native_clear_owner!=ctx))return EBUSY;
+  if(b->write_error)return b->write_error;
+  if(b->maps)return EBUSY;
+  if(b->has_contents||b->writer)return ENOTSUP; /* Load/preserve is separate. */
+  struct remesa_render_pass pass=b->pass;struct remesa_pass_ticket ticket=b->ticket;
+  int error=remesa_render_pass_begin(&pass,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&ticket);
+  if(error)return error;
+ }
+ for(unsigned i=0;i<2;i++)if(buffers&masks[i]){
+  remesa_resource_reference(slots[i],targets[i]);r(targets[i])->native_clear_owner=ctx;
+ }
+ return 0;
+}
 static void clear(struct pipe_context *p,unsigned buffers,const struct pipe_scissor_state *scissor,
  const union pipe_color_union *color,double depth,unsigned stencil)
 {
  (void)stencil;struct context *ctx=c(p);
+ if(ctx->homogeneous_draw_lab){ctx->error=queue_native_clear(ctx,buffers,scissor,color,depth);return;}
  if(s(p->screen)->gears_runtime&&buffers){
   bool bad=(buffers&~(PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH))||ctx->gears_pending||ctx->gears_poisoned||!ctx->target||ctx->target->width0!=1280||ctx->target->height0!=800;
   if(scissor&&(scissor->minx||scissor->miny||scissor->maxx!=1280||scissor->maxy!=800))bad=true;
@@ -2004,6 +2076,7 @@ static void clear(struct pipe_context *p,unsigned buffers,const struct pipe_scis
 static void clear_target(struct pipe_context *p,struct pipe_surface *surface,
  const union pipe_color_union *color,unsigned x,unsigned y,unsigned width,unsigned height,bool conditional)
 {
+ if(c(p)->homogeneous_draw_lab){c(p)->error=ENOTSUP;return;}
  if(conditional||!surface||surface->context!=p||surface->format!=PIPE_FORMAT_B8G8R8A8_UNORM||
     surface->level||surface->first_layer||surface->last_layer||surface->nr_samples>1) {
   c(p)->error=ENOTSUP;return;
@@ -2364,6 +2437,13 @@ static int flush_gears(struct pipe_context *p)
 static void flush(struct pipe_context *p,struct pipe_fence_handle **f,unsigned flags)
 {
  (void)flags;
+ if(c(p)->native_clear_color||c(p)->native_clear_depth){
+  /* Standalone clear execution is not supplied by the cold draw executor.
+   * Never represent unissued clear work with an older completed fence. */
+  c(p)->error=c(p)->failed_submission?EOWNERDEAD:ENOTSUP;
+  if(f)fence_ref(p->screen,f,NULL);
+  return;
+ }
  if(s(p->screen)->gears_runtime){int error=flush_gears(p);if(error)c(p)->error=error;}
  /* A rejected, unissued draw does not cancel earlier work. Preserve its
   * real fence even when validation or a resource poll reports an error.
@@ -2373,6 +2453,7 @@ static void flush(struct pipe_context *p,struct pipe_fence_handle **f,unsigned f
 }
 static void destroy_context(struct pipe_context *p)
 { struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ finish_native_clear(ctx,true);
  if(ctx->gears_pending){
   int error=sc->device.gears_runtime->cancel(sc->device.priv,r(ctx->gears_target)->bo);
   if(error){ctx->error=error;ctx->failed_submission=true;return;}
