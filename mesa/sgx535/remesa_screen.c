@@ -1673,7 +1673,8 @@ done:
 
 static int context_prepare_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
- const struct remesa_linked_scene_request *options,bool gears,struct remesa_scene_capture *out)
+ const struct remesa_linked_scene_request *options,bool gears,bool homogeneous,
+ struct remesa_scene_capture *out)
 {
 #ifdef REMESA_WITH_NIR
  if(!p||p->draw_vbo!=draw||!info||!draw_info||!options||!out||
@@ -1701,7 +1702,7 @@ static int context_prepare_scene(struct pipe_context *p,
     (at<(uintptr_t)options+sizeof(*options)&&(uintptr_t)options<at+sizeof(*out)))return EINVAL;
  if(sc->closing)return ESHUTDOWN;
  if(!sc->linked_attachment_storage||!ctx->target||!ctx->depth_target)return ENOTSUP;
- const struct remesa_linked_scene_request requested=*options;
+ struct remesa_linked_scene_request requested=*options;
  const struct remesa_linked_geometry_input *g=&requested.geometry;
  if(requested.color||requested.depth||requested.width||requested.height||requested.color_pitch||requested.linkage||
     g->vertices||g->vertex_bytes||g->vertex_count||g->indices||g->index_bytes||g->index_count)return EINVAL;
@@ -1717,6 +1718,20 @@ static int context_prepare_scene(struct pipe_context *p,
  if(color->maps||depth->maps)return EBUSY;
  if(color->has_contents||depth->has_contents)return ENOTSUP;
  if(out->owner||out->serial||out->slot||out->reserved)return EBUSY;
+ if(homogeneous){
+  if(!gears)return EINVAL;
+  /* This mode obtains its coordinate/ISP contract from the bound context.
+   * Never let manual options disagree with the live fixed/viewport state. */
+  const struct remesa_isp_opaque_triangle_request *isp=&requested.state.isp;
+  const struct remesa_ta_window_viewport_request *v=&requested.state.viewport;
+  if(isp->depth_bits_present||isp->depth_test||isp->depth_write||isp->compare||isp->rgba_mask||
+     v->framebuffer_width||v->framebuffer_height||v->x||v->y||v->width||v->height||
+     v->depth_bits||v->near_z!=0||v->far_z!=0||v->path)return EINVAL;
+  int state_error=remesa_context_linked_isp_snapshot(p,&requested.state.isp);
+  if(state_error)return state_error;
+  state_error=window_viewport_request(ctx,24,&requested.state.viewport);
+  if(state_error)return state_error;
+ }
  int error=resource_sync(p->screen,color,UINT64_MAX);if(error)return error;
  error=resource_sync(p->screen,depth,UINT64_MAX);if(error)return error;
  struct remesa_shader_linkage link;error=remesa_context_shader_linkage_snapshot(p,&link);if(error)return error;
@@ -1740,7 +1755,8 @@ static int context_prepare_scene(struct pipe_context *p,
   request.color=color->bo;request.depth=depth->bo;request.width=ctx->target->width0;
   request.height=ctx->target->height0;request.color_pitch=color->stride/4;request.linkage=&link;
   request.geometry=(struct remesa_linked_geometry_input){.vertices=packed,.vertex_bytes=(size_t)view.vertex_count*48,.vertex_count=view.vertex_count};
-  error=remesa_persistent_gears_attribute_scene_prepare(&sc->device,&request,parameters,out);
+  error=homogeneous?remesa_persistent_gears_homogeneous_scene_prepare(&sc->device,&request,parameters,out):
+   remesa_persistent_gears_attribute_scene_prepare(&sc->device,&request,parameters,out);
  gears_done:
   if(parameters)sc->device.ops->destroy_bo(sc->device.priv,parameters);
   free(packed);remesa_gears_geometry_destroy(geometry);return error;
@@ -1759,21 +1775,26 @@ static int context_prepare_scene(struct pipe_context *p,
  }
  remesa_linked_vertex_inputs_destroy(owned);return error;
 #else
- (void)p;(void)info;(void)draw_info;(void)options;(void)gears;(void)out;return ENOTSUP;
+ (void)p;(void)info;(void)draw_info;(void)options;(void)gears;(void)homogeneous;(void)out;return ENOTSUP;
 #endif
 }
 int remesa_context_prepare_linked_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
-{return context_prepare_scene(p,info,draw_info,options,false,out);}
+{return context_prepare_scene(p,info,draw_info,options,false,false,out);}
 int remesa_context_prepare_gears_attribute_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
-{return context_prepare_scene(p,info,draw_info,options,true,out);}
+{return context_prepare_scene(p,info,draw_info,options,true,false,out);}
+int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
+{return context_prepare_scene(p,info,draw_info,options,true,true,out);}
 
 static int context_submit_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
- const struct remesa_linked_scene_request *options,bool gears,struct pipe_fence_handle **out)
+ const struct remesa_linked_scene_request *options,bool gears,bool homogeneous,
+ struct pipe_fence_handle **out)
 {
  if(!p||p->draw_vbo!=draw||!info||!draw_info||!options||!out||
     (uintptr_t)out%_Alignof(void *)||!context_output_valid(c(p),out,sizeof(*out)))return EINVAL;
@@ -1807,7 +1828,7 @@ static int context_submit_scene(struct pipe_context *p,
  if(color==depth)return EINVAL;
  struct pipe_fence_handle *f=calloc(1,sizeof(*f));if(!f)return ENOMEM;
  struct remesa_scene_capture capture={0};
- int error=context_prepare_scene(p,info,draw_info,options,gears,&capture);
+ int error=context_prepare_scene(p,info,draw_info,options,gears,homogeneous,&capture);
  if(error){
   if(error==EOWNERDEAD){
    /* Preparation can itself lose ownership of a provider allocation. An
@@ -1854,11 +1875,15 @@ static int context_submit_scene(struct pipe_context *p,
 int remesa_context_submit_linked_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **out)
-{return context_submit_scene(p,info,draw_info,options,false,out);}
+{return context_submit_scene(p,info,draw_info,options,false,false,out);}
 int remesa_context_submit_gears_attribute_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **out)
-{return context_submit_scene(p,info,draw_info,options,true,out);}
+{return context_submit_scene(p,info,draw_info,options,true,false,out);}
+int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *p,
+ const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
+ const struct remesa_linked_scene_request *options,struct pipe_fence_handle **out)
+{return context_submit_scene(p,info,draw_info,options,true,true,out);}
 
 static void stencil_ref(struct pipe_context *p,const struct pipe_stencil_ref reference)
 { (void)reference;c(p)->error=0; /* All admitted DSA states disable stencil. */ }
@@ -2555,10 +2580,16 @@ int remesa_context_prepare_linked_scene(struct pipe_context *p,const struct pipe
 int remesa_context_prepare_gears_attribute_scene(struct pipe_context *p,const struct pipe_draw_info *i,
  const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct remesa_scene_capture *o)
 {(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
+int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *p,const struct pipe_draw_info *i,
+ const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct remesa_scene_capture *o)
+{(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
 int remesa_context_submit_linked_scene(struct pipe_context *p,const struct pipe_draw_info *i,
  const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct pipe_fence_handle **o)
 {(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
 int remesa_context_submit_gears_attribute_scene(struct pipe_context *p,const struct pipe_draw_info *i,
+ const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct pipe_fence_handle **o)
+{(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
+int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *p,const struct pipe_draw_info *i,
  const struct pipe_draw_start_count_bias *d,const struct remesa_linked_scene_request *r,struct pipe_fence_handle **o)
 {(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
 int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t bits,unsigned char out[28])

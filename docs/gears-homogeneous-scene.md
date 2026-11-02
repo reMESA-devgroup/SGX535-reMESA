@@ -66,3 +66,6 @@ placement and READ-image files are byte-identical to the actual Mesa/NIR i486
 outputs at each of the four sizes (`CAPTURE_EQUALITY.json`). These inputs test
 resource/command closure; their synthetic coefficients are not physical pixel
 oracles and must not be used as a hardware test catalogue.
+
+The subsequent bound context and shared-fence integration is described in
+[bound-gears-homogeneous.md](bound-gears-homogeneous.md).

@@ -152,6 +152,14 @@ int remesa_context_prepare_linked_scene(struct pipe_context *,
 int remesa_context_prepare_gears_attribute_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct remesa_scene_capture *);
+/* Homogeneous counterpart: options.state MUST be zero. Derives ISP from the
+ * bound opaque blend/DSA and MATRIX_WINDOW from the bound viewport, using
+ * existing snapshot validation before resource IO. Other options/ownership
+ * rules are unchanged. No CPU vertex transform or normal GL/caps admission.
+ */
+int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct remesa_scene_capture *);
 /* Explicit cold-scene execution using the same bound inputs as preparation.
  * Preallocates one fence shared by COLOR/Z and the context, reserves both pass
  * transitions before dispatch, and leaves resources unchanged on NOT_ISSUED.
@@ -166,6 +174,11 @@ int remesa_context_submit_linked_scene(struct pipe_context *,
  * contract, using the explicit bound gears preparation. Native authentication
  * remains mandatory; does not enable normal draw/caps or a kernel gate. */
 int remesa_context_submit_gears_attribute_scene(struct pipe_context *,
+ const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
+ const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
+/* Same shared fence/failure path with the bound homogeneous preparation.
+ * Requires a separately qualified matching native backend/catalogue. */
+int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
 
