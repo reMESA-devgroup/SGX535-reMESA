@@ -35,12 +35,14 @@ The new internal PDS producer profile is
 `REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_CLAMPED_PADDED3`. It retains the existing
 vertex PDS producer while checking its distinct committed/reserved USE sizes.
 The legacy state14 constructor refuses this profile; the explicit homogeneous
-state15 owner can prepare it. No kernel catalogue or execution gate is added.
-An internal PDS profile number is not a registered kernel test profile.
+state15 owner can prepare it. An internal PDS profile number is not a kernel
+test profile selector.
 
 The separate [kernel body/state validation](kernel-clamped-gears-admission.md)
-now recognizes CODE344 only with an authenticated state15 draw. Its offline
-coverage does not register a new LAB profile or authorize physical execution.
+now recognizes CODE344 only with an authenticated state15 draw. Separately,
+the [actual-API LAB catalogue](clamped-api-lab-catalogue.md) registers exact
+input candidates as wire selectors5/6. Neither change establishes physical
+qualification or removes the pending raster guard.
 
 ## Raster descriptors and execution
 

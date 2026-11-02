@@ -130,6 +130,10 @@ enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *,
  * kernel; registration is not physical qualification or general GL support. */
 enum remesa_dispatch remesa_linux_memory_gears_homogeneous_lab_dispatch(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Explicit actual-API CODE344/state15 profiles5/6, separately registered LAB
+ * candidates. Does not change the older dispatchers or raster admission. */
+enum remesa_dispatch remesa_linux_memory_gears_clamped_api_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *,
  struct remesa_gears_scene_probe_request *);
 /* Optional LAB query after authenticated retirement. One read-only ioctl, no

@@ -974,7 +974,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_stream_file_lost.inc', 'remesa_private_trusted_file_lost.inc',
                      'remesa_easter_egg.h', 'remesa_fixed_private.inc',
                      'remesa_scene_backend.h', 'remesa_scene_backend.inc', 'remesa_scene_source.inc', 'remesa_scene_backend_abi.c',
-                     'remesa_scene_probe.h', 'remesa_scene_probe.inc', 'remesa_scene_probe_profiles.h', 'remesa_gears_scene_probe_profiles.h', 'remesa_gears_homogeneous_probe_profiles.h', 'remesa_scene_probe_request.h']:
+                     'remesa_scene_probe.h', 'remesa_scene_probe.inc', 'remesa_scene_probe_profiles.h', 'remesa_gears_scene_probe_profiles.h', 'remesa_gears_homogeneous_probe_profiles.h', 'remesa_gears_clamped_api_probe_profiles.h', 'remesa_scene_probe_request.h']:
             components[name] = (additions / name).read_bytes()
         components['remesa_scene_probe_uapi.h'] = (root / 'include/remesa/scene_probe_uapi.h').read_bytes()
         components['remesa_gears_scene_probe_uapi.h'] = (root / 'include/remesa/gears_scene_probe_uapi.h').read_text().replace('"scene_probe_uapi.h"','"remesa_scene_probe_uapi.h"').encode()

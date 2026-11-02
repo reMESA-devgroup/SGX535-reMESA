@@ -16,6 +16,13 @@ def build(c):
  # Shared checks authenticate every owned image, overlap, packet/placement,
  # CODE320, dense coefficient source and raw PN packing before serialization.
  text=build_common(normalized)
+ validate_state15(c)
+ text=text.replace('REMESA_GEARS_SCENE_PROBE_PROFILES_H','REMESA_GEARS_HOMOGENEOUS_PROBE_PROFILES_H').replace('"remesa_scene_probe_profiles.h"','"remesa_gears_scene_probe_profiles.h"')
+ text='\n'.join(line for line in text.split('\n') if not line.startswith('struct remesa_gears_scene_probe_profile {'))
+ return text.replace('gears_scene_probe_packet_','gears_homogeneous_probe_packet_').replace(' gears_scene_probe_profiles[2]',' gears_homogeneous_probe_profiles[2]').replace('tools/remesa/build_gears_scene_probe_profiles.py','tools/remesa/build_gears_homogeneous_probe_profiles.py')
+
+def validate_state15(c):
+ """Check effective state15 independently of the selected vertex body."""
  for p in c['profiles']:
   w,h=map(int,p['size'].split('x'));packet=checked(p['packet_path'],p['packet_sha256'],2264);images={b['captured_handle']:(b,checked(b['path'],b['sha256'],b['allocation_bytes'])) for b in p['bindings'] if b['access']==1}
   states=[(b,data) for b,data in images.values() if struct.unpack_from('<I',data)[0]==0x1f41]
@@ -29,9 +36,6 @@ def build(c):
   if len([u for u in use if u[0]==b['captured_handle'] and u[1:3]==(64,16) and u[4]==0])!=1:raise ValueError('state15 auxiliary ownership')
   ta_id,ta_offset,ta_bytes=struct.unpack_from('<3I',packet,360);ta=images[ta_id][1]
   if ta_bytes!=104 or struct.unpack_from('<I',ta,ta_offset+56)[0]!=(0x40000000|((va+96)>>4)):raise ValueError('state15 TA reference')
- text=text.replace('REMESA_GEARS_SCENE_PROBE_PROFILES_H','REMESA_GEARS_HOMOGENEOUS_PROBE_PROFILES_H').replace('"remesa_scene_probe_profiles.h"','"remesa_gears_scene_probe_profiles.h"')
- text='\n'.join(line for line in text.split('\n') if not line.startswith('struct remesa_gears_scene_probe_profile {'))
- return text.replace('gears_scene_probe_packet_','gears_homogeneous_probe_packet_').replace(' gears_scene_probe_profiles[2]',' gears_homogeneous_probe_profiles[2]').replace('tools/remesa/build_gears_scene_probe_profiles.py','tools/remesa/build_gears_homogeneous_probe_profiles.py')
 
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--catalogue',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();text=build(json.loads(a.catalogue.read_text()))

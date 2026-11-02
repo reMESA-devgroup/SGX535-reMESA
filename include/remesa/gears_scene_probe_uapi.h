@@ -5,9 +5,11 @@
 /* Separate closed LAB ABI. Never reinterpret the old17-binding request or
  * its reserved words. Selectors1/2 retain the state14 catalogues; explicit
  * selectors3/4 select state15/W2 at1280x800/640x640 respectively.
+ * Selectors5/6 are separate actual-API CODE344/state15 LAB candidates at
+ * those sizes. Registration is not physical qualification or a FAST path.
  * Matching kernel registration/catalogues and physical qualification required.
  * No caller packet, VA, CODE, pointer or execution-evidence injection. */
-#define REMESA_GEARS_SCENE_PROFILE_COUNT 4u
+#define REMESA_GEARS_SCENE_PROFILE_COUNT 6u
 struct remesa_gears_scene_probe_request {
  __u32 version,profile;
  __u64 context;

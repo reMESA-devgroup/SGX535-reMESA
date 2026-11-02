@@ -138,7 +138,10 @@ int main(int argc,char **argv)
  u32 ids[18]={0};struct scene_probe_selection selected={0};
 #ifdef REMESA_SCENE_CONTROLLER_WIRE_V2
  CHECK(fault<OK_INIT);wire_mode=true;expected_count=18;request.version=2;request.profile=fault==OK640?2:1;
- #ifdef REMESA_SCENE_CONTROLLER_HOMOGENEOUS
+ #if defined(REMESA_SCENE_CONTROLLER_CLAMPED_API)
+ request.profile+=4;
+ const struct remesa_gears_scene_probe_profile *gear=&gears_clamped_api_probe_profiles[request.profile-5];
+ #elif defined(REMESA_SCENE_CONTROLLER_HOMOGENEOUS)
  request.profile+=2;
  const struct remesa_gears_scene_probe_profile *gear=&gears_homogeneous_probe_profiles[request.profile-3];
 #else

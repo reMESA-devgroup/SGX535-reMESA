@@ -373,6 +373,9 @@ enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *opaque,
 enum remesa_dispatch remesa_linux_memory_gears_homogeneous_lab_dispatch(void *opaque,
  const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
 {return gears_scene_lab_dispatch(opaque,submit,out,2);}
+enum remesa_dispatch remesa_linux_memory_gears_clamped_api_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{return gears_scene_lab_dispatch(opaque,submit,out,4);}
 int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *d,
  struct remesa_gears_scene_probe_request *out)
 {

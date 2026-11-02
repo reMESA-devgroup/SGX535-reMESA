@@ -10,11 +10,12 @@ def checked(path, digest, size=None):
   raise ValueError('changed input: '+str(path))
  return data
 
-def build(c):
+def build(c, *, code_bytes=320):
  if c.get('format')!='REMESA_BOUND_GEARS_POSITIVE_V1' or c.get('physical_qualification') is not False or c.get('GPU_operations')!=0:
   raise ValueError('not an unqualified bound positive-witness catalogue')
  witness=c['witness']
- code=checked(witness['code_path'],witness['code_sha256'],320)
+ if code_bytes not in (320,344):raise ValueError('unsupported selected CODE size')
+ code=checked(witness['code_path'],witness['code_sha256'],code_bytes)
  coeff=checked(witness['coefficient_path'],witness['coefficient_sha256'],144)
  vertices=checked(witness['vertices_path'],witness['vertices_sha256'],96)
  packed=b''.join(vertices[i*32:i*32+32]+bytes(16) for i in range(3))
@@ -39,7 +40,7 @@ def build(c):
    ids.append(rid);spans.append((va,va+n));addresses[rid]=va
    if access==1:images[rid]=checked(b['path'],b['sha256'],n)
   uses=[struct.unpack_from('<6I',packet,400+j*24) for j in range(11)]
-  vs=[u for u in uses if u[2]==320 and u[4]==0];params=[u for u in uses if u[2]==8 and u[4]==0]
+  vs=[u for u in uses if u[2]==code_bytes and u[4]==0];params=[u for u in uses if u[2]==8 and u[4]==0]
   if len(vs)!=1 or len(params)!=1:raise ValueError('selected VS/parameter entry missing')
   rid,offset,n,_,_,_=vs[0]
   if images[rid][offset:offset+n]!=code:raise ValueError('CODE differs from preserved witness')

@@ -72,7 +72,7 @@ int main(void)
  _Static_assert(sizeof(struct remesa_gears_scene_probe_request)==152,"request ABI");
  _Static_assert(sizeof(struct remesa_gears_scene_trace_request)==4296,"trace ABI");
  ops=remesa_linux_memory_ops();
- for(gears_profile=1;gears_profile<=4;gears_profile++)for(fault=0;fault<=25;fault++){
+ for(gears_profile=1;gears_profile<=REMESA_GEARS_SCENE_PROFILE_COUNT;gears_profile++)for(fault=0;fault<=25;fault++){
   struct remesa_linux_memory *d=gears_setup();struct remesa_scene_packet p=gears_packet();struct remesa_gears_scene_probe_request out;unsigned before=memcalls;
   assert(remesa_linux_memory_gears_scene_lab_response(d,&out)==ENODATA);
   int e=remesa_linux_memory_gears_scene_lab_submit(d,&p,gears_profile,1000,&out);
@@ -88,7 +88,7 @@ int main(void)
   }
  }
  fault=0;gears_profile=1;
- for(gears_profile=1;gears_profile<=4;gears_profile++)for(trace_fault=0;trace_fault<=27;trace_fault++){
+ for(gears_profile=1;gears_profile<=REMESA_GEARS_SCENE_PROFILE_COUNT;gears_profile++)for(trace_fault=0;trace_fault<=27;trace_fault++){
   struct remesa_linux_memory *d=gears_setup();struct remesa_scene_packet p=gears_packet();struct remesa_gears_scene_probe_request out;
   struct remesa_gears_scene_trace t,saved;memset(&t,0xa5,sizeof t);saved=t;
   assert(remesa_linux_memory_gears_scene_lab_trace(d,&t)==ENODATA&&!memcmp(&t,&saved,sizeof t)&&!trace_calls);
@@ -99,9 +99,9 @@ int main(void)
   gears_cleanup(d); /* Read-only diagnostics do not undo proven retirement. */
  }
  trace_fault=0;
- for(gears_profile=1;gears_profile<=4;gears_profile++)for(fault=0;fault<=25;fault++){
+ for(gears_profile=1;gears_profile<=REMESA_GEARS_SCENE_PROFILE_COUNT;gears_profile++)for(fault=0;fault<=25;fault++){
   struct remesa_linux_memory *d=gears_setup();struct remesa_scene_packet p=gears_packet();struct remesa_gpu_scene_submit job={77,19,&p};struct remesa_gpu_scene_receipt receipt={0},saved=receipt;
-  enum remesa_dispatch e=gears_profile<=2?remesa_linux_memory_gears_scene_lab_dispatch(d,&job,&receipt):remesa_linux_memory_gears_homogeneous_lab_dispatch(d,&job,&receipt);
+  enum remesa_dispatch e=gears_profile<=2?remesa_linux_memory_gears_scene_lab_dispatch(d,&job,&receipt):gears_profile<=4?remesa_linux_memory_gears_homogeneous_lab_dispatch(d,&job,&receipt):remesa_linux_memory_gears_clamped_api_lab_dispatch(d,&job,&receipt);
   assert(e==(fault?REMESA_ISSUANCE_AMBIGUOUS:REMESA_ISSUED)&&gears_calls==1);
   if(fault){assert(!memcmp(&receipt,&saved,sizeof receipt));remesa_linux_memory_forget(d);}
   else{assert(receipt.context==77&&receipt.operation==19&&receipt.retired&&receipt.published&&receipt.acknowledged);gears_cleanup(d);}
@@ -109,7 +109,7 @@ int main(void)
  fault=0;gears_profile=1;struct remesa_linux_memory *d=gears_setup();struct remesa_scene_packet p=gears_packet();struct remesa_gears_scene_probe_request out,saved;memset(&out,0xa5,sizeof out);saved=out;
  for(unsigned k=0;k<16;k++){
   struct remesa_scene_packet bad=p;unsigned profile=1,budget=1000;
-  switch(k){case 0:profile=0;break;case 1:profile=5;break;case 2:budget=0;break;case 3:budget=10001;break;case 4:bad.owner++;break;case 5:bad.serial=0;break;case 6:bad.bindings[17].id=900;break;case 7:bad.bindings[17].id=32;break;case 8:bad.controls.depth_finalize=0;break;case 9:bad.controls.ta_bytes=96;break;case 10:bad.controls.height=640;break;case 11:bad.use_count=10;break;case 12:bad.window_count=3;break;case 13:bad.binding_count=17;break;case 14:bad.controls.schema=1;break;case 15:bad.controls.width=800;break;}
+  switch(k){case 0:profile=0;break;case 1:profile=REMESA_GEARS_SCENE_PROFILE_COUNT+1;break;case 2:budget=0;break;case 3:budget=10001;break;case 4:bad.owner++;break;case 5:bad.serial=0;break;case 6:bad.bindings[17].id=900;break;case 7:bad.bindings[17].id=32;break;case 8:bad.controls.depth_finalize=0;break;case 9:bad.controls.ta_bytes=96;break;case 10:bad.controls.height=640;break;case 11:bad.use_count=10;break;case 12:bad.window_count=3;break;case 13:bad.binding_count=17;break;case 14:bad.controls.schema=1;break;case 15:bad.controls.width=800;break;}
   assert(remesa_linux_memory_gears_scene_lab_submit(d,&bad,profile,budget,&out)==EINVAL&&!memcmp(&out,&saved,sizeof out)&&!gears_calls);
  }
  assert(remesa_linux_memory_gears_scene_lab_submit(d,&p,1,1000,(void *)&p)==EINVAL);

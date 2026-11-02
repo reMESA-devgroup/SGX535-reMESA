@@ -7,6 +7,7 @@
 #include "remesa_scene_probe_profiles.h"
 #include "remesa_gears_scene_probe_profiles.h"
 #include "remesa_gears_homogeneous_probe_profiles.h"
+#include "remesa_gears_clamped_api_probe_profiles.h"
 #include "remesa_gears_scene_probe_envelope.h"
 #include "remesa_private_session.h"
 static DEFINE_MUTEX(scene_probe_lock);
@@ -263,7 +264,8 @@ int remesa_gears_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_
  BUILD_BUG_ON(sizeof(*r)!=152);BUILD_BUG_ON(offsetof(struct remesa_gears_scene_probe_request,operation)!=96);
  BUILD_BUG_ON((sizeof(gears_scene_probe_profiles)/sizeof(gears_scene_probe_profiles[0]))!=2);
  BUILD_BUG_ON((sizeof(gears_homogeneous_probe_profiles)/sizeof(gears_homogeneous_probe_profiles[0]))!=2);
- BUILD_BUG_ON(REMESA_GEARS_SCENE_PROFILE_COUNT!=4);
+ BUILD_BUG_ON((sizeof(gears_clamped_api_probe_profiles)/sizeof(gears_clamped_api_probe_profiles[0]))!=2);
+ BUILD_BUG_ON(REMESA_GEARS_SCENE_PROFILE_COUNT!=6);
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
  if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
  if(!remesa_gears_scene_probe_request_valid(r))return -EINVAL;
@@ -271,7 +273,8 @@ int remesa_gears_scene_probe_ioctl(struct drm_device *dev,void *data,struct drm_
  for(i=0;i<18;i++)ids[i]=r->ids[i];
  memcpy(normalized.ids,ids,sizeof(normalized.ids));
  profile=r->profile<=2?&gears_scene_probe_profiles[r->profile-1]:
-  &gears_homogeneous_probe_profiles[r->profile-3];
+  r->profile<=4?&gears_homogeneous_probe_profiles[r->profile-3]:
+  &gears_clamped_api_probe_profiles[r->profile-5];
  selected=(struct scene_probe_selection){profile->packet,profile->packet_bytes,18,profile->bindings};
  error=scene_probe_execute_selected(dev,file,&normalized,ids,&selected);
  if(error)return error;

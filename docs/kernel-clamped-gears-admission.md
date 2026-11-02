@@ -47,10 +47,11 @@ state14 with CODE344 and an inconsistent PDS count before backend stage0.
 Changing the eight spare USE bytes is accepted by the internal structural
 checker because those bytes are not instructions. This control does not
 exercise the separate closed LAB catalogue: its full READ-image hashes still
-apply, and the new captures are not registered there.
+apply, including to spare bytes.
 
 The model's execution/retirement callbacks are simulated. No GPU execution,
-pixel readback or new physical approval follows from these tests. The
-registered public profiles remain the four previous profiles, and the
-userspace pending-raster guard remains blocking. Physical testing needs a
-separate exact input catalogue and complete raster admission first.
+pixel readback or new physical approval follows from these tests. This
+component retained the four previous registered profiles. The subsequent
+[actual-API catalogue](clamped-api-lab-catalogue.md) adds separate selectors5/6;
+the userspace pending-raster guard remains blocking. Physical testing still
+needs complete raster admission first.
