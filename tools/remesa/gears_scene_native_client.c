@@ -12,6 +12,9 @@
 #include "remesa_linux_memory.h"
 #include "remesa_screen.h"
 #include "remesa_resource_ref.h"
+#ifdef REMESA_CAPTURED_SCENE_NATIVE
+#include "../../mesa/sgx535/remesa_present.h"
+#endif
 #include "scene_fixture.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
@@ -281,7 +284,26 @@ int main(int argc,char **argv)
 #endif
 
  struct pipe_fence_handle *fence=NULL;
-#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+#ifdef REMESA_CAPTURED_SCENE_NATIVE
+ struct remesa_scene_capture capture={0};
+ int e=remesa_context_prepare_gears_homogeneous_scene(ctx,&info,&draw,&options,&capture);
+ if(!e)e=remesa_context_submit_captured_scene(ctx,capture,&fence);
+ if(!e){
+  CHECK(fence&&screen->fence_finish(screen,ctx,fence,0));
+  OK(remesa_resource_wait_writer(ctx,color,0));OK(remesa_resource_wait_writer(ctx,depth,0));
+  size_t bytes=(size_t)width*height*4;void *pixels=malloc(bytes);CHECK(pixels);
+  e=remesa_present_snapshot(ctx,color,pixels,(size_t)width*4,bytes);
+  if(!e)output(out_dir,"RETAINED-COLOR-BGRA.bin",pixels,bytes);
+  free(pixels);
+ }
+ /* This client uses the acknowledged one-shot native callback, never an
+  * open general session. Its receipt covers CLOSE before capture release.
+  * Preserve uncertain ownership; no guessed cleanup after map/close failure. */
+ if(!e||(prepare_only&&e==EOPNOTSUPP)){
+  int release=remesa_persistent_scene_capture_release(&device,capture);
+  if(release)e=EOWNERDEAD;
+ }
+#elif defined(REMESA_GEARS_HOMOGENEOUS_NATIVE)
  int e=remesa_context_submit_gears_homogeneous_scene(ctx,&info,&draw,&options,&fence);
 #else
  int e=remesa_context_submit_gears_attribute_scene(ctx,&info,&draw,&options,&fence);

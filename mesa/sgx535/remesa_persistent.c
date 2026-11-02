@@ -3826,7 +3826,7 @@ static int scene_color_fault(struct persistent *d)
   if(d->buffers[i].live)quarantine(d,&d->buffers[i]);
  d->failed=true;return EOWNERDEAD;
 }
-static int scene_color_role(const struct scene_capture *c,const struct memory *b)
+static int scene_attachment_role(const struct scene_capture *c,const struct memory *b,uint32_t role)
 {
  unsigned matches=0;
  if(c->submitted||c->footprint.allocation_count>REMESA_PERSISTENT_BUFFERS)return EBUSY;
@@ -3835,11 +3835,31 @@ static int scene_color_role(const struct scene_capture *c,const struct memory *b
      c->footprint.allocations[i].gpu_va!=b->va||
      c->footprint.allocations[i].allocation_bytes!=b->allocated||
      c->footprint.allocations[i].logical_bytes>b->allocated||
-     c->footprint.allocations[i].roles!=REMESA_SCENE_REF_COLOR||
+     c->footprint.allocations[i].roles!=role||
      !(c->footprint.allocations[i].access&REMESA_ACCESS_WRITE))return EACCES;
   matches++;
  }
  return matches==1?0:EACCES;
+}
+static int scene_color_role(const struct scene_capture *c,const struct memory *b)
+{return scene_attachment_role(c,b,REMESA_SCENE_REF_COLOR);}
+int remesa_persistent_scene_capture_validate_attachments(const struct remesa_device *device,
+ struct remesa_scene_capture token,void *color,void *depth,uint32_t width,uint32_t height)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!color||!depth||color==depth)return EINVAL;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ int e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(c->submitted||c->read_color||d->dispatching)return EBUSY;
+ if(c->footprint.width!=width||c->footprint.height!=height)return EINVAL;
+ struct memory *attachments[2]={color,depth};
+ for(unsigned i=0;i<2;i++){
+  struct memory *b=attachments[i];unsigned matches=0;
+  if(!owns_memory(d,b))return EINVAL;
+  for(unsigned k=0;k<c->count;k++)if(c->held[k]==b)matches++;
+  if(matches!=1||!b->owner)return EACCES;
+  e=scene_attachment_role(c,b,i?REMESA_SCENE_REF_DEPTH:REMESA_SCENE_REF_COLOR);if(e)return e;
+ }
+ return 0;
 }
 int remesa_persistent_scene_color_map(struct remesa_device *device,
  struct remesa_scene_capture token,const void **out)

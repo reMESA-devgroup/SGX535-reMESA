@@ -1960,6 +1960,75 @@ int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *p,
  const struct remesa_linked_scene_request *options,struct remesa_scene_capture *out)
 {return context_prepare_scene(p,info,draw_info,options,true,true,out);}
 
+static int context_issue_capture(struct pipe_context *p,struct remesa_scene_capture capture,
+ bool keep,bool homogeneous,struct pipe_fence_handle *f,struct pipe_fence_handle **out)
+{
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ struct resource *color=r(ctx->target),*depth=r(ctx->depth_target);
+ struct remesa_render_pass cp=color->pass,zp=depth->pass;
+ struct remesa_pass_ticket ct=color->ticket,zt=depth->ticket;
+ int error=remesa_render_pass_begin(&cp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&ct);
+ if(!error)error=remesa_render_pass_begin(&zp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&zt);
+ if(!error)error=remesa_render_pass_submitted(&cp,&ct);
+ if(!error)error=remesa_render_pass_submitted(&zp,&zt);
+ void *backend=NULL;
+ if(!error)error=keep?remesa_persistent_scene_capture_submit_keep(&sc->device,capture,&backend):
+  sc->device.ops->submit_linked_scene(&sc->device,capture,&backend);
+ bool uncertain=error==EOWNERDEAD||(error&&backend)||(!error&&!backend);
+ if(error&&!uncertain){
+  int release=keep?0:sc->device.ops->release_linked_scene(&sc->device,capture);
+  if(release){error=EOWNERDEAD;uncertain=true;}
+  else {free(f);return error;}
+ }
+ if(uncertain){
+  error=EOWNERDEAD;ctx->failed_submission=true;
+  color->pass=cp;depth->pass=zp;color->ticket=ct;depth->ticket=zt;
+  color->write_error=depth->write_error=error;
+  (void)remesa_render_pass_fail(&color->pass,&color->ticket,error);
+  (void)remesa_render_pass_fail(&depth->pass,&depth->ticket,error);
+  if(backend)sc->device.ops->destroy_fence(sc->device.priv,backend);
+  free(f);ctx->error=error;return error;
+ }
+ color->pass=cp;depth->pass=zp;color->ticket=ct;depth->ticket=zt;
+ color->has_contents=depth->has_contents=true;
+ f->refs=1;f->screen=sc;f->backend=backend;screen_hold(sc);
+ fence_ref(p->screen,&color->writer,f);fence_ref(p->screen,&depth->writer,f);
+ fence_ref(p->screen,&ctx->last,f);
+ if(homogeneous)finish_native_clear(ctx,false);
+ *out=f;return 0;
+}
+static int captured_scene_error(struct context *ctx,int error)
+{
+ if(error==EOWNERDEAD){
+  ctx->failed_submission=true;ctx->error=error;
+  if(ctx->target)r(ctx->target)->write_error=error;
+  if(ctx->depth_target)r(ctx->depth_target)->write_error=error;
+ }
+ return error;
+}
+int remesa_context_submit_captured_scene(struct pipe_context *p,
+ struct remesa_scene_capture capture,struct pipe_fence_handle **out)
+{
+ if(!p||p->draw_vbo!=draw||!out||(uintptr_t)out%_Alignof(void *)||
+    !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ int error=remesa_persistent_shader_output_check(&sc->device,out,sizeof(*out));if(error)return error;
+ if(*out)return EBUSY;
+ if(sc->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!sc->linked_attachment_storage||!ctx->target||!ctx->depth_target)return ENOTSUP;
+ struct resource *color=r(ctx->target),*depth=r(ctx->depth_target);
+ if(color->maps||depth->maps||color->native_clear_owner||depth->native_clear_owner)return EBUSY;
+ if(ctx->target->width0!=ctx->depth_target->width0||ctx->target->height0!=ctx->depth_target->height0)return EINVAL;
+ error=remesa_persistent_scene_capture_validate_attachments(&sc->device,capture,color->bo,depth->bo,
+  ctx->target->width0,ctx->target->height0);
+ if(error)return captured_scene_error(ctx,error);
+ error=resource_sync_writer(p->screen,color,UINT64_MAX);if(error)return captured_scene_error(ctx,error);
+ error=resource_sync_writer(p->screen,depth,UINT64_MAX);if(error)return captured_scene_error(ctx,error);
+ struct pipe_fence_handle *f=calloc(1,sizeof(*f));if(!f)return ENOMEM;
+ return context_issue_capture(p,capture,true,false,f,out);
+}
+
 static int context_submit_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,bool gears,bool homogeneous,
@@ -2009,38 +2078,7 @@ static int context_submit_scene(struct pipe_context *p,
  }
  /* Reserve on local copies: neither attachment may change if the second
   * reservation fails or the backend conclusively reports NOT_ISSUED. */
- struct remesa_render_pass cp=color->pass,zp=depth->pass;
- struct remesa_pass_ticket ct=color->ticket,zt=depth->ticket;
- error=remesa_render_pass_begin(&cp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&ct);
- if(!error)error=remesa_render_pass_begin(&zp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&zt);
- if(!error)error=remesa_render_pass_submitted(&cp,&ct);
- if(!error)error=remesa_render_pass_submitted(&zp,&zt);
- void *backend=NULL;
- if(!error)error=sc->device.ops->submit_linked_scene(&sc->device,capture,&backend);
- bool uncertain=error==EOWNERDEAD||(error&&backend)||(!error&&!backend);
- if(error&&!uncertain){
-  int release=sc->device.ops->release_linked_scene(&sc->device,capture);
-  if(release){error=EOWNERDEAD;uncertain=true;}
-  else {free(f);return error;}
- }
- if(uncertain){
-  error=EOWNERDEAD;ctx->failed_submission=true;
-  /* Even pre-issue ownership failure must prevent resource reuse. */
-  color->pass=cp;depth->pass=zp;
-  color->ticket=ct;depth->ticket=zt;
-  color->write_error=depth->write_error=error;
-  (void)remesa_render_pass_fail(&color->pass,&color->ticket,error);
-  (void)remesa_render_pass_fail(&depth->pass,&depth->ticket,error);
-  if(backend)sc->device.ops->destroy_fence(sc->device.priv,backend);
-  free(f);ctx->error=error;return error;
- }
- color->pass=cp;depth->pass=zp;color->ticket=ct;depth->ticket=zt;
- color->has_contents=depth->has_contents=true;
- f->refs=1;f->screen=sc;f->backend=backend;screen_hold(sc);
- fence_ref(p->screen,&color->writer,f);fence_ref(p->screen,&depth->writer,f);
- fence_ref(p->screen,&ctx->last,f);
- if(homogeneous)finish_native_clear(ctx,false);
- *out=f;return 0;
+ return context_issue_capture(p,capture,false,homogeneous,f,out);
 }
 
 int remesa_context_submit_linked_scene(struct pipe_context *p,
@@ -2870,6 +2908,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+int remesa_context_submit_captured_scene(struct pipe_context *p,struct remesa_scene_capture c,struct pipe_fence_handle **o)
+{(void)p;(void)c;(void)o;return ENOTSUP;}
 int remesa_context_prepare_vertex_parameters(struct pipe_context *p,uint32_t bank,void **out)
 {(void)p;(void)bank;(void)out;return ENOTSUP;}
 int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *p,struct remesa_vertex_parameter_values *out)

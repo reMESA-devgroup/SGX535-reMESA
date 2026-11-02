@@ -170,6 +170,15 @@ int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *,
 int remesa_context_submit_linked_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
+/* Submit one already frozen persistent capture against its exact currently
+ * bound COLOR/DEPTH objects. Reuses normal pass/writer/context fences but
+ * keeps the capture on success and conclusive NOT_ISSUED. The native session
+ * must already be open; CLOSE acknowledgement precedes caller release.
+ * This does not rebuild inputs, consume queued clears, infer unchanged GL
+ * state or enable ordinary draws/caps. Rejects mapped/mismatched attachments.
+ * Uncertainty poisons the same context/targets as ordinary scene submission. */
+int remesa_context_submit_captured_scene(struct pipe_context *,
+ struct remesa_scene_capture,struct pipe_fence_handle **);
 /* Canonical gears counterpart: same shared COLOR/Z/context fence and failure
  * contract, using the explicit bound gears preparation. Native authentication
  * remains mandatory; does not enable normal draw/caps or a kernel gate. */

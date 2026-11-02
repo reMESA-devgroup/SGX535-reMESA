@@ -944,6 +944,12 @@ int remesa_persistent_scene_capture_submit(struct remesa_device *,
  * External serialization includes submit, native session close and release. */
 int remesa_persistent_scene_capture_submit_keep(struct remesa_device *,
  struct remesa_scene_capture,void **fence);
+/* Pure host validation that these exact live COLOR and DEPTH BOs (not just
+ * caller-supplied IDs) are the frozen writable attachments of this capture.
+ * Requires matching dimensions/generations/extents and idle ownership; no
+ * allocation, map, native IO, publication or new execution authority. */
+int remesa_persistent_scene_capture_validate_attachments(const struct remesa_device *,
+ struct remesa_scene_capture,void *color,void *depth,uint32_t width,uint32_t height);
 /* Explicit CPU READ lease of the capture's exact COLOR allocation, after an
  * authenticated published keep-submit. Ordinary held-object maps remain
  * blocked. All captures sharing COLOR must agree on its role and be idle;
