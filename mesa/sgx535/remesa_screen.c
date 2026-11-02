@@ -91,7 +91,7 @@ struct resource {
  struct remesa_render_pass pass;struct remesa_pass_ticket ticket;
 };
 enum fixed_kind { FIXED_BLEND,FIXED_DSA,FIXED_RASTER,FIXED_COUNT };
-struct fixed { struct fixed *next; enum fixed_kind kind; bool deleted,scissor,depth_clip,full_clip,recording_edge_proof,native_raster_pending;
+struct fixed { struct fixed *next; enum fixed_kind kind; bool deleted,scissor,depth_clip,full_clip,recording_edge_proof,native_raster_pending,native_w2_raster;
  unsigned cull_face,depth_func;bool bottom_edge_rule,front_ccw,depth_clip_near,depth_clip_far,flat,flat_first,clamp_vertex_color,depth_enabled,depth_write; };
 struct elements { struct elements *next; struct pipe_vertex_element position,normal,light; unsigned count; bool deleted; };
 struct vertex { struct vertex *next; unsigned input_slot; bool deleted;
@@ -111,6 +111,7 @@ struct context {
  int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies,native_fills;
  bool failed_submission;
  bool homogeneous_draw_lab;
+ enum remesa_homogeneous_api_lab_profile homogeneous_api_lab;
  struct pipe_resource *native_clear_color,*native_clear_depth;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
@@ -1227,7 +1228,9 @@ static void *create_raster(struct pipe_context *p,const struct pipe_rasterizer_s
  if(s(p->screen)->homogeneous_frontend_lab&&state&&state->half_pixel_center){
   struct fixed *out=create_fixed(p,FIXED_RASTER,remesa_validate_gears_rasterizer(state),state->scissor,
    state->depth_clip_near||state->depth_clip_far);
-  if(out){out->native_raster_pending=true;out->bottom_edge_rule=state->bottom_edge_rule;
+  if(out){out->native_raster_pending=true;
+   out->native_w2_raster=!remesa_validate_homogeneous_w2_rasterizer(state);
+   out->bottom_edge_rule=state->bottom_edge_rule;
    out->flat=state->flatshade;out->clamp_vertex_color=state->clamp_vertex_color;
    out->flat_first=state->flatshade_first;out->front_ccw=state->front_ccw;out->cull_face=state->cull_face;
    out->depth_clip_near=state->depth_clip_near;out->depth_clip_far=state->depth_clip_far;}
@@ -1869,6 +1872,30 @@ static int context_prepare_scene(struct pipe_context *p,
   error=remesa_context_gears_geometry_snapshot(p,info,draw_info,&geometry);if(error)return error;
   struct remesa_gears_geometry_view view;
   error=remesa_gears_geometry_inspect(geometry,&view);if(error)goto gears_done;
+  if(ctx->homogeneous_api_lab){
+   const struct fixed *raster=ctx->bound_fixed[FIXED_RASTER];
+   const struct remesa_ta_window_viewport_request *v=&requested.state.viewport;
+   const struct remesa_isp_opaque_triangle_request *isp=&requested.state.isp;
+   if(!homogeneous||ctx->homogeneous_api_lab!=REMESA_HOMOGENEOUS_API_W2_CLAMPED||
+      !raster||ctx->invalid_fixed[FIXED_RASTER]||!raster->native_w2_raster||
+      remesa_shader_ir_gears_vertex_clamped(&link.vertex.semantic)||
+      remesa_shader_ir_fragment_color_input(&link.fragment.semantic)||
+      requested.clear_depth!=1||ctx->native_clear_color!=ctx->target||
+      ctx->native_clear_depth!=ctx->depth_target||
+      v->x||v->y||v->width!=v->framebuffer_width||v->height!=v->framebuffer_height||
+      v->depth_bits!=24||v->near_z!=0||v->far_z!=1||v->path!=REMESA_TA_VIEWPORT_MATRIX_WINDOW||
+      !isp->depth_bits_present||!isp->depth_test||!isp->depth_write||
+      isp->compare!=REMESA_DEPTH_LESS||isp->rgba_mask!=15){error=ENOTSUP;goto gears_done;}
+   /* Authenticate the finite clip/edge recipe before allocating native
+    * program/parameter/geometry owners. This does not evaluate vertices. */
+   const struct remesa_pds_parameter_source_request source_request={0x20000000,4096,0,36,40};
+   uint8_t source[160];size_t written=0;
+   error=remesa_context_vertex_parameter_source(p,&source_request,source,sizeof source,&written);
+   if(error)goto gears_done;
+   if(written!=sizeof source){error=EPROTO;goto gears_done;}
+   error=remesa_admit_homogeneous_w2_inputs(view.vertices,view.bytes,source+4,144,
+    ctx->target->width0,ctx->target->height0);if(error)goto gears_done;
+  }
   if(view.normal_from_attribute!=1||view.stride_dwords!=8||!view.vertex_count||view.vertex_count>65535||
      view.bytes!=(size_t)view.vertex_count*32){error=ENOTSUP;goto gears_done;}
   packed=calloc(view.vertex_count,48);if(!packed){error=ENOMEM;goto gears_done;}
@@ -2025,6 +2052,23 @@ int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *p)
  ctx->homogeneous_draw_lab=true;return 0;
 #else
  (void)p;return ENOTSUP;
+#endif
+}
+int remesa_context_enable_homogeneous_api_lab(struct pipe_context *p,
+ enum remesa_homogeneous_api_lab_profile profile)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw)return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(profile!=REMESA_HOMOGENEOUS_API_W2_CLAMPED||!sc->homogeneous_frontend_lab||
+    !ctx->homogeneous_draw_lab)return ENOTSUP;
+ if(ctx->homogeneous_api_lab)return EALREADY;
+ int error=remesa_persistent_native_scene_ready(&sc->device);if(error)return error;
+ ctx->homogeneous_api_lab=profile;return 0;
+#else
+ (void)p;(void)profile;return ENOTSUP;
 #endif
 }
 
@@ -2256,7 +2300,11 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
   struct fixed *state=ctx->bound_fixed[FIXED_RASTER];
   /* The closed native scene has no cull/scissor/clip lowering. Never ignore
    * an API raster state merely because its shader/geometry is recognized. */
-  if(state&&(state->native_raster_pending||state->scissor||state->cull_face||state->depth_clip||state->flat||
+  if(state&&state->native_raster_pending){
+   /* Only the explicit finite API route may proceed. Its complete bound
+    * shader/input/viewport/ISP/clear contract is checked in preparation. */
+   if(ctx->homogeneous_api_lab!=REMESA_HOMOGENEOUS_API_W2_CLAMPED||!state->native_w2_raster)goto done;
+  }else if(state&&(state->scissor||state->cull_face||state->depth_clip||state->flat||
      state->front_ccw||state->bottom_edge_rule||state->clamp_vertex_color))goto done;
   err=remesa_sampler_draw_admit(ctx->samplers);if(err)goto done;
   err=remesa_texture_draw_admit(ctx->textures);if(err)goto done;
@@ -2837,6 +2885,8 @@ int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t bits,u
 {(void)p;(void)bits;(void)out;return ENOTSUP;}
 int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *p)
 {(void)p;return ENOTSUP;}
+int remesa_context_enable_homogeneous_api_lab(struct pipe_context *p,enum remesa_homogeneous_api_lab_profile profile)
+{(void)p;(void)profile;return ENOTSUP;}
 int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}

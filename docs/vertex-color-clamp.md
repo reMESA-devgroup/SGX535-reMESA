@@ -50,8 +50,10 @@ The explicit homogeneous frontend can retain a supported OpenGL raster
 descriptor and use its clamp request in the effective shader snapshot. These
 descriptors are marked pending. The normal draw guard refuses that class
 before scene allocation or dispatch, including a half-center descriptor with
-the other guard bits zero. Retaining API state is separate from establishing
-the complete sampling, edge, clipping and culling contract.
+the other guard bits zero. The separate [finite API raster
+contract](homogeneous-api-raster.md) admits only the explicitly enabled sealed
+W2 recipe; retaining a descriptor alone never establishes draw admission or
+general sampling, edge, clipping and culling support.
 
 The old GLXGears runtime, default screens, previously qualified CODE320 and
 physical OpenGL/GLX tests are preserved. The new frontend still does not claim

@@ -33,9 +33,11 @@ The new userspace adapter is
 the previous adapters continue selecting1/2 and3/4. This adapter performs no
 pixel checks or hashing and cannot enable a kernel gate. Registration does
 not activate it on ordinary screens or FAST frames. The frontend's
-`native_raster_pending` guard is unchanged and still refuses the pending API
-raster class. A complete typed raster contract is the next prerequisite to
-executing this API recipe on hardware.
+pending raster class remains refused by default. The subsequent
+[finite API raster contract](homogeneous-api-raster.md) requires separate
+context-local enabling and authenticates its bound recipe before native owner
+allocation. The real Linux/GEM API client and physical qualification remain
+required before claiming execution of this new recipe.
 
 Offline evidence is under
 `/home/gama/sgx535-offline/clamped-api-catalogue-20261102/v1`.

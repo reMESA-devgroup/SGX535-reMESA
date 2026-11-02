@@ -8,6 +8,9 @@ int main(void)
  glsl_type_singleton_init_or_ref();
  CHECK(remesa_screen_enable_homogeneous_frontend_lab(NULL)==EINVAL);
  struct pipe_screen foreign={0};CHECK(remesa_screen_enable_homogeneous_frontend_lab(&foreign)==EINVAL);
+ CHECK(remesa_context_enable_homogeneous_api_lab(NULL,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==EINVAL);
+ struct pipe_context foreign_context={0};
+ CHECK(remesa_context_enable_homogeneous_api_lab(&foreign_context,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==EINVAL);
  struct remesa_device foreign_device={0};
  CHECK(remesa_persistent_native_scene_ready(NULL)==EINVAL);
  CHECK(remesa_persistent_native_scene_ready(&foreign_device)==EINVAL);
@@ -42,6 +45,7 @@ int main(void)
    CHECK(error==(mode==4?ESHUTDOWN:mode==2||mode==3?EBUSY:mode==11?EOPNOTSUPP:ENOTSUP));
    CHECK(!memcmp(&before,&screen->caps,sizeof before));
    CHECK(!memcmp(&vertex,&screen->shader_caps[PIPE_SHADER_VERTEX],sizeof vertex));
+   if(ctx)CHECK(remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==(mode==4?ESHUTDOWN:ENOTSUP));
   }else{
    CHECK(!error&&screen->caps.graphics&&!screen->caps.accelerated);
    CHECK(screen->caps.max_texture_2d_size==(mode==6?512:mode==7?32:2048));
@@ -51,6 +55,10 @@ int main(void)
    CHECK(remesa_screen_enable_homogeneous_frontend_lab(screen)==EALREADY);
    ctx=screen->context_create(screen,NULL,0);CHECK(ctx);
    CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==EALREADY);
+   CHECK(remesa_context_enable_homogeneous_api_lab(ctx,0)==ENOTSUP);
+   CHECK(remesa_context_enable_homogeneous_api_lab(ctx,2)==ENOTSUP);
+   CHECK(!remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED));
+   CHECK(remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==EALREADY);
    if(mode==10)CHECK(remesa_screen_enable_homogeneous_frontend_lab(screen)==EALREADY);
   }
   CHECK(f.creates==creates&&f.cpu_maps==maps&&!dispatch_calls);

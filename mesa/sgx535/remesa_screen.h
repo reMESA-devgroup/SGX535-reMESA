@@ -189,6 +189,11 @@ int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *,
  * backend is still required. Existing COLOR/Z contents remain unsupported.
  * No resource IO or submission occurs when enabling. Serialized API entry. */
 int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *);
+/* Explicit finite actual-OpenGL W2/CODE344 recipe, separate from default
+ * frontend admission. Still needs a matching gated native LAB backend. */
+enum remesa_homogeneous_api_lab_profile { REMESA_HOMOGENEOUS_API_W2_CLAMPED = 1 };
+int remesa_context_enable_homogeneous_api_lab(struct pipe_context *,
+ enum remesa_homogeneous_api_lab_profile);
 /* Before children/resources, after linked attachment storage admission.
  * Enables a named LAB frontend with the implemented P/N/COLOR0/coefficient
  * shader limits and bounded renderbuffer dimensions. New contexts opt into

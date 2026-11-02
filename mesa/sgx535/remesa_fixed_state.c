@@ -104,6 +104,60 @@ int remesa_validate_recording_window_rasterizer(const struct pipe_rasterizer_sta
    return remesa_validate_rasterizer(&ordinary);
 }
 
+int remesa_validate_homogeneous_w2_rasterizer(const struct pipe_rasterizer_state *s)
+{
+   if (!s) return EINVAL;
+   if (!s->half_pixel_center || !s->bottom_edge_rule || !s->front_ccw ||
+       !s->depth_clip_near || !s->depth_clip_far || !s->clamp_vertex_color ||
+       s->scissor) return ENOTSUP;
+   struct pipe_rasterizer_state ordinary = *s;
+   /* COLOR clamp is encoded by the separate CODE344 semantic variant.
+    * Closed W2 inputs are strictly inside clip space and have no sample-edge
+    * ties. Their proof is separate from this descriptor compatibility check. */
+   ordinary.half_pixel_center = ordinary.bottom_edge_rule = 0;
+   ordinary.clamp_vertex_color = 0;
+   return remesa_validate_rasterizer(&ordinary);
+}
+
+int remesa_admit_homogeneous_w2_inputs(const void *pn,size_t pn_bytes,
+                                      const void *coefficients,size_t coefficient_bytes,
+                                      uint32_t width,uint32_t height)
+{
+   /* Exact actual-API inputs preserved in the separate LAB catalogue.
+    * These are semantic admission data, not transformed vertices or pixels.
+    * Float bit comparisons preserve normal-w/alpha, NaNs and signed zero.
+    * No hashing, frame readback, shader encoding or vertex arithmetic. */
+   static const uint32_t vertices[24] = {
+      0x41040000,0x41040000,0x3f000000,0x3f800000,0,0,0x3f800000,0x3f800000,
+      0x41c20000,0x41040000,0x3f000000,0x3f800000,0,0,0x3f800000,0x3f800000,
+      0x41040000,0x41c20000,0x3f000000,0x3f800000,0,0,0x3f800000,0x3f800000
+   };
+   static const uint32_t constants[36] = {
+      0,0,0,0x3f800000,0,0x3f800000,0,0x3f800000,
+      0x3f800000,0,0,0x3f800000,0,0,0x3f800000,0x3f800000,
+      0x3b800000,0,0,0,0,0xbb800000,0,0,0,0,0,0,
+      0xc0000000,0x40001000,0,0x40000000,0,0,0x3f800000,0
+   };
+   if (!pn || !coefficients) return EINVAL;
+   if (pn_bytes != sizeof(vertices) || coefficient_bytes != sizeof(constants) ||
+       !((width == 1280 && height == 800) || (width == 640 && height == 640)))
+      return ENOTSUP;
+   if ((uintptr_t)pn > UINTPTR_MAX - pn_bytes ||
+       (uintptr_t)coefficients > UINTPTR_MAX - coefficient_bytes) return EINVAL;
+   for (unsigned i=0;i<24;i++) {
+      uint32_t bits;memcpy(&bits,(const unsigned char *)pn+4*i,4);
+      if (bits != vertices[i]) return ENOTSUP;
+   }
+   /* Parameter source bytes are little-endian, independently of host order. */
+   const unsigned char *c = coefficients;
+   for (unsigned i=0;i<36;i++) {
+      uint32_t bits=(uint32_t)c[4*i] | (uint32_t)c[4*i+1]<<8 |
+                    (uint32_t)c[4*i+2]<<16 | (uint32_t)c[4*i+3]<<24;
+      if (bits != constants[i]) return ENOTSUP;
+   }
+   return 0;
+}
+
 int remesa_prove_half_pixel_edge_independence(const float p[3][4],uint32_t width,uint32_t height)
 {
    int64_t xy[3][2];

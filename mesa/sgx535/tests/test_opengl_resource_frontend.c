@@ -20,6 +20,35 @@ static void *(*original_raster)(struct pipe_context *,const struct pipe_rasteriz
 static void (*original_clear)(struct pipe_context *,unsigned,const struct pipe_scissor_state *,const union pipe_color_union *,double,unsigned);
 static unsigned observed_clear_mask;
 static void *observed_raster;
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+static uint64_t api_va[64];
+static unsigned api_fault;
+static int api_record_mapping(void *priv,uint32_t id,uint64_t va,size_t bytes)
+{
+ int error=ops.gpu_map(priv,id,va,bytes);
+ CHECK(id&&id<=64);if(!error)api_va[id-1]=va;return error;
+}
+static enum remesa_dispatch api_native(void *priv,const struct remesa_gpu_scene_submit *submit,
+ struct remesa_gpu_scene_receipt *out)
+{
+ const struct remesa_scene_packet *p=submit->packet;
+ CHECK(remesa_scene_packet_valid(p)&&p->binding_count==18&&p->use_count==11);
+ CHECK(!dispatch_calls++);struct fixture *f=priv;
+ struct remesa_persistent_scene_footprint footprint={.owner=p->owner,.width=p->controls.width,
+  .height=p->controls.height,.allocation_count=18};
+ for(unsigned i=0;i<18;i++){
+  uint32_t id=p->bindings[i].id;struct backing *b=get(f,id);
+  CHECK(!b->lease&&api_va[id-1]);
+  footprint.allocations[i].handle=id;footprint.allocations[i].access=p->bindings[i].access;
+  footprint.allocations[i].gpu_va=api_va[id-1];footprint.allocations[i].allocation_bytes=b->length;
+  if(p->bindings[i].access!=REMESA_ACCESS_READ)
+   for(size_t j=0;j<b->length;j++)CHECK(b->bytes[j]==0xa5);
+ }
+ scene_capture_export(f,&footprint,p);
+ *out=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,
+  .retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
+}
+#endif
 static void observe_clear(struct pipe_context *ctx,unsigned mask,const struct pipe_scissor_state *scissor,
  const union pipe_color_union *color,double depth,unsigned stencil)
 {
@@ -137,6 +166,12 @@ static struct pipe_context *create_enabled(struct pipe_screen *screen,void *priv
 {
  struct pipe_context *ctx=original_create(screen,priv,flags);CHECK(ctx);
  CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==(automatic_context?EALREADY:0));enabled_contexts++;original_vs=ctx->create_vs_state;ctx->create_vs_state=observe_vertex;
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ if(frontend_case>=3){
+  CHECK(!remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED));
+  CHECK(remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==EALREADY);
+ }
+#endif
  original_raster=ctx->create_rasterizer_state;ctx->create_rasterizer_state=observe_raster;
  original_clear=ctx->clear;ctx->clear=observe_clear;observed_clear_mask=0;
  return ctx;
@@ -193,6 +228,10 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  FILE *file=fopen(path,"rb");CHECK(file&&fread(coefficients,1,sizeof coefficients,file)==sizeof coefficients&&fgetc(file)==EOF&&!fclose(file));
  CHECK(snprintf(path,sizeof path,"%s/vertices-source.bin",witness)>0);
  file=fopen(path,"rb");CHECK(file&&fread(vertices,1,sizeof vertices,file)==sizeof vertices&&fgetc(file)==EOF&&!fclose(file));
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ if(api_fault==1)vertices[0][0]+=.25f;
+ if(api_fault==2)coefficients[16]*=2;
+#endif
  const GLfloat one[4]={1,1,1,1},zero[4]={0,0,0,0};
  const GLfloat light[4]={coefficients[32],coefficients[33],coefficients[34],0};
  glMatrixMode(GL_MODELVIEW);glLoadIdentity();glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
@@ -204,6 +243,11 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  glLightfv(GL_LIGHT0,GL_SPECULAR,coefficients+12);glLightfv(GL_LIGHT0,GL_POSITION,light);
  glEnable(GL_LIGHTING);glEnable(GL_LIGHT0);glEnable(GL_NORMALIZE);glEnable(GL_DEPTH_TEST);glDisable(GL_DITHER);
  glViewport(0,0,color->width0,color->height0);CHECK(glGetError()==GL_NO_ERROR);
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ if(api_fault==3)glViewport(0,0,color->width0-1,color->height0);
+ if(api_fault==4)glEnable(GL_CULL_FACE);
+ if(api_fault==5)glDisable(GL_DEPTH_TEST);
+#endif
  glVertexPointer(4,GL_FLOAT,sizeof vertices[0],vertices);
  glNormalPointer(GL_FLOAT,sizeof vertices[0],vertices[0]+4);
  glEnableClientState(GL_VERTEX_ARRAY);glEnableClientState(GL_NORMAL_ARRAY);
@@ -212,23 +256,50 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  CHECK(remesa_resource_wait_writer(st->pipe,color,0)==EBUSY);
  printf("FIXED_CLEAR_MASK case=%u observed=%x expected=%x depth_wait=%d\n",frontend_case,observed_clear_mask,PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH,remesa_resource_wait_writer(st->pipe,depth,0));
  fflush(stdout);CHECK(remesa_resource_wait_writer(st->pipe,depth,0)==EBUSY);
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ unsigned before_draw_creates=fixture->creates;
+#endif
  glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  struct remesa_shader_compile_status vs={0},fs={0};
  (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_VERTEX,&vs);
  (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_FRAGMENT,&fs);
  printf("FIXED_GL version=%u GL_error=%u VS_attempts=%llu VS_error=%d FS_attempts=%llu FS_error=%d pipe=%d submissions=%u\n",
   st->ctx->Version,glGetError(),(unsigned long long)vs.attempts,vs.error,(unsigned long long)fs.attempts,fs.error,remesa_context_error(st->pipe),dispatch_calls);
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ (void)device;(void)fixture;
+ if(api_fault){
+  CHECK(remesa_context_error(st->pipe)==ENOTSUP&&!dispatch_calls&&fixture->creates==before_draw_creates);
+  CHECK(!remesa_context_cpu_clear_count(st->pipe));
+  printf("FIXED_API_REFUSAL case=%u fault=%u allocations=0 dispatches=0 GPU_operations=0\n",frontend_case,api_fault);
+ }else{
+ CHECK(!remesa_context_error(st->pipe)&&dispatch_calls==1&&!remesa_context_cpu_clear_count(st->pipe));
+ CHECK(!remesa_resource_wait_writer(st->pipe,color,0)&&!remesa_resource_wait_writer(st->pipe,depth,0));
+ struct pipe_fence_handle *fence=NULL;st->pipe->flush(st->pipe,&fence,0);
+ CHECK(fence&&screen->fence_finish(screen,st->pipe,fence,0));screen->fence_reference(screen,&fence,NULL);
+ /* A second draw cannot silently discard the first or reenter the backend. */
+ glDrawArrays(GL_TRIANGLES,0,3);glFlush();
+ CHECK(remesa_context_error(st->pipe)==ENOTSUP&&dispatch_calls==1);
+ printf("FIXED_API_NATIVE case=%u first_draw_retired=1 second_draw_refused=1 GPU_operations=0\n",frontend_case);
+ }
+#else
  inspect_fixed_inputs(st->pipe,device,fixture);
  CHECK(!dispatch_calls&&!remesa_context_cpu_clear_count(st->pipe));
+#endif
  st_api_make_current(NULL,NULL,NULL);st_destroy_context(st);
 }
 
 int main(void)
 {
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+ const char *fault=getenv("REMESA_TEST_API_FAULT");api_fault=fault?(unsigned)strtoul(fault,NULL,10):0;CHECK(api_fault<=5);
+#endif
  for(unsigned enable=0;enable<5;enable++) {
   frontend_case=enable;vertex_attempt=0;
   glsl_type_singleton_init_or_ref();
   struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+  dispatch_calls=0;memset(api_va,0,sizeof api_va);target_ops.gpu_map=api_record_mapping;
+#endif
   struct remesa_device device={0};
   struct remesa_persistent_config cfg={.ops=&target_ops,.priv=&f,.context=9600,
    .va_start=0x20000000,.va_end=0x45000000,.byte_budget=96u*1024u*1024u,
@@ -237,7 +308,11 @@ int main(void)
   cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};
   cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
   CHECK(!remesa_persistent_open(&device,&cfg));
+#ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+  CHECK(!remesa_persistent_set_native_scene(&device,api_native));
+#else
   CHECK(!remesa_persistent_set_native_scene(&device,context_native));
+#endif
   struct pipe_screen *screen=remesa_screen_create(&device);CHECK(screen);
   CHECK(!remesa_screen_enable_linked_attachment_storage(screen));
   CHECK(!screen->caps.graphics&&!screen->caps.accelerated);

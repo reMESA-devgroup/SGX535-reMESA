@@ -22,6 +22,13 @@ int remesa_validate_rasterizer(const struct pipe_rasterizer_state *);
 enum remesa_lab_raster_profile { REMESA_LAB_RASTER_QUARTER_FBO = 1 };
 int remesa_validate_lab_rasterizer(const struct pipe_rasterizer_state *,
                                   enum remesa_lab_raster_profile);
+/* Separate finite native W2/CODE344 API recipe. Geometry/constants/viewport
+ * must also match remesa_admit_homogeneous_w2_inputs and the caller's complete
+ * native contract; this does not establish general clipping/edge support. */
+int remesa_validate_homogeneous_w2_rasterizer(const struct pipe_rasterizer_state *);
+int remesa_admit_homogeneous_w2_inputs(const void *pn,size_t pn_bytes,
+                                     const void *coefficients,size_t coefficient_bytes,
+                                     uint32_t width,uint32_t height);
 /* Recording backend only. Requires a separate geometric proof for EVERY
  * submitted triangle; not a physical raster profile or GPU edge-rule encoder. */
 int remesa_validate_recording_window_rasterizer(const struct pipe_rasterizer_state *);
