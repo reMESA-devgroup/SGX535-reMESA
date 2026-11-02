@@ -54,3 +54,23 @@ These tests use modeled memory, completion receipts and initial allocation
 bytes. They do not render pixels or qualify physical execution, sustained FPS,
 complete GL2.1/GLES2 or an installable driver. The previous physical results
 continue to qualify only their recorded kernel, client and execution paths.
+
+The new unwrapped `captured_scene_native_client` subsequently passed one
+physical profile3 job at 1280x800. It prepares the same homogeneous Gallium/NIR
+scene as before, submits it through the new captured-scene frontend, waits on
+the shared pipe fence, and snapshots COLOR while the capture remains held.
+That snapshot exactly matches the independent COLOR oracle. Separate COLOR/Z24,
+all 13 READ inputs, three CPU/source owners, four guards, native control words,
+retirement, publication and cleanup passed the outer audit. Seven controls
+returned to N and stock recovery was verified.
+
+Evidence:
+`/home/gama/sgx535-offline/captured-scene-frontend-physical-20261102/v1-1280/FINAL_PHYSICAL_RESULT.json`.
+This qualifies this single captured frontend/retained READ path. It does not
+qualify the Linux general-session adapter, repeated physical frontend jobs,
+640x640 execution of this client, ordinary GL or sustained FPS.
+
+The optional build without Mesa headers also compiles after including the
+complete by-value capture token for its refusal stub. The qualified full-Mesa
+i486 screen object remains byte-identical, as recorded in
+`/home/gama/sgx535-offline/captured-scene-frontend-20261102/v2/FALLBACK_FIX_PROOF.json`.

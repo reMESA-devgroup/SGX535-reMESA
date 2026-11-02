@@ -2908,6 +2908,7 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+#include "remesa_persistent.h" /* Complete by-value capture token for the stub. */
 int remesa_context_submit_captured_scene(struct pipe_context *p,struct remesa_scene_capture c,struct pipe_fence_handle **o)
 {(void)p;(void)c;(void)o;return ENOTSUP;}
 int remesa_context_prepare_vertex_parameters(struct pipe_context *p,uint32_t bank,void **out)
