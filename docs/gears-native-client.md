@@ -76,3 +76,7 @@ validators, and source/guard/lifecycle requirements are pinned under
 `/home/gama/sgx535-offline/gears-pixel-oracles-20261102/v1/PRELAUNCH_ORACLES.json`.
 No new rasterizer or encoder was added to the driver. These calculations are
 LAB expectations and are never uploaded to the GPU or used for presentation.
+
+The physical boundary for this selected scene subsequently passed in both
+sizes. See [bound-gears-physical.md](bound-gears-physical.md) for the evidence,
+recovery status and remaining API/continuous-execution limitations.
