@@ -144,6 +144,9 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
  struct remesa_linux_memory *m=priv;CHECK(submit&&submit->packet&&submit->context==remesa_linux_memory_context(m));
  timings[1]=ns();check_placement(m,submit->packet);guards(m);dump_backing(m,submit->packet,false);timings[2]=ns();
  if(prepare_only)return REMESA_NOT_ISSUED;
+#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+ (void)receipt;return REMESA_NOT_ISSUED; /* No matching native catalogue yet. */
+#else
  enum remesa_dispatch result=remesa_linux_memory_gears_scene_lab_dispatch(m,submit,receipt);timings[3]=ns();
  struct remesa_gears_scene_probe_request response;int e=remesa_linux_memory_gears_scene_lab_response(m,&response);
  if(!e)output(out_dir,"RESPONSE.bin",&response,sizeof response);
@@ -167,9 +170,15 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
   dump_backing(m,submit->packet,true);timings[4]=ns();
  }
  return result;
+#endif
 }
 int main(int argc,char **argv)
 {
+#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+ if(argc!=6||strcmp(argv[5],"--prepare-only")){
+  fprintf(stderr,"homogeneous client supports --prepare-only until a matching native catalogue is qualified\n");return 2;
+ }
+#endif
  if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute"))){
   fprintf(stderr,"usage: gears_scene_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --prepare-only|--execute\n");return 2;
  }
@@ -185,6 +194,10 @@ int main(int argc,char **argv)
  struct pipe_context *ctx=screen->context_create(screen,NULL,0);CHECK(ctx);
  const struct pipe_framebuffer_state fb={.width=width,.height=height,.nr_cbufs=1,.cbufs={{.texture=color,.format=PIPE_FORMAT_B8G8R8A8_UNORM}},.zsbuf={.texture=depth,.format=PIPE_FORMAT_Z24X8_UNORM}};
  ctx->set_framebuffer_state(ctx,&fb);OK(remesa_context_error(ctx));
+#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+ const struct pipe_viewport_state viewport={.scale={width*.5f,-(float)height*.5f,.5f},.translate={width*.5f,height*.5f,.5f}};
+ ctx->set_viewport_states(ctx,0,1,&viewport);OK(remesa_context_error(ctx));
+#endif
  const struct pipe_blend_state blend={.rt={{.colormask=PIPE_MASK_RGBA}}};
  const struct pipe_depth_stencil_alpha_state less={.depth_enabled=true,.depth_writemask=true,.depth_func=PIPE_FUNC_LESS};
  void *bs=ctx->create_blend_state(ctx,&blend),*ds=ctx->create_depth_stencil_alpha_state(ctx,&less);CHECK(bs&&ds);
@@ -198,9 +211,18 @@ int main(int argc,char **argv)
  struct pipe_vertex_element elements[2]={0};for(unsigned i=0;i<2;i++){elements[i].src_format=PIPE_FORMAT_R32G32B32A32_FLOAT;elements[i].src_stride=32;elements[i].src_offset=i*16;}void *el=ctx->create_vertex_elements_state(ctx,2,elements);CHECK(el);ctx->bind_vertex_elements_state(ctx,el);
  struct pipe_draw_info info={.mode=MESA_PRIM_TRIANGLES,.instance_count=1};struct pipe_draw_start_count_bias draw={.count=3};
  struct remesa_linked_scene_request options={.state={.viewport={.framebuffer_width=width,.framebuffer_height=height,.width=width,.height=height,.depth_bits=24,.far_z=1,.path=REMESA_TA_VIEWPORT_INITIAL_ZERO}},.vertex_bank=4,.pixel_bank=3,.state_bank=4,.clear_depth=1};
+#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+ memset(&options.state,0,sizeof options.state);
+#else
  OK(remesa_context_linked_isp_snapshot(ctx,&options.state.isp));
+#endif
 
- struct pipe_fence_handle *fence=NULL;int e=remesa_context_submit_gears_attribute_scene(ctx,&info,&draw,&options,&fence);
+ struct pipe_fence_handle *fence=NULL;
+#ifdef REMESA_GEARS_HOMOGENEOUS_NATIVE
+ int e=remesa_context_submit_gears_homogeneous_scene(ctx,&info,&draw,&options,&fence);
+#else
+ int e=remesa_context_submit_gears_attribute_scene(ctx,&info,&draw,&options,&fence);
+#endif
  output(out_dir,"TIMES.bin",timings,sizeof timings);output(out_dir,"RESULT.bin",&e,sizeof e);
  if(!e||(prepare_only&&e==EOPNOTSUPP)){
   struct remesa_linux_memory_inventory remaining;struct remesa_memory_info info;

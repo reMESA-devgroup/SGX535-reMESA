@@ -98,6 +98,10 @@ int main(int argc,char **argv)
  struct pipe_shader_state sh={.type=PIPE_SHADER_IR_NIR,.ir.nir=mode==6?linked_shader(0):make(true,0)};
  void *vs=ctx->create_vs_state(ctx,&sh);CHECK(vs);ctx->bind_vs_state(ctx,vs);sh.ir.nir=linked_shader(1);void *fs=ctx->create_fs_state(ctx,&sh);CHECK(fs);ctx->bind_fs_state(ctx,fs);
  uint32_t coefficients[36],expected[36];for(unsigned i=0;i<36;i++)coefficients[i]=expected[i]=0x3f800000u+i*37;
+#ifdef REMESA_BOUND_GEARS_HOMOGENEOUS
+ const char *witness=getenv("REMESA_BOUND_GEARS_WITNESS_DIR");
+ if(witness){char path[4096];CHECK(snprintf(path,sizeof path,"%s/coefficients-source.bin",witness)>0);FILE *fp=fopen(path,"rb");CHECK(fp&&fread(coefficients,1,sizeof coefficients,fp)==sizeof coefficients&&fgetc(fp)==EOF&&!fclose(fp));memcpy(expected,coefficients,sizeof expected);}
+#endif
  struct pipe_resource *cb=NULL,*ib=NULL;
  const struct pipe_resource buffer={.target=PIPE_BUFFER,.format=PIPE_FORMAT_R8_UNORM,.bind=PIPE_BIND_VERTEX_BUFFER,.width0=96,.height0=1,.depth0=1,.array_size=1};
  if(mode!=7){
@@ -106,9 +110,12 @@ int main(int argc,char **argv)
   ctx->set_constant_buffer(ctx,PIPE_SHADER_VERTEX,0,false,&constant);CHECK(!remesa_context_error(ctx));
   if(mode==10)memset(coefficients,0,sizeof coefficients); /* Bind snapshot wins. */
  }
- const uint32_t raw[3][8]={{0x80000000,0x3f800000,0x3e000000,0x3f800000,0,0,0x3f800000,0},
+ uint32_t raw[3][8]={{0x80000000,0x3f800000,0x3e000000,0x3f800000,0,0,0x3f800000,0},
   {0x3f800000,0x80000000,0x3e000000,0x3f800000,0,0,0x3f800000,0},
   {0,0x3f000000,0x3e000000,0x3f800000,0,0,0x3f800000,0}};
+#ifdef REMESA_BOUND_GEARS_HOMOGENEOUS
+ if(witness){char path[4096];CHECK(snprintf(path,sizeof path,"%s/vertices-source.bin",witness)>0);FILE *fp=fopen(path,"rb");CHECK(fp&&fread(raw,1,sizeof raw,fp)==sizeof raw&&fgetc(fp)==EOF&&!fclose(fp));}
+#endif
  struct pipe_resource *vb=screen->resource_create(screen,&buffer);CHECK(vb);ctx->buffer_subdata(ctx,vb,0,0,sizeof raw,raw);
  struct pipe_vertex_buffer binding={.buffer.resource=vb};vb->reference.count++;ctx->set_vertex_buffers(ctx,1,&binding);
  struct pipe_vertex_element elements[2]={0};for(unsigned a=0;a<2;a++){elements[a].src_format=PIPE_FORMAT_R32G32B32A32_FLOAT;elements[a].src_stride=32;elements[a].src_offset=a*16;}
