@@ -22,6 +22,7 @@
 #include "../../mesa/sgx535/tests/authored_gears_vertex_nir_fixture.h"
 #endif
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
@@ -146,12 +147,68 @@ static void dump_backing(struct remesa_linux_memory *m,const struct remesa_scene
  CHECK(info.objects==22+REMESA_NATIVE_CLIENT_SOURCE_OWNERS&&info.pinned_objects==info.objects&&!info.leases&&!info.held_jobs&&!info.quarantined);
  output(out_dir,after?"INFO-AFTER.bin":"INFO-BEFORE.bin",&info,sizeof info);
 }
+#ifdef REMESA_OPENGL_HOMOGENEOUS_NATIVE
+static unsigned session_jobs;
+static enum remesa_dispatch collect_general_session(struct remesa_linux_memory *m,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *receipt)
+{
+ const char *parent=out_dir;uint32_t ids[18];
+ for(unsigned i=0;i<18;i++)ids[i]=submit->packet->bindings[i].id;
+ unsigned profile=submit->packet->controls.width==1280?5:6;
+ struct remesa_general_session_request request={.version=1,.action=1,.context=submit->context,
+  .profile=profile,.max_jobs=session_jobs},response={0};
+ memcpy(request.ids,ids,sizeof ids);output(parent,"OPEN-REQUEST.bin",&request,sizeof request);
+ int error=remesa_linux_memory_general_open(m,ids,profile,session_jobs,&response);
+ output(parent,"OPEN-RESULT.bin",&error,sizeof error);output(parent,"OPEN-RESPONSE.bin",&response,sizeof response);
+ if(error)return REMESA_ISSUANCE_AMBIGUOUS;
+ uint64_t session=response.session;
+ for(unsigned i=1;i<=session_jobs;i++){
+  char dir[4096];CHECK(snprintf(dir,sizeof dir,"%s/session-%06u",parent,i)>0);CHECK(!mkdir(dir,0700));out_dir=dir;
+  request=(struct remesa_general_session_request){.version=1,.action=2,.context=submit->context,
+   .session=session,.sequence=i,.budget_ms=1000};
+  output(dir,"REQUEST.bin",&request,sizeof request);
+  memset(&response,0,sizeof response);error=remesa_linux_memory_general_submit(m,1000,&response);
+  output(dir,"RESULT.bin",&error,sizeof error);output(dir,"RESPONSE.bin",&response,sizeof response);
+  if(error){out_dir=parent;return REMESA_ISSUANCE_AMBIGUOUS;}
+  struct remesa_gears_scene_trace_request q={.version=2,.context=submit->context};
+  output(dir,"TRACE-REQUEST.bin",&q,sizeof q);
+  int rc=ioctl(borrowed_fd,DRM_IOCTL_REMESA_GEARS_SCENE_TRACE,&q);int trace_error=rc<0?errno:rc?EIO:0;
+  output(dir,"TRACE-RESPONSE.bin",&q,sizeof q);output(dir,"TRACE-RESULT.bin",&trace_error,sizeof trace_error);
+  const struct remesa_scene_probe_trace *t=&q.trace.prefix;
+  if(trace_error||q.version!=2||q.reserved||q.context!=submit->context||t->version!=2||t->bytes!=4280||
+     t->context!=submit->context||t->profile!=profile||t->operation!=response.operation||t->cookie!=response.cookie||
+     t->phase!=9||t->ledger!=7||t->stages!=15||t->error||t->retained||t->reserved||t->binding_count!=18||
+     t->event_count>64||t->load_count!=29||t->ta_count!=31||t->raster_count!=20){out_dir=parent;return REMESA_ISSUANCE_AMBIGUOUS;}
+  struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv));
+  for(unsigned k=0;k<18;k++){
+   const struct remesa_scene_trace_binding *b=k<17?&t->bindings[k]:&q.trace.last_binding;unsigned matches=0;
+   if(b->id!=ids[k]||b->access!=submit->packet->bindings[k].access){out_dir=parent;return REMESA_ISSUANCE_AMBIGUOUS;}
+   for(unsigned v=0;v<inv.count;v++)if(inv.entries[v].id==b->id){CHECK(inv.entries[v].gpu_va==b->address&&inv.entries[v].bytes==b->bytes);matches++;}
+   CHECK(matches==1);
+  }
+  /* LAB only: independent per-job COLOR/Z/input/guard capture while backing
+   * remains owned. No CPU read of DPM pools, no overwrite of prior evidence. */
+  dump_backing(m,submit->packet,true);out_dir=parent;
+ }
+ request=(struct remesa_general_session_request){.version=1,.action=3,.context=submit->context,.session=session,.sequence=session_jobs};
+ output(parent,"CLOSE-REQUEST.bin",&request,sizeof request);memset(&response,0,sizeof response);
+ error=remesa_linux_memory_general_close(m,&response);
+ output(parent,"CLOSE-RESULT.bin",&error,sizeof error);output(parent,"CLOSE-RESPONSE.bin",&response,sizeof response);
+ if(error)return REMESA_ISSUANCE_AMBIGUOUS;
+ timings[3]=timings[4]=ns();
+ /* One API draw, explicitly replayed by the GPU through the bounded LAB
+  * transaction. Never report this as multiple GL draws or sustained FPS. */
+ *receipt=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,
+  .retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
+}
+#endif
 static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *receipt)
 {
  struct remesa_linux_memory *m=priv;CHECK(submit&&submit->packet&&submit->context==remesa_linux_memory_context(m));
  timings[1]=ns();check_placement(m,submit->packet);guards(m);dump_backing(m,submit->packet,false);timings[2]=ns();
  if(prepare_only)return REMESA_NOT_ISSUED;
 #ifdef REMESA_OPENGL_HOMOGENEOUS_NATIVE
+ if(session_jobs)return collect_general_session(m,submit,receipt);
  enum remesa_dispatch result=remesa_linux_memory_gears_clamped_api_lab_dispatch(m,submit,receipt);
 #elif defined(REMESA_GEARS_HOMOGENEOUS_NATIVE)
  enum remesa_dispatch result=remesa_linux_memory_gears_homogeneous_lab_dispatch(m,submit,receipt);

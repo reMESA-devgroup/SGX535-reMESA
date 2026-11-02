@@ -48,12 +48,13 @@ static void input_file(const char *name,void *data,size_t size)
 }
 int main(int argc,char **argv)
 {
- if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute"))){
-  fprintf(stderr,"usage: opengl_homogeneous_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --prepare-only|--execute\n");return 2;
+ if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute")&&strcmp(argv[5],"--session-2"))){
+  fprintf(stderr,"usage: opengl_homogeneous_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --prepare-only|--execute|--session-2\n");return 2;
  }
  char *end;errno=0;long fd=strtol(argv[1],&end,10);if(errno||!*argv[1]||*end||fd<0||fd>INT_MAX)return 2;
  unsigned width,height;if(!strcmp(argv[2],"1280x800")){width=1280;height=800;}else if(!strcmp(argv[2],"640x640")){width=height=640;}else return 2;
  borrowed_fd=(int)fd;out_dir=argv[3];fixture_dir=argv[4];prepare_only=!strcmp(argv[5],"--prepare-only");timings[0]=ns();
+ session_jobs=!strcmp(argv[5],"--session-2")?2:0;
  CHECK(!st_api_get_current());
  struct remesa_linux_memory *memory=NULL;OK(remesa_linux_memory_begin(fd,&memory));
  struct remesa_device device={0};struct remesa_persistent_config cfg={.ops=remesa_linux_memory_ops(),.priv=memory,

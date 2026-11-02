@@ -10,6 +10,11 @@ static unsigned reads_retired;
 static struct remesa_gears_scene_probe_request model_receipt;
 static struct remesa_scene_fixture model_placement;
 static bool model_check_registered;
+#ifdef REMESA_GEARS_MODEL_GENERAL
+static bool general_active,general_internal,general_closed,general_failed;
+static unsigned general_calls,general_completed,general_reads_before;
+static struct remesa_general_session_request general_opened;
+#endif
 #ifdef REMESA_GEARS_MODEL_OPENGL
 #define MODEL_SOURCE_OWNERS 2u
 #else
@@ -18,6 +23,13 @@ static bool model_check_registered;
 static void check_model_exit(void)
 {
  unsigned live=0;for(unsigned k=0;k<count;k++)if(bo[k].bytes){live++;assert(bo[k].pin&&bo[k].va&&!bo[k].lease);}
+#ifdef REMESA_GEARS_MODEL_GENERAL
+ if(general_calls){
+  if(general_failed){assert(general_active&&!general_closed&&live==22+MODEL_SOURCE_OWNERS&&!teardown_gears);}
+  else assert(submissions==2&&general_completed==2&&general_closed&&!general_active&&live==4+MODEL_SOURCE_OWNERS);
+  return;
+ }
+#endif
  assert(submissions<=1);
  if(getenv("REMESA_GEARS_MODEL_BAD_RECEIPT")||getenv("REMESA_GEARS_MODEL_IOCTL_ERROR")){
   assert(submissions==1&&live==22+MODEL_SOURCE_OWNERS&&!reads_retired&&!teardown_gears);
@@ -28,8 +40,43 @@ int __wrap_ioctl(int fd,unsigned long command,...)
 {
  if(!model_check_registered){assert(!atexit(check_model_exit));model_check_registered=true;}
  va_list ap;va_start(ap,command);void *arg=va_arg(ap,void *);va_end(ap);assert(fd==99);
+#ifdef REMESA_GEARS_MODEL_GENERAL
+ if(command==DRM_IOCTL_REMESA_GENERAL_SESSION){
+  struct remesa_general_session_request *r=arg;assert(remesa_general_session_request_valid(r));general_calls++;
+  unsigned fail_action=getenv("REMESA_GENERAL_MODEL_FAIL_ACTION")?(unsigned)atoi(getenv("REMESA_GENERAL_MODEL_FAIL_ACTION")):0;
+  unsigned fail_sequence=getenv("REMESA_GENERAL_MODEL_FAIL_SEQUENCE")?(unsigned)atoi(getenv("REMESA_GENERAL_MODEL_FAIL_SEQUENCE")):0;
+  bool fail=r->action==fail_action&&(!fail_sequence||r->sequence==fail_sequence);
+  if(r->action==1){
+   assert(!general_active&&!general_closed&&r->max_jobs==2&&(r->profile==5||r->profile==6));
+   general_opened=*r;general_active=true;r->session=7;r->state=1;r->stages=16;
+   r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
+  }else if(r->action==2){
+   assert(general_active&&!general_closed&&r->session==7&&r->sequence==general_completed+1&&r->budget_ms==1000);
+   if(general_completed)assert(reads_retired>general_reads_before);
+   general_reads_before=reads_retired;
+   struct remesa_gears_scene_probe_request legacy={.version=2,.profile=general_opened.profile,.context=r->context,.budget_ms=r->budget_ms};
+   memcpy(legacy.ids,general_opened.ids,sizeof legacy.ids);
+   general_internal=true;int e=__wrap_ioctl(fd,DRM_IOCTL_REMESA_GEARS_SCENE_PROBE,&legacy);general_internal=false;assert(!e);
+   general_completed++;model_receipt.operation=model_receipt.cookie=general_completed;
+   r->operation=r->cookie=general_completed;r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
+   r->phase=9;r->ledger=7;r->stages=15;r->state=1;
+  }else{
+   assert(general_active&&general_completed==2&&reads_retired>general_reads_before&&r->sequence==2&&r->session==7);
+   r->state=3;r->stages=32;
+   if(!fail){general_closed=true;general_active=false;}
+  }
+  if(fail){general_failed=true;errno=EINTR;return -1;}
+  return 0;
+ }
+#endif
  if(command==DRM_IOCTL_REMESA_GEARS_SCENE_PROBE){
-  struct remesa_gears_scene_probe_request *r=arg;assert(!submissions++&&r->version==2&&r->context==77&&r->profile>=1&&r->profile<=REMESA_GEARS_SCENE_PROFILE_COUNT&&!r->reserved_input);
+  struct remesa_gears_scene_probe_request *r=arg;
+#ifdef REMESA_GEARS_MODEL_GENERAL
+  assert(general_internal&&general_active&&submissions<2);submissions++;
+#else
+  assert(!submissions++);
+#endif
+  assert(r->version==2&&r->context==77&&r->profile>=1&&r->profile<=REMESA_GEARS_SCENE_PROFILE_COUNT&&!r->reserved_input);
 #ifdef REMESA_GEARS_MODEL_OPENGL
   assert(r->profile==5||r->profile==6);
 #elif defined(REMESA_GEARS_MODEL_HOMOGENEOUS)
@@ -41,7 +88,13 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   assert(fread(&model_placement,1,sizeof model_placement,f)==sizeof model_placement&&model_placement.count==18&&fgetc(f)==EOF&&!fclose(f));
   for(unsigned i=0;i<18;i++){
    const unsigned id=r->ids[i],k=id-32;assert(id==model_placement.bindings[i].id&&k<count&&bo[k].pin&&!bo[k].lease&&bo[k].va==model_placement.bindings[i].address&&bo[k].size==model_placement.bindings[i].bytes);
-   if(model_placement.bindings[i].access==1){assert(snprintf(path,sizeof path,"%s/model-bo-%u.bin",dir,i)>0);f=fopen(path,"wbx");assert(f&&fwrite(bo[k].bytes,1,bo[k].size,f)==bo[k].size&&!fclose(f));}
+   if(model_placement.bindings[i].access==1){
+#ifdef REMESA_GEARS_MODEL_GENERAL
+    assert(snprintf(path,sizeof path,"%s/model-job-%u-bo-%u.bin",dir,submissions,i)>0);
+#else
+    assert(snprintf(path,sizeof path,"%s/model-bo-%u.bin",dir,i)>0);
+#endif
+    f=fopen(path,"wbx");assert(f&&fwrite(bo[k].bytes,1,bo[k].size,f)==bo[k].size&&!fclose(f));}
   }
 #ifdef REMESA_GEARS_MODEL_OPENGL
   if(getenv("REMESA_OPENGL_MODEL_ROW_TAGS")){
@@ -62,7 +115,14 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   struct remesa_gears_scene_trace_request *q=arg;struct remesa_gears_scene_trace zero={0};assert(returned_gears&&q->version==2&&!q->reserved&&q->context==77&&!memcmp(&q->trace,&zero,sizeof zero));
   struct remesa_scene_probe_trace *t=&q->trace.prefix;t->version=2;t->bytes=4280;t->context=77;t->profile=model_receipt.profile;t->operation=t->cookie=1;t->phase=9;t->ledger=7;t->stages=15;t->binding_count=18;t->load_count=29;t->ta_count=31;t->raster_count=20;t->use_mask=24;
   t->event_count=3;t->events[0]=(struct remesa_scene_trace_event){4,1,0x2000,0,0,5,1000};t->events[1]=(struct remesa_scene_trace_event){4,1,4,0,3,8,2000};t->events[2]=(struct remesa_scene_trace_event){4,1,0x40001,0,7,9,3000};
+#ifdef REMESA_GEARS_MODEL_GENERAL
+  assert(general_active&&!general_failed);t->operation=t->cookie=general_completed;
+  for(unsigned k=0;k<3;k++)t->events[k].sequence=general_completed;
+#endif
   for(unsigned i=0;i<18;i++){struct remesa_scene_trace_binding *b=i<17?&t->bindings[i]:&q->trace.last_binding;*b=(struct remesa_scene_trace_binding){model_receipt.ids[i],model_placement.bindings[i].access,model_placement.bindings[i].address,model_placement.bindings[i].bytes};}
+#ifdef REMESA_GEARS_MODEL_GENERAL
+  if(getenv("REMESA_GENERAL_MODEL_BAD_TRACE")&&general_completed==2){t->cookie^=1;general_failed=true;}
+#endif
   return 0;
  }
  assert(command==DRM_IOCTL_REMESA_MEMORY);struct remesa_memory_request *r=arg;
@@ -86,6 +146,9 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   reads_retired++;
  }
  if(r->action==REMESA_MEM_UNMAP||r->action==REMESA_MEM_UNPIN||r->action==REMESA_MEM_DESTROY){
+#ifdef REMESA_GEARS_MODEL_GENERAL
+  if(general_calls)assert(general_closed&&!general_active&&!general_failed);
+#endif
   unsigned k=r->id-32;assert(k<count&&bo[k].bytes&&!bo[k].lease);if(returned_gears){assert(reads_retired);teardown_gears=true;}
   if(r->action==REMESA_MEM_UNMAP){assert(bo[k].va);bo[k].va=0;}
   if(r->action==REMESA_MEM_UNPIN){assert(bo[k].pin&&!bo[k].va);bo[k].pin=false;}
