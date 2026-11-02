@@ -242,7 +242,8 @@ enum remesa_persistent_state_kind {
  REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6,
  REMESA_PERSISTENT_STATE_LINKED_DRAW=7,
  REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS=8,
- REMESA_PERSISTENT_STATE_GEARS_DRAW=9
+ REMESA_PERSISTENT_STATE_GEARS_DRAW=9,
+ REMESA_PERSISTENT_STATE_GEARS_HOMOGENEOUS_DRAW=10
 };
 /* Owned parameter source using the physically exercised dense16-coefficient,
  * prefix17/transfer20-DWORD policy. Exact float bits, not vertex evaluation.
@@ -536,6 +537,16 @@ struct remesa_persistent_linked_state_backing {
 int remesa_persistent_linked_state_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_state_backing *);
 int remesa_persistent_gears_attribute_state_snapshot(const struct remesa_device *,void *bo,
+ struct remesa_persistent_linked_state_backing *);
+/* Original state15 contract with group1000=0, physically witnessed with W=2.
+ * Reuses the existing ISP/FS/viewport/scalar/state-upload encoders. Requires
+ * MATRIX_WINDOW and the owned gears PDS. This separate owner is deliberately
+ * rejected by the old body/capture constructors until their complete closure
+ * supports this mode; preparation never grants execution or general clipping.
+ */
+int remesa_persistent_gears_homogeneous_state_prepare(struct remesa_device *,void *pds,
+ const struct remesa_persistent_linked_state_request *,uint32_t use_bank,void **bo);
+int remesa_persistent_gears_homogeneous_state_snapshot(const struct remesa_device *,void *bo,
  struct remesa_persistent_linked_state_backing *);
 /* Ordered dynamic draw-body storage: (state reference8 + indexed draw20)*N
  * followed by the owned scene-close12. Not an initial scene: bounds/clears,

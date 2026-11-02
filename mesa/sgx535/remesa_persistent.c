@@ -2341,12 +2341,14 @@ int remesa_persistent_linked_index_encode(const struct remesa_device *device,voi
 }
 
 static int linked_state_prepare(struct remesa_device *device,void *pds,
- const struct remesa_persistent_linked_state_request *request,uint32_t bank,bool gears,void **out)
+ const struct remesa_persistent_linked_state_request *request,uint32_t bank,bool gears,
+ bool homogeneous,void **out)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(!request||overlaps(request,sizeof(*request),out,sizeof(*out)))return EINVAL;
  if(*out)return EBUSY;
  const struct remesa_persistent_linked_state_request r=*request;
+ if(homogeneous&&(!gears||r.viewport.path!=REMESA_TA_VIEWPORT_MATRIX_WINDOW))return ENOTSUP;
  struct remesa_persistent_linked_pds_backing backing;
  e=remesa_persistent_linked_pds_snapshot(device,pds,&backing);if(e)return e;
  if(backing.plans[0].request.profile!=(gears?REMESA_PDS_SELECTED_VS_GEARS_ATTRIBUTE_PADDED3:REMESA_PDS_SELECTED_VS_WHITE_LAMBERT3)||
@@ -2358,7 +2360,7 @@ static int linked_state_prepare(struct remesa_device *device,void *pds,
    backing.image_bytes[1],12,1,0},
   .secondary={backing.gpu_va,backing.allocation_bytes,backing.object_offset[2],
    backing.image_bytes[2],0,0,0}};
- uint8_t isp[8],fs[16],viewport[28],scalar[16],state[56];size_t n=0;
+ uint8_t isp[8],fs[16],viewport[28],scalar[16],state[60]={0};size_t n=0;
  e=remesa_isp_opaque_triangle_data_encode(&r.isp,isp);if(e)return e;
  e=remesa_ta_fragment_binding_encode(&fragment,fs);if(e)return e;
  e=remesa_ta_window_viewport_encode(&r.viewport,viewport);if(e)return e;
@@ -2370,7 +2372,14 @@ static int linked_state_prepare(struct remesa_device *device,void *pds,
  for(unsigned i=0;i<4;i++)state[i]=isp[i]|fs[i]|viewport[i]|scalar[i];
  memcpy(state+4,isp+4,4);memcpy(state+8,fs+4,12);
  memcpy(state+20,viewport+4,24);memcpy(state+44,scalar+4,12);
- e=state_update_prepare(device,state,sizeof(state),gears?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW,
+ /* Original serializer group1000 follows group800. The preserved physical
+  * W=2 witness consumes this final zero word: 15 DWORDs, not 16 padded words.
+  * The existing owner derives MOVE14/tail15, DMA15 and TA ceil(60/16)=4.
+  */
+ if(homogeneous)state[1]|=0x10;
+ e=state_update_prepare(device,state,homogeneous?60:56,
+  homogeneous?REMESA_PERSISTENT_STATE_GEARS_HOMOGENEOUS_DRAW:
+  gears?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW,
   bank,NULL,pds,0,out);
  if(!e){struct memory *b=*out;b->depth_width=r.viewport.framebuffer_width;
   b->depth_height=r.viewport.framebuffer_height;}
@@ -2378,18 +2387,23 @@ static int linked_state_prepare(struct remesa_device *device,void *pds,
 }
 int remesa_persistent_linked_state_prepare(struct remesa_device *device,void *pds,
  const struct remesa_persistent_linked_state_request *request,uint32_t bank,void **out)
-{return linked_state_prepare(device,pds,request,bank,false,out);}
+{return linked_state_prepare(device,pds,request,bank,false,false,out);}
 int remesa_persistent_gears_attribute_state_prepare(struct remesa_device *device,void *pds,
  const struct remesa_persistent_linked_state_request *request,uint32_t bank,void **out)
-{return linked_state_prepare(device,pds,request,bank,true,out);}
+{return linked_state_prepare(device,pds,request,bank,true,false,out);}
+int remesa_persistent_gears_homogeneous_state_prepare(struct remesa_device *device,void *pds,
+ const struct remesa_persistent_linked_state_request *request,uint32_t bank,void **out)
+{return linked_state_prepare(device,pds,request,bank,true,true,out);}
 static int linked_state_snapshot(const struct remesa_device *device,void *object,
- bool gears,struct remesa_persistent_linked_state_backing *out)
+ bool gears,bool homogeneous,struct remesa_persistent_linked_state_backing *out)
 {
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  struct persistent *d=device->priv;struct memory *b=object;
  e=linked_live(d,b,true);if(e)return e;
- if(!b->isp_update||b->state_kind!=(gears?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW)||
-    b->state_bytes!=56||!b->linked_dependency)return EINVAL;
+ unsigned kind=homogeneous?REMESA_PERSISTENT_STATE_GEARS_HOMOGENEOUS_DRAW:
+  gears?REMESA_PERSISTENT_STATE_GEARS_DRAW:REMESA_PERSISTENT_STATE_LINKED_DRAW;
+ if(!b->isp_update||b->state_kind!=kind||
+    b->state_bytes!=(homogeneous?60u:56u)||!b->linked_dependency)return EINVAL;
  struct remesa_persistent_linked_state_backing value={0};
  e=linked_pds_metadata(d,b->linked_dependency,false,&value.dependencies);if(e)return e;
  value.image=(struct remesa_persistent_isp_update_backing){.owner=d->cfg.context,
@@ -2402,10 +2416,13 @@ static int linked_state_snapshot(const struct remesa_device *device,void *object
 }
 int remesa_persistent_linked_state_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_linked_state_backing *out)
-{return linked_state_snapshot(device,object,false,out);}
+{return linked_state_snapshot(device,object,false,false,out);}
 int remesa_persistent_gears_attribute_state_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_linked_state_backing *out)
-{return linked_state_snapshot(device,object,true,out);}
+{return linked_state_snapshot(device,object,true,false,out);}
+int remesa_persistent_gears_homogeneous_state_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_linked_state_backing *out)
+{return linked_state_snapshot(device,object,true,true,out);}
 
 static int body_bank_add(const struct remesa_use_entry_plan *entry,
  struct remesa_use_entry_plan banks[16],bool present[16])
@@ -2438,7 +2455,7 @@ static int linked_body_prepare(struct remesa_device *device,
  for(size_t i=0;i<count;i++){
   struct memory *state=request[i].state;
   struct remesa_persistent_linked_state_backing sb;
-  e=linked_state_snapshot(device,state,gears,&sb);if(e)return e;
+  e=linked_state_snapshot(device,state,gears,false,&sb);if(e)return e;
   if(state->depth_width!=ending->depth_width||state->depth_height!=ending->depth_height)return EINVAL;
   for(unsigned p=0;p<2;p++){
    e=body_bank_add(&sb.dependencies.program.entry[p],banks,present);if(e)return e;
@@ -3796,7 +3813,7 @@ static int linked_scene_prepare(struct remesa_device *device,
  e=remesa_persistent_linked_geometry_prepare(device,&r.geometry,&objects[1]);if(e)goto done;
  e=gears?remesa_persistent_gears_attribute_pds_prepare(device,objects[0],objects[1],parameters,&objects[2]):
   remesa_persistent_linked_pds_prepare(device,objects[0],objects[1],&objects[2]);if(e)goto done;
- e=linked_state_prepare(device,objects[2],&r.state,r.state_bank,gears,&objects[3]);if(e)goto done;
+ e=linked_state_prepare(device,objects[2],&r.state,r.state_bank,gears,false,&objects[3]);if(e)goto done;
  e=remesa_persistent_scene_close_prepare(device,r.width,r.height,r.state_bank,&objects[4]);if(e)goto done;
  const struct remesa_linked_body_draw draw={objects[3],0,r.geometry.indices?r.geometry.index_count:r.geometry.vertex_count};
  e=linked_body_prepare(device,&draw,1,objects[4],gears,&objects[5]);if(e)goto done;
