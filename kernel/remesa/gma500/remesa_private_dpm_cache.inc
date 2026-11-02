@@ -26,7 +26,7 @@ static void private_dpm_publish(struct remesa_gem_memory *s,struct backing *b,bo
  }
  /* Before possible device use; failures retain the job/session, not authority
   * to read, retry, unseal or infer retirement. */
- if(gpu_write)b->ta_gpu_dirty=true;
+ if(gpu_write){s->private_dpm_ready=false;b->ta_gpu_dirty=true;}
 }
 static void private_dpm_complete(struct remesa_gem_memory *s,struct backing *b)
 {

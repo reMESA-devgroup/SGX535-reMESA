@@ -85,9 +85,9 @@ used to exercise ownership do not acquire warm scene admission. Cache-resident
 data and a GPU-dirty bit are not retirement credentials: publication sets that
 bit before possible use, including failing attempts.
 
-The remaining continuous-rendering contract is a separate warm DPM claim tied
-to successful prior retirement under the same protected source/backing lease,
-plus separate REGION preparation and bounded user transport. It must not
+The [retirement-bound warm DPM claim and REGION preparation](general-scene-warm-session.md)
+are now implemented and offline checked under the same source/backing lease.
+Bounded user transport and physical qualification remain. The integration must not
 relabel `zero_pristine`, treat reserved bytes as consumed data, omit the load
 sequence or rearm a consumed LAB/source gate. A separately admitted physical
 sequence at both sizes is still required before enabling or claiming this

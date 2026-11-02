@@ -15,6 +15,7 @@ int remesa_private_session_acquire(struct drm_device *dev,struct drm_file *file,
  if(s->private_session||s->stream_bound||s->executor||s->pds_write_guard){error=-EBUSY;goto unlock;}
  if(s->private_work_owned){error=-EBUSY;goto unlock;}
  for(i=0;i<2;i++)if(s->private_dpm_ids[i]){error=-EBUSY;goto unlock;}
+ if(s->private_dpm_ready||s->private_dpm_retired_operation){error=-EBUSY;goto unlock;}
  for(i=0;i<6;i++)if(s->private_work_ids[i]){error=-EBUSY;goto unlock;}
 #if !defined(REMESA_MEMORY_TEST) || defined(REMESA_RETAINED_IOCTL_TEST)
  if(retained_entry.initialized||retained_entry.attempted){error=-EBUSY;goto unlock;}
@@ -85,6 +86,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
  for(i=0;i<2;i++)if(s->private_dpm_ids[i])ta_for_cpu(&s->bo[s->private_dpm_ids[i]&31]);
 #endif
  memset(s->private_dpm_ids,0,sizeof(s->private_dpm_ids));
+ s->private_dpm_ready=false;s->private_dpm_retired_operation=0;
  s->private_session=NULL;error=0;
  unlock:mutex_unlock(&s->lock);
  done:mutex_unlock(&endpoint_lock);return error;

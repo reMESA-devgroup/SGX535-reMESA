@@ -61,7 +61,7 @@ def dpm_origin_source(source):
         ('bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;',
          'bool live,pinned,reserved,lease,write,quarantine,initialized,lease_borrowed;\n bool zero_pristine;'),
         ('unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];',
-         'unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];u32 dpm_mask,region_mask;'),
+         'unsigned command_bytes,count;u32 generation,ids[REMESA_GEM_JOB_BINDINGS];u32 dpm_mask,region_mask;\n u64 dpm_previous_operation;const void *private_scene_owner;'),
         ('b->live=false;b->initialized=false;b->lease_borrowed=false;',
          'b->live=false;b->initialized=false;b->lease_borrowed=false;b->zero_pristine=false;'),
         ('b->initialized=true;b->ta_cpu_cached=true;b->ta_cpu_dirty=true;',
@@ -71,7 +71,7 @@ def dpm_origin_source(source):
         ('b->lease=true;b->write=r->flags;return 0;',
          'b->lease=true;b->write=r->flags;if(b->write)b->zero_pristine=false;return 0;'),
         ('j->command_bytes=bytes;j->count=count;j->live=true;',
-         'j->command_bytes=bytes;j->count=count;j->dpm_mask=0;j->region_mask=0;j->live=true;'),
+         'j->command_bytes=bytes;j->count=count;j->dpm_mask=0;j->region_mask=0;j->dpm_previous_operation=0;j->private_scene_owner=NULL;j->live=true;'),
         ('if(capacity<j->count)return -ENOSPC;\n e=verify_job_bindings',
          'if(capacity<j->count)return -ENOSPC;\n if(j->dpm_mask||j->region_mask)return -EACCES;\n e=verify_job_bindings'),
         ('out[i]=(struct remesa_memory_view){uses[i],b->pages,b->gem.size/PAGE_SIZE,j->cpu_views[i]};',
@@ -558,6 +558,7 @@ def private_file_lost_sources(memory):
         ' u32 private_work_ids[6]; /* kernel-owned COLOR/TA/DPM/Z roles */\n'
         ' bool private_work_owned;\n'
         ' u32 private_dpm_ids[2]; /* general table/parameter write exclusion */\n'
+        ' u64 private_dpm_retired_operation;bool private_dpm_ready;\n'
         ' bool private_device_lost; /* monotonic; do not reclaim after unplug */\n')
     memory = replace_once(memory,
         'static bool ta_domain(const struct remesa_gem_memory *s,const struct backing *b)\n'

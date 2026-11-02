@@ -44,6 +44,7 @@ struct remesa_gem_memory {
  unsigned private_input_ids[5];int (*pds_write_guard)(u64,const void *,unsigned);
  unsigned private_work_ids[6];bool private_work_owned;
  unsigned private_dpm_ids[2];
+ u64 private_dpm_retired_operation;bool private_dpm_ready;
  void *executor;struct backing bo[OBJECTS];struct retained_job jobs[8];struct resource exclude;
 };
 struct remesa_memory_request {unsigned action;};

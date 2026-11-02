@@ -10,8 +10,8 @@ struct remesa_scene_packet_storage {
  struct remesa_gem_private_rule rules[REMESA_GEM_JOB_BINDINGS];
  u8 commands[REMESA_SCENE_PACKET_COMMAND_MAX];
 };
-int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *s,
- const struct remesa_scene_packet *p,struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c)
+static int scene_packet_prepare_owned(struct remesa_gem_memory *s,
+ const struct remesa_scene_packet *p,struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c,const void *session_owner)
 {
  struct remesa_scene_packet_storage *storage;struct remesa_scene_packet_sections offsets;
  struct remesa_gem_scene_sections sections;unsigned bytes,i;int error=0;
@@ -40,6 +40,9 @@ int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *s,
  sections=(struct remesa_gem_scene_sections){offsets.actions,offsets.controls,offsets.use,offsets.vertices};
  /* Existing prepare copies all commands and takes actual job/GEM holds.
   * Revalidation rejects topology changes between this snapshot and prepare. */
- error=remesa_gem_scene_job_prepare(s,storage->bindings,p->binding_count,storage->commands,bytes,&sections,storage->rules,guard,c);
+ error=scene_job_prepare_owned(s,storage->bindings,p->binding_count,storage->commands,bytes,&sections,storage->rules,guard,c,session_owner);
  done:kfree(storage);return error;
 }
+int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *s,
+ const struct remesa_scene_packet *p,struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c)
+{return scene_packet_prepare_owned(s,p,guard,c,NULL);}

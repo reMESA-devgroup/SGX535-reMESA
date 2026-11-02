@@ -27,6 +27,12 @@ release or retry. File/device loss is rejected before another executor call.
 
 ## Remaining scratch initialization contract
 
+The observations in this section describe the ordinary cold preparer and
+remain its expected behavior. A separate trusted
+[warm source-session preparer](general-scene-warm-session.md) now implements
+the retirement-bound pool claim and actual REGION overwrite; it has passed
+offline integration but has no new user endpoint or physical qualification.
+
 The restricted physical FAST already reused its two DPM pools after three cold
 frames. Its existing producer, write exclusion and cache-domain rules are the
 donor for this integration; see [the retained/general comparison](general-dpm-reuse-contract.md).

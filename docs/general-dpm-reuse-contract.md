@@ -68,15 +68,15 @@ It does not transfer the donor's ownership/cache rules into the new executor.
 |29-action DPM load | Physically used, including warm frames | Same CPU construction; finite cold physical API cases passed |
 | Pool identity | Sealed fixed eleven-role stream | Explicit packet IDs and narrowed private mappings |
 | Between-frame writes | Pool write exclusion for stream lifetime | Explicit general-ID pool seal implemented; kernel-only, not physically qualified |
-| Warm admission | Typed `ta_reuse` policy after initial three frames | Cold `zero_pristine` claim; second preparation returns `-ENODATA` |
+| Warm admission | Typed `ta_reuse` policy after initial three frames | Separate prior-retirement claim in trusted session; ordinary cold preparation still refuses reused pools |
 | Cache ownership | Tracks CPU cached/dirty and GPU dirty separately | Same tracking integrated for sealed pool IDs; offline checked, not physically qualified |
-| REGION preparation | Separate per-frame clear | Cold zero-origin requirement; publication consumes it |
+| REGION preparation | Separate per-frame clear | Actual page overwrite under exclusive holds in trusted session; ordinary cold requirement preserved |
 | Source lifetime | Retained stream | Existing source-session adapter, not a new user endpoint |
 
 The [general pool write exclusion](general-dpm-write-exclusion.md) now carries
 the first part of the donor contract using explicit IDs and generations.
 Its [cache ownership](general-dpm-cache-ownership.md) is now integrated too.
-The remaining warm claim must be a separate capability backed by successful
+The [warm claim](general-scene-warm-session.md) is now a separate capability backed by successful
 prior retirement under that same lease. It must not set `zero_pristine=true`,
 accept arbitrary modified pools, reinterpret the eleven-role ABI or clear64MiB
 per frame. CPU access, source/file/device loss and ambiguous execution must

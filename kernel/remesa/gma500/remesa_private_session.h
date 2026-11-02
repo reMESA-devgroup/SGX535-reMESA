@@ -38,6 +38,15 @@ struct remesa_memory_ticket;
 int remesa_private_session_seal_dpm(struct remesa_gem_memory *,const void *,
  struct remesa_memory_ticket,u32 table_id,u32 parameter_id);
 int remesa_private_session_dpm_locked(struct remesa_gem_memory *,struct remesa_memory_ticket);
+/* Trusted general-session preparation/closure only. The caller retains the
+ * endpoint/source lease; claim locks memory, check/retired require it locked.
+ * A warm job references a prior acknowledged operation, never zero provenance.
+ * Publication invalidates readiness for NEXT jobs; only successful complete
+ * scene execution may record retirement. No raw user credential or new ioctl. */
+int remesa_private_session_claim_warm_dpm(struct remesa_gem_memory *,const void *,
+ struct remesa_memory_ticket,u32,u32);
+int remesa_private_session_warm_check_locked(struct remesa_gem_memory *,struct remesa_memory_ticket);
+int remesa_private_session_dpm_retired_locked(struct remesa_gem_memory *,const void *,struct remesa_memory_ticket);
 /* Authenticate all five final input images/geometry under this PREPARED job's
  * holds before calling seal_inputs. The trusted pure callback permits only
  * typed PDS updates; CODE/geometry/other inputs become immutable to userspace.
@@ -67,6 +76,14 @@ int remesa_private_session_execute(struct remesa_gem_memory *,const void *,
  struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,
  const struct remesa_memory_view *,unsigned,unsigned,unsigned);
 struct remesa_gem_scene_job;
+struct remesa_scene_packet;
+struct remesa_twod_reservation;
+/* Same live source/backing lease, pools already sealed. Serialized internally
+ * by endpoint then memory. Uses ordinary cold preparation first; only this
+ * trusted path may claim acknowledged warm pools and initialize REGION.
+ * Caller retains stable job/packet/guard; HELD forbids retry or cleanup. */
+int remesa_private_session_scene_prepare(struct remesa_gem_memory *,const void *,
+ const struct remesa_scene_packet *,struct remesa_twod_reservation *,struct remesa_gem_scene_job *);
 /* Same file/backing/source lease, separately validated general scene job.
  * Does not reinterpret the retained eleven-role seals or ABI. Caller retains
  * DRM entry, authenticates final inputs and prepares a fresh actual scene job.

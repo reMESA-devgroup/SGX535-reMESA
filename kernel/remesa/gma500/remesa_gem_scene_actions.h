@@ -19,7 +19,9 @@ struct remesa_gem_scene_actions {
  struct sgx535_frozen_reg_action ta[REMESA_LAB_TA_FIRE_ACTIONS];
  struct sgx535_frozen_reg_action raster[REMESA_LAB_RASTER_FIRE_ACTIONS];
 };
-/* Prepared/unattached job; DPM zero claim must already cover its two pools.
+/* Prepared/unattached job; a DPM claim must already cover its two pools.
+ * Ordinary callers use the existing zero claim. The trusted general-session
+ * preparer may use a distinct prior-retirement epoch checked again at closure.
  * Requires fresh-zero, unexposed exact region storage and reserves it GPU-only.
  * Builds original29/31/20 closed action groups from the actual held backing.
  * No image validation, allocation, map/clear/flush, root bind or MMIO/issue.

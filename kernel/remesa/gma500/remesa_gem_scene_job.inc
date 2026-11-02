@@ -13,16 +13,19 @@ int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *c)
  if(error){c->state=REMESA_SCENE_JOB_HELD;return error;}
  memset(c,0,sizeof(*c));return 0;
 }
-int remesa_gem_scene_job_prepare(struct remesa_gem_memory *s,
+static int scene_job_prepare_owned(struct remesa_gem_memory *s,
  const struct remesa_memory_binding *bindings,unsigned count,const void *commands,unsigned bytes,
  const struct remesa_gem_scene_sections *sections,const struct remesa_gem_private_rule *rules,
- struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c)
+ struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c,const void *session_owner)
 {
  struct remesa_gem_scene_action_command action;struct retained_job *j;
  u32 mask=0;unsigned i;int error,cleanup;
  if(!s||!bindings||!commands||!bytes||!sections||!rules||!guard||!c||
     !count||count>REMESA_GEM_JOB_BINDINGS)return -EINVAL;
  if(c->memory||c->state!=REMESA_SCENE_JOB_EMPTY||c->loan.live)return -EBUSY;
+#ifndef REMESA_PRIVATE_DPM_CACHE
+ if(session_owner)return -EOPNOTSUPP;
+#endif
  error=remesa_gem_job_prepare(s,bindings,count,commands,bytes,&c->snapshot.ticket);
  if(error)return error;
  c->memory=s;c->state=REMESA_SCENE_JOB_PREPARED;c->count=count;c->sections=*sections;
@@ -33,8 +36,18 @@ int remesa_gem_scene_job_prepare(struct remesa_gem_memory *s,
  if((sections->actions&3)||sections->actions>j->command_bytes||
     sizeof(action)>j->command_bytes-sections->actions){error=-EINVAL;goto read_done;}
  memcpy(&action,(const u8 *)j->commands+sections->actions,sizeof(action));error=0;
+#ifdef REMESA_PRIVATE_DPM_CACHE
+ if(session_owner)j->private_scene_owner=session_owner;
+#endif
  read_done:mutex_unlock(&s->lock);if(error)goto failed;
- error=remesa_gem_job_claim_zero_dpm(s,c->snapshot.ticket,action.table_id,action.parameter_id);if(error)goto failed;
+ error=remesa_gem_job_claim_zero_dpm(s,c->snapshot.ticket,action.table_id,action.parameter_id);
+#ifdef REMESA_PRIVATE_DPM_CACHE
+ if(error==-ENODATA&&session_owner)error=remesa_private_session_claim_warm_dpm(s,session_owner,c->snapshot.ticket,action.table_id,action.parameter_id);
+#endif
+ if(error)goto failed;
+#ifdef REMESA_PRIVATE_DPM_CACHE
+ if(session_owner){error=scene_region_initialize(s,c->snapshot.ticket,sections->actions,session_owner);if(error)goto failed;}
+#endif
  error=remesa_gem_scene_actions_prepare(s,c->snapshot.ticket,sections->actions,&c->actions);if(error)goto failed;
  error=remesa_gem_scene_controls_prepare(s,c->snapshot.ticket,sections->actions,sections->controls,&c->controls);if(error)goto failed;
  error=remesa_gem_scene_use_prepare(s,c->snapshot.ticket,sections->actions,sections->controls,sections->use,&c->use);if(error)goto failed;
@@ -52,6 +65,11 @@ int remesa_gem_scene_job_prepare(struct remesa_gem_memory *s,
  if(cleanup)c->state=REMESA_SCENE_JOB_HELD;
  return error;
 }
+int remesa_gem_scene_job_prepare(struct remesa_gem_memory *s,
+ const struct remesa_memory_binding *b,unsigned n,const void *commands,unsigned bytes,
+ const struct remesa_gem_scene_sections *sections,const struct remesa_gem_private_rule *rules,
+ struct remesa_twod_reservation *guard,struct remesa_gem_scene_job *c)
+{return scene_job_prepare_owned(s,b,n,commands,bytes,sections,rules,guard,c,NULL);}
 
 int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *c)
 {

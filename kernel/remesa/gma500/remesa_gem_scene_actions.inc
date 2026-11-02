@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After retained GEM/private helpers. */
 #include "remesa_gem_scene_actions.h"
 #include "remesa_scene_layout.h"
+#ifdef REMESA_PRIVATE_DPM_CACHE
+#include "remesa_private_session.h"
+#endif
 struct remesa_scene_action_inputs {
  struct remesa_gem_scene_action_command command;
  struct remesa_lab_scene_fire_request fire;
@@ -28,6 +31,13 @@ static int scene_action_inputs(struct remesa_gem_memory *s,struct retained_job *
   if(role==0)value.region_index=i;else if(role==1)value.table_index=i;else value.parameter_index=i;
  }
  if(j->dpm_mask!=(((u32)1<<value.table_index)|((u32)1<<value.parameter_index)))return -EACCES;
+#ifdef REMESA_PRIVATE_DPM_CACHE
+ if(j->dpm_previous_operation){
+  if(ids[1]!=s->private_dpm_ids[0]||ids[2]!=s->private_dpm_ids[1])return -EACCES;
+  error=remesa_private_session_warm_check_locked(s,(struct remesa_memory_ticket){.context=s->context,.operation=j->operation,.slot=(u32)(j-s->jobs),.generation=j->generation});
+  if(error)return error;
+ }
+#endif
  if(j->region_mask&&j->region_mask!=((u32)1<<value.region_index))return -EBUSY;
  if(objects[0]->gem.size!=(u64)layout.allocation_pages*PAGE_SIZE)return -ENOSPC;
  value.fire=(struct remesa_lab_scene_fire_request){value.command.width,value.command.height,objects[0]->va.start,objects[0]->gem.size};
@@ -38,7 +48,7 @@ int remesa_gem_scene_actions_prepare(struct remesa_gem_memory *s,
  struct remesa_memory_ticket t,u32 offset,struct remesa_gem_scene_actions *out)
 {
  struct remesa_gem_scene_actions value={0};struct remesa_scene_action_inputs in;
- struct retained_job *j;struct backing *b;unsigned indices[3],i;size_t n;int error=-ENOENT;
+ struct retained_job *j;struct backing *b;unsigned indices[3],i;size_t n;bool initialized;int error=-ENOENT;
  if(!s||!out)return -EINVAL;
  mutex_lock(&s->lock);j=ticket_job(s,t);if(!j)goto done;
  if(j->state!=REMESA_JOB_PREPARED||j->attached||j->cookie||j->quarantined){error=-EBUSY;goto done;}
@@ -46,7 +56,11 @@ int remesa_gem_scene_actions_prepare(struct remesa_gem_memory *s,
  indices[0]=in.region_index;indices[1]=in.table_index;indices[2]=in.parameter_index;
  for(i=0;i<3;i++){
   b=&s->bo[j->ids[indices[i]]&31];
-  if(!b->initialized||!b->zero_pristine||b->cached_job_view||j->cpu_views[indices[i]]||atomic_read(&b->color_vmas)){error=-ENODATA;goto done;}
+  initialized=b->zero_pristine;
+#ifdef REMESA_PRIVATE_DPM_CACHE
+  if(i&&j->dpm_previous_operation)initialized=true;
+#endif
+  if(!b->initialized||!initialized||b->cached_job_view||j->cpu_views[indices[i]]||atomic_read(&b->color_vmas)){error=-ENODATA;goto done;}
  }
  value.ticket=t;value.command_offset=offset;value.binding_count=j->count;value.command=in.command;
  error=remesa_lab_dpm_actions_encode(&in.load,value.load,REMESA_LAB_DPM_LOAD_ACTIONS,&n);if(error){error=-error;goto done;}value.load_count=n;
@@ -55,6 +69,31 @@ int remesa_gem_scene_actions_prepare(struct remesa_gem_memory *s,
  j->region_mask=(u32)1<<in.region_index;*out=value;error=0;
  done:mutex_unlock(&s->lock);return error;
 }
+#ifdef REMESA_PRIVATE_DPM_CACHE
+static int scene_region_initialize(struct remesa_gem_memory *s,
+ struct remesa_memory_ticket t,u32 offset,const void *owner)
+{
+ struct retained_job *j;struct backing *b;struct remesa_scene_action_inputs in;
+ unsigned page,i;int error=-EACCES;
+ mutex_lock(&s->lock);j=ticket_job(s,t);
+ if(!j||j->state!=REMESA_JOB_PREPARED||j->attached||j->cookie||j->quarantined||
+    j->private_scene_owner!=owner||s->private_session!=owner||!s->private_source_held||
+    s->private_device_lost||!s->file||s->private_source_poisoned)goto done;
+ for(i=0;i<8;i++)if(s->jobs[i].live&& &s->jobs[i]!=j){error=-EBUSY;goto done;}
+ error=scene_action_inputs(s,j,offset,&in);if(error)goto done;
+ b=&s->bo[j->ids[in.region_index]&31];
+ if(b->holds!=1||!b->initialized||b->cached_job_view||j->cpu_views[in.region_index]||atomic_read(&b->color_vmas)){error=-EBUSY;goto done;}
+ if(!b->zero_pristine){
+  /* Whole-page overwrite under exclusive holds, no CPU reads or GPU work.
+   * This is real REGION initialization, not a claim about consumed bytes.
+   * Existing private publication flushes these new CPU writes before use. */
+  for(page=0;page<b->inserted;page++)clear_highpage(b->pages[page]);
+  b->zero_pristine=true;
+ }
+ error=0;
+ done:mutex_unlock(&s->lock);return error;
+}
+#endif
 int remesa_gem_scene_actions_check_locked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *plan)
 {
