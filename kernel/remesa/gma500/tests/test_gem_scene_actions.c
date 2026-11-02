@@ -386,7 +386,7 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
    u8 *code=(u8 *)views[14].cpu+256;
    for(unsigned byte=0;byte<320;byte++)for(unsigned bit=0;bit<8;bit++){
     code[byte]^=1u<<bit;
-    CHECK(scene_vertices_build_checked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&vertices)==-EINVAL&&
+    CHECK(scene_vertices_build_checked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-EINVAL&&
      !memcmp(&vertices,&vertices_saved,sizeof vertices));code[byte]^=1u<<bit;
    }
    /* The old ordinal formula selected this PARAM source as fragment state.

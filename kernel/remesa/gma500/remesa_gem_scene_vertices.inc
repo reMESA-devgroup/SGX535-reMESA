@@ -4,17 +4,32 @@
 #include "remesa_scene_use_bodies.h"
 static bool vertex_section_overlap(u32 a,u32 an,u32 b,u32 bn)
 {return a<=b?b-a<an:a-b<bn;}
+/* States were authenticated before this checker. Resolve this draw's actual
+ * state upload by identity; capacity/PARAM presence alone is not state15. */
+static bool vertex_homogeneous_state(const struct remesa_gem_scene_ta *ta,
+ const struct remesa_gem_scene_states *states,unsigned draw)
+{
+ unsigned r,s;
+ if(!ta||!states||ta->reference_count>REMESA_TA_REFERENCE_MAX||states->count>REMESA_GEM_SCENE_STATE_MAX)return false;
+ for(r=0;r<ta->reference_count;r++)if(ta->references[r].draw==draw&&
+    ta->references[r].kind==REMESA_TA_REF_DRAW_STATE)
+  for(s=0;s<states->count;s++)if(states->uploads[s].pds_id==ta->references[r].id&&
+     states->uploads[s].pds_offset==ta->references[r].byte_offset)
+   return states->uploads[s].source_bytes==60;
+ return false;
+}
 /* Keep this transactional result off the prerequisite validators' stack.
  * The noinline boundary is intentional on the 8 KiB i486 kernel stack. */
 static __attribute__((__noinline__)) int scene_vertices_build_checked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
  const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,u32 offset,
- struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_vertices *out)
+ struct remesa_gem_scene_ta *ta,const struct remesa_gem_scene_states *states,
+ struct remesa_gem_scene_vertices *out)
 {
  struct remesa_gem_scene_vertices value={0};struct remesa_gem_scene_vertex_command command;
  struct remesa_gem_scene_use_command use_command;struct retained_job *j;
  unsigned draw,p,i,v,e,u,r;bool parameters=false;int error;
- if(!out)return -EINVAL;
+ if(!out||!states)return -EINVAL;
  for(r=0;r<ta->reference_count;r++)
   if(ta->references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS)parameters=true;
  j=ticket_job(loan->memory,loan->ticket);
@@ -55,18 +70,22 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
   error=remesa_vertex_indices_check((const u8 *)views[i].cpu+w.index_offset,w.index_bytes,
    ta->references[ir].index_count,w.vertex_count,&indices);if(error)return -error;
   for(e=0;e<use->entry_count;e++)if(use->lower19[e]==decoded.use_lower19){
-   struct remesa_gem_scene_use_entry entry;
+   struct remesa_gem_scene_use_entry entry;bool clamped;
    memcpy(&entry,(const u8 *)j->commands+use->command_offset+sizeof(use_command)+e*sizeof(entry),sizeof(entry));
-   if(entry.data_master!=REMESA_USE_VERTEX||entry.program_bytes!=use_bytes)continue;
+   clamped=draw&&parameters&&entry.program_bytes==344;
+   if(entry.data_master!=REMESA_USE_VERTEX)continue;
+   if(clamped){if(!vertex_homogeneous_state(ta,states,draw))continue;}
+   else if(entry.program_bytes!=use_bytes)continue;
    for(u=0;u<count&&views[u].binding.id!=entry.id;u++);
    if(u==count)return -ENOENT;
    if(!views[u].cpu)return -EACCES;
-   error=draw&&parameters?
+   error=clamped?
+    remesa_scene_gears_attribute_clamped_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,entry.program_bytes):draw&&parameters?
     remesa_scene_gears_attribute_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes):
     remesa_scene_vertex_body((const u8 *)views[u].cpu+entry.byte_offset,use_bytes,draw?1:0);if(error)return -error;
    if(entry.id==w.vertex_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.vertex_offset,w.vertex_bytes))return -EINVAL;
    if(entry.id==w.index_id&&vertex_section_overlap(entry.byte_offset,entry.program_bytes,w.index_offset,w.index_bytes))return -EINVAL;
-   use_id=entry.id;use_offset=entry.byte_offset;break;
+   use_id=entry.id;use_offset=entry.byte_offset;use_bytes=entry.program_bytes;break;
   }
   if(!use_id)return -ENOENT;
   value.draws[draw].index_id=w.index_id;value.draws[draw].index_offset=w.index_offset;value.draws[draw].index_bytes=w.index_bytes;
@@ -85,5 +104,5 @@ int remesa_gem_scene_vertices_check_locked(struct remesa_gem_private *loan,
  int error;
  if(!out)return -EINVAL;
  error=remesa_gem_scene_states_check_locked(loan,views,count,actions,controls,use,ta,states);if(error)return error;
- return scene_vertices_build_checked(loan,views,count,actions,controls,use,offset,ta,out);
+ return scene_vertices_build_checked(loan,views,count,actions,controls,use,offset,ta,states,out);
 }

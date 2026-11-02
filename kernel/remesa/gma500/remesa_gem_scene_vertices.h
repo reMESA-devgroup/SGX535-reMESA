@@ -18,8 +18,9 @@ struct remesa_gem_scene_vertices {
 /* Same endpoint/MMU/private-root locks as states check. Caller retains both
  * scratch plans; only VERTEX output is transactional. Validates selected PDS64,
  * exact committed windows, actual u16 indices, source extent and a matching
- * held vertex USE16(prefix)/64(compiled) entry. Does NOT certify that shader
- * body, unknown PDS cells, fragment/background/event closure or execution.
+ * held vertex USE16(prefix)/64(white)/320(gears)/344(clamped gears) entry.
+ * The344 variant requires an authenticated state15 draw. Exact body checks
+ * do not certify unknown PDS cells, fragment/background/event or execution.
  * No allocation, MMIO, pixel readback/hash, extra flush/wait or admission. */
 int remesa_gem_scene_vertices_check_locked(struct remesa_gem_private *,
  const struct remesa_memory_view *,unsigned,const struct remesa_gem_scene_actions *,

@@ -58,6 +58,27 @@ static inline int remesa_scene_gears_attribute_vertex_body(const void *input,siz
  for(i=0;i<80;i++)if(remesa_ta_ref_word(p+i*4)!=words[i])return EINVAL;
  return 0;
 }
+/* Separate COLOR-clamped variant: original312 + existing three-record
+ * COLOR0 max/min24 + original tail8. The temporary below is validation-only;
+ * no shader is emitted or uploaded. Reuse the unchanged old body predicate.
+ * Available capacity may exceed344; only committed CODE is consumed here. */
+static __attribute__((__noinline__,__unused__)) int remesa_scene_gears_attribute_clamped_vertex_body(const void *input,size_t available)
+{
+ const remesa_ta_ref_u8 *p=input;remesa_ta_ref_uptr a=(remesa_ta_ref_uptr)input;
+ remesa_ta_ref_u8 original[320];unsigned i;
+ static const remesa_scene_u32 clamp[6]={
+  (1u<<24)|(1u<<16)|(1u<<8),(31u<<27)|(1u<<25)|(1u<<20),
+  (1u<<30)|(1u<<28)|(4u<<21)|(4u<<7)|48u,
+  (3u<<27)|(1u<<23)|(1u<<21)|(3u<<12)|(1u<<16)|(1u<<9)|1u,
+  (1u<<30)|(1u<<28)|(4u<<21)|(4u<<7)|52u,
+  (3u<<27)|(1u<<23)|(1u<<21)|(3u<<12)|(1u<<16)|1u
+ };
+ if(!input||available<344||a>~(remesa_ta_ref_uptr)0-344)return EINVAL;
+ for(i=0;i<6;i++)if(remesa_ta_ref_word(p+312+i*4)!=clamp[i])return EINVAL;
+ for(i=0;i<312;i++)original[i]=p[i];
+ for(i=312;i<320;i++)original[i]=p[i+24];
+ return remesa_scene_gears_attribute_vertex_body(original,sizeof(original));
+}
 static inline int remesa_scene_fragment_body(const void *input,size_t available,remesa_scene_u32 compiled)
 {
  const remesa_ta_ref_u8 *p=input;remesa_ta_ref_uptr a=(remesa_ta_ref_uptr)input;

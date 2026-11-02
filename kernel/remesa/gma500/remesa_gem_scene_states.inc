@@ -34,8 +34,9 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
       ta->references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS&&
       ta->references[r].draw==ta->references[ref].draw)break;
     if(r==ta->reference_count)return -EINVAL;
-    /* The subsequent vertex checker requires the exact gears CODE320 when
-     * this PARAM grammar is present. States alone never certify a shader. */
+    /* The subsequent vertex checker requires the exact selected gears body.
+     * Its COLOR-clamp344 variant additionally requires this state15 upload.
+     * States alone never certify a shader. */
    }
   }
   error=parameter?remesa_parameter_upload_pds((const u8 *)views[p].cpu+offset,60,&decoded):

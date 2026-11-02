@@ -38,6 +38,10 @@ The legacy state14 constructor refuses this profile; the explicit homogeneous
 state15 owner can prepare it. No kernel catalogue or execution gate is added.
 An internal PDS profile number is not a registered kernel test profile.
 
+The separate [kernel body/state validation](kernel-clamped-gears-admission.md)
+now recognizes CODE344 only with an authenticated state15 draw. Its offline
+coverage does not register a new LAB profile or authorize physical execution.
+
 ## Raster descriptors and execution
 
 The explicit homogeneous frontend can retain a supported OpenGL raster
