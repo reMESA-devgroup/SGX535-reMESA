@@ -33,6 +33,10 @@ donor for this integration; see [the retained/general comparison](general-dpm-re
 The missing general-job contract below does not invalidate that earlier proof
 or require another DPM encoder.
 
+The [general-ID pool write exclusion](general-dpm-write-exclusion.md) is now
+implemented and checked before general execution when sealed. It supplies
+ownership protection, not a replacement for the cold claim or a warm epoch.
+
 Keeping the source lease does not make rendered scratch pristine again.
 Publication consumes `zero_pristine` on GPU-written REGION and DPM objects.
 The next cold scene preparation requires authenticated zero origin for those

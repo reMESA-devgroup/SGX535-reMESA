@@ -14,6 +14,7 @@ int remesa_private_session_acquire(struct drm_device *dev,struct drm_file *file,
  if(s->private_device_lost){error=-ENODEV;goto unlock;}
  if(s->private_session||s->stream_bound||s->executor||s->pds_write_guard){error=-EBUSY;goto unlock;}
  if(s->private_work_owned){error=-EBUSY;goto unlock;}
+ for(i=0;i<2;i++)if(s->private_dpm_ids[i]){error=-EBUSY;goto unlock;}
  for(i=0;i<6;i++)if(s->private_work_ids[i]){error=-EBUSY;goto unlock;}
 #if !defined(REMESA_MEMORY_TEST) || defined(REMESA_RETAINED_IOCTL_TEST)
  if(retained_entry.initialized||retained_entry.attempted){error=-EBUSY;goto unlock;}
@@ -45,6 +46,18 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
  }
  /* Validate the complete seal before clearing any part of it. Source close,
   * job retirement and all CPU aliases were checked above; no cache/GPU work. */
+ if(s->private_dpm_ids[0]||s->private_dpm_ids[1]){
+  if(s->private_work_owned||s->pds_write_guard){error=-EIO;goto unlock;}
+  for(i=0;i<5;i++)if(s->private_input_ids[i]){error=-EIO;goto unlock;}
+  for(i=0;i<6;i++)if(s->private_work_ids[i]){error=-EIO;goto unlock;}
+  if(!s->private_dpm_ids[0]||!s->private_dpm_ids[1]||
+     s->private_dpm_ids[0]==s->private_dpm_ids[1]){error=-EIO;goto unlock;}
+  for(i=0;i<2;i++){
+   unsigned id=s->private_dpm_ids[i];struct backing *b=&s->bo[id&31];
+   if(!b->live||b->generation!=id>>5||b->input_seal||!b->pinned||!b->reserved||
+      !b->pages||b->gem.size!=33554432ULL||b->inserted!=8192){error=-EIO;goto unlock;}
+  }
+ }
  if(s->private_work_owned){
   if(!s->private_input_ids[0]||!s->pds_write_guard){error=-EIO;goto unlock;}
   for(i=0;i<6;i++){
@@ -66,6 +79,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
   memset(s->private_input_ids,0,sizeof(s->private_input_ids));s->pds_write_guard=NULL;
  }else if(s->pds_write_guard){error=-EIO;goto unlock;}
  memset(s->private_work_ids,0,sizeof(s->private_work_ids));s->private_work_owned=false;
+ memset(s->private_dpm_ids,0,sizeof(s->private_dpm_ids));
  s->private_session=NULL;error=0;
  unlock:mutex_unlock(&s->lock);
  done:mutex_unlock(&endpoint_lock);return error;

@@ -91,6 +91,10 @@ int main(void)
  CHECK(remesa_private_session_source_begin(&s,&owner)==-EBUSY&&claims==1);
  CHECK(remesa_private_session_source_end(&s,&otherowner)==-EACCES&&!settles&&!releases);
  CHECK(remesa_private_session_release(&s,&owner)==-EBUSY);
+ for(unsigned i=0;i<2;i++){
+  s.private_dpm_ids[i]=32;CHECK(job(1)==-EOPNOTSUPP&&!executes&&!poisons);
+  s.private_dpm_ids[i]=0;s.jobs[0].live=false;s.bo[0].holds=0;
+ }
  for(u64 op=1;op<=3;op++){
   CHECK(!job(op));CHECK(source_live&&claims==1&&!releases&&!poisons);
   CHECK(s.private_source_held&&s.private_session==&owner);

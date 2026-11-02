@@ -21,6 +21,8 @@ int remesa_private_session_scene_execute(struct remesa_gem_memory *s,const void 
   for(i=0;i<5;i++)if(s->private_input_ids[i])error=-EOPNOTSUPP;
   for(i=0;i<6;i++)if(s->private_work_ids[i])error=-EOPNOTSUPP;
  }
+ if(!error&&(s->private_dpm_ids[0]||s->private_dpm_ids[1]))
+  error=remesa_private_session_dpm_locked(s,job->loan.ticket);
  mutex_unlock(&s->lock);if(error)goto done;
  error=remesa_gem_scene_job_execute(job,backend,observation,token,ticks,samples);
  if(error){

@@ -28,6 +28,16 @@ struct sgx535_gma500_fixed_backend;
 struct remesa_stream_observation;
 struct remesa_memory_view;
 struct remesa_memory_ticket;
+/* General scene pool write exclusion, independent of the retained11-role seal.
+ * Seal the existing cold-claimed table/parameter of a PREPARED admission job,
+ * cancel that job, then source_begin. Both IDs include generations. WRITE,
+ * write-LEASE and user SYNC stay denied until idle source close/backing release.
+ * READ retains ordinary job/lease exclusion. No clear, mapping, hash, cache
+ * exemption or warm-reuse credential is created. Caller retains the outer DRM
+ * guard; seal locks endpoint then memory, dpm_locked requires memory lock. */
+int remesa_private_session_seal_dpm(struct remesa_gem_memory *,const void *,
+ struct remesa_memory_ticket,u32 table_id,u32 parameter_id);
+int remesa_private_session_dpm_locked(struct remesa_gem_memory *,struct remesa_memory_ticket);
 /* Authenticate all five final input images/geometry under this PREPARED job's
  * holds before calling seal_inputs. The trusted pure callback permits only
  * typed PDS updates; CODE/geometry/other inputs become immutable to userspace.

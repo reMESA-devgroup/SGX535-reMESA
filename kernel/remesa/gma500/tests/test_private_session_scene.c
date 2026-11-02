@@ -24,6 +24,8 @@ static int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *j,
  j->loan.execution_retired=true;j->state=REMESA_SCENE_JOB_ACKNOWLEDGED;o->finished=true;return 0;
 }
 #define REMESA_PRIVATE_SESSION_SCENE_TEST
+int remesa_private_session_dpm_locked(struct remesa_gem_memory *m,struct remesa_memory_ticket t)
+{CHECK(m==&s&&t.operation&&(s.private_dpm_ids[0]||s.private_dpm_ids[1]));return -EACCES;}
 #include "remesa_private_session_scene.inc"
 static struct remesa_gem_scene_job scene_job(u64 op)
 {
@@ -55,6 +57,9 @@ int main(void)
  }
  s.private_work_owned=true;CHECK(RUN(&s,&owner,&j,&b,&o)==-EOPNOTSUPP);s.private_work_owned=false;
  s.pds_write_guard=unused_guard;CHECK(RUN(&s,&owner,&j,&b,&o)==-EOPNOTSUPP);s.pds_write_guard=NULL;
+ for(unsigned i=0;i<2;i++){
+  s.private_dpm_ids[i]=32;CHECK(RUN(&s,&owner,&j,&b,&o)==-EACCES);s.private_dpm_ids[i]=0;
+ }
  CHECK(scene_calls==calls&&!s.private_source_poisoned&&!poisons);
  for(u64 op=1;op<=3;op++){
   j=scene_job(op);o=(struct remesa_stream_observation){0};CHECK(!RUN(&s,&owner,&j,&b,&o));

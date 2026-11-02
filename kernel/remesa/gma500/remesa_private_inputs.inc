@@ -10,7 +10,7 @@ int remesa_private_session_seal_inputs(struct remesa_gem_memory *s,const void *o
  mutex_lock(&s->lock);
  error=private_session_owner(s,owner);if(error)goto unlock;
  if(s->stream_bound||s->executor||s->private_source_held||s->ta_cache_domains||
-    s->pds_write_guard||s->private_input_ids[0]){error=-EBUSY;goto unlock;}
+    s->pds_write_guard||s->private_input_ids[0]||s->private_dpm_ids[0]||s->private_dpm_ids[1]){error=-EBUSY;goto unlock;}
  j=ticket_job(s,ticket);
  if(!j||j->state!=REMESA_JOB_PREPARED||j->quarantined||j->cookie||j->attached||j->count!=11){
   error=-EBUSY;goto unlock;

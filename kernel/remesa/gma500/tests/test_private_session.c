@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 typedef uint64_t u64;
+typedef uint32_t u32;
 #define OBJECTS 32
 #define PAGE_SIZE 4096
 #define THIS_MODULE NULL
@@ -42,6 +43,7 @@ struct remesa_gem_memory {
  bool private_source_held,private_source_poisoned;
  unsigned private_input_ids[5];int (*pds_write_guard)(u64,const void *,unsigned);
  unsigned private_work_ids[6];bool private_work_owned;
+ unsigned private_dpm_ids[2];
  void *executor;struct backing bo[OBJECTS];struct retained_job jobs[8];struct resource exclude;
 };
 struct remesa_memory_request {unsigned action;};
@@ -95,6 +97,9 @@ int main(void)
    case 6:s.bo[31].color_vmas=1;break;case 7:s.private_device_lost=true;break;
    case 8:retained_entry.initialized=true;break;case 9:retained_entry.attempted=true;break;}
   CHECK(acquire(&out)==(fault==7?-ENODEV:-EBUSY)&&!out&&!s.private_session&&!cleanup);
+ }
+ for(unsigned i=0;i<2;i++){
+  fixture();s.private_dpm_ids[i]=32;CHECK(acquire(&out)==-EBUSY&&!out);
  }
  fixture();CHECK(!acquire(&out)&&out==&s&&s.private_session==&owner);
  CHECK(remesa_private_memory_device_retained(&dev));
