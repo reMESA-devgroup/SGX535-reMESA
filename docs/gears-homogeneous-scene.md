@@ -1,5 +1,9 @@
 # Homogeneous gears scene closure
 
+This records the earlier offline component. Subsequent native physical
+qualification at 1280×800 and 640×640 is recorded in
+[the native client integration](homogeneous-native-client.md).
+
 The separate state15 owner now feeds a complete persistent scene through
 `remesa_persistent_gears_homogeneous_body_prepare` and
 `remesa_persistent_gears_homogeneous_scene_prepare`. The common capture,
@@ -56,8 +60,9 @@ mode; this newly assembled complete state15 scene still needs its own physical
 qualification after bound frontend inputs and independent oracles are pinned.
 
 Next connect the bound Gallium viewport/ISP/constant-buffer snapshot to this
-explicit scene mode and its shared fence/retirement path. Resolve Mesa's
-`viewport_transform_lowered` contract consistently with the hardware mode.
+explicit scene mode and its shared fence/retirement path. The subsequent
+[frontend coordinate audit](opengl-native-coordinate-contract.md) found that
+`viewport_transform_lowered` does not inject viewport math on this path.
 Keep generic clipping, interpolation, shader/texture coverage and complete
 OpenGL/GLES capabilities unproved until validated.
 

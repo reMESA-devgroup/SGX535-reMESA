@@ -43,10 +43,31 @@ static enum remesa_dispatch bound_submit_native(void *priv,const struct remesa_g
  (void)priv;
 #endif
  CHECK(submit&&remesa_scene_packet_valid(submit->packet)&&submit->packet->binding_count==18&&submit->packet->use_count==11&&submit->packet->controls.ta_bytes==104);
+#ifdef REMESA_BOUND_GEARS_DRAW_VBO
+ const char *export_dir=getenv("REMESA_DRAW_INPUT_EXPORT_DIR");
+ if(export_dir){
+  fixture_write(export_dir,"packet.bin",submit->packet,sizeof(*submit->packet));
+  for(unsigned i=0;i<submit->packet->binding_count;i++)if(submit->packet->bindings[i].access==1){
+   struct backing *b=get(priv,submit->packet->bindings[i].id);char name[40];
+   CHECK(snprintf(name,sizeof name,"bo-%u.bin",i)>0);fixture_write(export_dir,name,b->bytes,b->length);
+  }
+ }
+#endif
  if(bound_submit_mode==14)return REMESA_NOT_ISSUED;
  if(bound_submit_mode==15)return REMESA_ISSUANCE_AMBIGUOUS;
  *out=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,.retired=true,.published=true,.acknowledged=bound_submit_mode!=16};return REMESA_ISSUED;
 }
+#endif
+#ifdef REMESA_BOUND_GEARS_DRAW_VBO
+static int bound_execute_scene(struct pipe_context *ctx,const struct pipe_draw_info *info,
+ const struct pipe_draw_start_count_bias *draw,const struct remesa_linked_scene_request *options,
+ struct pipe_fence_handle **fence)
+{
+ (void)options;ctx->draw_vbo(ctx,info,0,NULL,draw,1);
+ int error=remesa_context_error(ctx);if(!error)ctx->flush(ctx,fence,0);return error;
+}
+#else
+#define bound_execute_scene bound_submit_scene
 #endif
 int main(int argc,char **argv)
 {
@@ -79,6 +100,12 @@ int main(int argc,char **argv)
  struct pipe_screen *screen=remesa_screen_create(&d);CHECK(screen);CHECK(!remesa_screen_enable_linked_attachment_storage(screen));
  struct pipe_resource *color=attachment(screen,width,height,false),*depth=attachment(screen,width,height,true);CHECK(color&&depth);
  struct pipe_context *ctx=screen->context_create(screen,NULL,0);CHECK(ctx);
+#ifdef REMESA_BOUND_GEARS_DRAW_VBO
+ unsigned before_enable=f.creates,maps_before_enable=f.cpu_maps;
+ CHECK(!remesa_context_enable_homogeneous_draw_lab(ctx));
+ CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==EALREADY);
+ CHECK(f.creates==before_enable&&f.cpu_maps==maps_before_enable&&!bound_submit_calls);
+#endif
  const struct pipe_framebuffer_state fb={.width=width,.height=height,.nr_cbufs=1,.cbufs={{.texture=color,.format=PIPE_FORMAT_B8G8R8A8_UNORM}},.zsbuf={.texture=depth,.format=PIPE_FORMAT_Z24X8_UNORM}};
  ctx->set_framebuffer_state(ctx,&fb);CHECK(!remesa_context_error(ctx));
 #ifdef REMESA_BOUND_GEARS_HOMOGENEOUS
@@ -156,15 +183,27 @@ int main(int argc,char **argv)
  if(mode==12||mode==13){fail_at=f.creates+3;fail_uncertain=mode==13;}
 #ifdef REMESA_BOUND_GEARS_SCENE_SUBMIT
  struct pipe_fence_handle *fence=NULL;
+#ifdef REMESA_BOUND_GEARS_DRAW_VBO
+ struct pipe_draw_start_count_bias empty=draw;empty.count=0;
+ ctx->draw_vbo(ctx,&info,0,NULL,&empty,1);CHECK(!remesa_context_error(ctx)&&!bound_submit_calls);
+ unsigned before_invalid=f.creates,maps_before_invalid=f.cpu_maps;
+ ctx->draw_vbo(ctx,&info,1,NULL,&draw,1);CHECK(remesa_context_error(ctx)==ENOTSUP&&!bound_submit_calls);
+ ctx->draw_vbo(ctx,&info,0,NULL,&draw,2);CHECK(remesa_context_error(ctx)==ENOTSUP&&!bound_submit_calls);
+ struct pipe_rasterizer_state unsupported={.poly_stipple_enable=true};
+ CHECK(!ctx->create_rasterizer_state(ctx,&unsupported));
+ ctx->draw_vbo(ctx,&info,0,NULL,&draw,1);CHECK(remesa_context_error(ctx)==ENOTSUP&&!bound_submit_calls);
+ ctx->bind_rasterizer_state(ctx,NULL);
+ CHECK(f.creates==before_invalid&&f.cpu_maps==maps_before_invalid);
+#endif
  if(mode==14){
-  CHECK(bound_submit_scene(ctx,&info,&draw,&options,&fence)==EOPNOTSUPP&&!fence&&bound_submit_calls==1);
+  CHECK(bound_execute_scene(ctx,&info,&draw,&options,&fence)==EOPNOTSUPP&&!fence&&bound_submit_calls==1);
   CHECK(!remesa_resource_wait_writer(ctx,color,0)&&!remesa_resource_wait_writer(ctx,depth,0));bound_submit_mode=0;
  }
- int error=bound_submit_scene(ctx,&info,&draw,&options,&fence);
+ int error=bound_execute_scene(ctx,&info,&draw,&options,&fence);
  if(mode==13||mode==15||mode==16){
   CHECK(error==EOWNERDEAD&&!fence&&bound_submit_calls==(mode==13?0:1));
   CHECK(remesa_resource_wait_writer(ctx,color,0)==EOWNERDEAD&&remesa_resource_wait_writer(ctx,depth,0)==EOWNERDEAD);
-  unsigned calls=bound_submit_calls;CHECK(bound_submit_scene(ctx,&info,&draw,&options,&fence)==EOWNERDEAD&&bound_submit_calls==calls);
+  unsigned calls=bound_submit_calls;CHECK(bound_execute_scene(ctx,&info,&draw,&options,&fence)==EOWNERDEAD&&bound_submit_calls==calls);
   ctx->flush(ctx,&fence,0);CHECK(!fence&&remesa_persistent_close(&d)==EBUSY);
   puts("PASS bound gears uncertain allocation/dispatch/receipt poisons both attachments and suppresses retry/flush; MODEL_GPU0");return 0;
  }
@@ -180,6 +219,11 @@ int main(int argc,char **argv)
 #ifdef REMESA_BOUND_GEARS_SCENE_SUBMIT
   CHECK(!error&&fence&&bound_submit_calls==(mode==14?2:1)&&!remesa_context_cpu_clear_count(ctx)&&!screen->caps.graphics&&!screen->caps.accelerated);
   CHECK(screen->fence_finish(screen,ctx,fence,0));struct pipe_fence_handle *flushed=NULL;ctx->flush(ctx,&flushed,0);CHECK(flushed==fence);screen->fence_reference(screen,&flushed,NULL);
+#ifdef REMESA_BOUND_GEARS_DRAW_VBO
+  unsigned calls=bound_submit_calls;
+  CHECK(bound_execute_scene(ctx,&info,&draw,&options,&flushed)==ENOTSUP&&!flushed&&bound_submit_calls==calls);
+  ctx->flush(ctx,&flushed,0);CHECK(flushed==fence);screen->fence_reference(screen,&flushed,NULL);
+#endif
   CHECK(!remesa_resource_wait_writer(ctx,color,0));ctx->delete_vs_state(ctx,vs);ctx->delete_fs_state(ctx,fs);ctx->delete_vertex_elements_state(ctx,el);ctx->destroy(ctx);
   remesa_resource_reference(&color,NULL);remesa_resource_reference(&vb,NULL);remesa_resource_reference(&cb,NULL);remesa_resource_reference(&ib,NULL);
   struct pipe_context *other=screen->context_create(screen,NULL,0);CHECK(other);CHECK(!remesa_resource_wait_writer(other,depth,0));other->destroy(other);remesa_resource_reference(&depth,NULL);

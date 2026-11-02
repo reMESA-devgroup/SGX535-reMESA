@@ -92,6 +92,7 @@ struct context {
  struct pipe_resource *target,*depth_target; bool position_bound,pipeline_bound,diagnostic_discard; uint32_t argb;
  int error; struct pipe_fence_handle *last; uint64_t cpu_clears,cpu_copies,native_copies,native_fills;
  bool failed_submission;
+ bool homogeneous_draw_lab;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
  struct remesa_draw_rejection_status draw_rejections;
@@ -176,6 +177,9 @@ static void set_capabilities(struct screen *sc)
   * Fragment coordinates/interpolation are rejected by the NIR recognizer;
   * their convention flags must not advertise unqualified GPU semantics. */
  caps.max_varyings=0; caps.vendor_id=0x8086; caps.device_id=0x8108;
+ /* Mesa uses this historical hint for gl_Position transform-feedback
+  * preservation. It does not insert nir_lower_viewport_transform here;
+  * this driver never calls that pass. Stream output remains unsupported. */
  caps.viewport_transform_lowered=true;
 #ifdef REMESA_WITH_NIR
  if(!sc->device.resource_only_backend) {
@@ -1884,6 +1888,21 @@ int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **out)
 {return context_submit_scene(p,info,draw_info,options,true,true,out);}
+int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *p)
+{
+#ifdef REMESA_WITH_NIR
+ if(!p||p->draw_vbo!=draw)return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!sc->device.resource_only_backend||!sc->linked_attachment_storage||sc->gears_runtime||
+    !sc->device.ops->submit_linked_scene||!sc->device.ops->release_linked_scene)return ENOTSUP;
+ if(ctx->homogeneous_draw_lab)return EALREADY;
+ ctx->homogeneous_draw_lab=true;return 0;
+#else
+ (void)p;return ENOTSUP;
+#endif
+}
 
 static void stencil_ref(struct pipe_context *p,const struct pipe_stencil_ref reference)
 { (void)reference;c(p)->error=0; /* All admitted DSA states disable stencil. */ }
@@ -2062,6 +2081,27 @@ static void draw(struct pipe_context *p,const struct pipe_draw_info *info,unsign
   owned_index=info->index.resource;
  if(sc->closing) { err=ESHUTDOWN;goto done; }
  if(sc->gears_runtime){err=queue_gears(p,info,drawid,indirect,draws,count);if(err)ctx->gears_poisoned=true;goto done;}
+ if(ctx->homogeneous_draw_lab){
+  if(!draws||count!=1||indirect||drawid)goto done;
+  if(ctx->failed_submission){err=EOWNERDEAD;goto done;}
+  if(!draws->count||!info->instance_count||!ctx->sample_enabled){err=0;goto done;}
+  if(ctx->invalid_scissor)goto done;
+  for(unsigned kind=0;kind<FIXED_COUNT;kind++)if(ctx->invalid_fixed[kind])goto done;
+  struct fixed *state=ctx->bound_fixed[FIXED_RASTER];
+  /* The closed native scene has no cull/scissor/clip lowering. Never ignore
+   * an API raster state merely because its shader/geometry is recognized. */
+  if(state&&(state->scissor||state->cull_face||state->depth_clip||state->flat||
+     state->front_ccw||state->bottom_edge_rule||state->clamp_vertex_color))goto done;
+  err=remesa_sampler_draw_admit(ctx->samplers);if(err)goto done;
+  err=remesa_texture_draw_admit(ctx->textures);if(err)goto done;
+  const struct remesa_linked_scene_request options={.vertex_bank=4,.pixel_bank=3,
+   .state_bank=4,.clear_depth=1};
+  struct pipe_fence_handle *native=NULL;
+  err=remesa_context_submit_gears_homogeneous_scene(p,info,draws,&options,&native);
+  /* Submission already shared this fence with COLOR/Z/context. Drop only
+   * this local reference; common legacy cleanup must not destroy it twice. */
+  fence_ref(p->screen,&native,NULL);goto done;
+ }
  if(sc->device.resource_only_backend||ctx->depth_target) goto done; /* CPU-only depth attachment never admits a draw. */
  if(!draws || count!=1 || indirect || drawid) goto done;
  /* Triangle-list assembly ignores an incomplete final primitive. Do this
@@ -2594,6 +2634,8 @@ int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *p,const s
 {(void)p;(void)i;(void)d;(void)r;(void)o;return ENOTSUP;}
 int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t bits,unsigned char out[28])
 {(void)p;(void)bits;(void)out;return ENOTSUP;}
+int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *p)
+{(void)p;return ENOTSUP;}
 int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}
 int remesa_context_gears_bottom_left(struct pipe_context *p,bool *b){(void)p;(void)b;return ENOTSUP;}
 int remesa_context_gears_geometry_snapshot(struct pipe_context *p,const struct pipe_draw_info *i,

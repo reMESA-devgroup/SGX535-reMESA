@@ -1,5 +1,9 @@
 # Reusing the physically witnessed homogeneous viewport state
 
+This records the earlier offline component. Subsequent native physical
+qualification at 1280×800 and 640×640 is recorded in
+[the native client integration](homogeneous-native-client.md).
+
 The original 2026-10-24 W=2 viewport experiment already passed physically:
 `/home/gama/sgx535-offline/native1280-gears-viewport-mode-20261024T205600Z/PHYSICAL_RESULT.md`.
 It used the existing gears CODE, matrix and six viewport values, with the
@@ -45,10 +49,12 @@ W=2 witness instead of inventing software viewport math or another shader.
 Keep general reciprocal-W interpolation, clipping and API coverage explicitly
 unproved until their respective contracts and physical tests pass.
 
-The capability decision must follow that integration: the current
-`viewport_transform_lowered=true` asks Mesa to insert viewport arithmetic.
-The witnessed homogeneous state is a candidate hardware coordinate path, so
-its eventual screen contract must avoid applying the transform twice. Trace
-that choice through the existing state tracker and shader recognition before
-adding an arithmetic epilogue or changing the capability. The flag stays
-unchanged in this preparation-only component.
+The earlier interpretation of `viewport_transform_lowered` was incorrect.
+In the pinned Mesa source it controls preservation of `gl_Position` for
+transform feedback; it does not itself insert viewport arithmetic. This driver
+does not call `nir_lower_viewport_transform`, and stream output is refused.
+The actual OpenGL-to-NIR comparison with that flag false/true delivered
+byte-identical passthrough vertex NIR without viewport loads or reciprocals.
+See [the frontend coordinate contract](opengl-native-coordinate-contract.md).
+Keep the historical flag unchanged; do not add an arithmetic epilogue or flip
+it merely to connect the native executor.

@@ -181,6 +181,14 @@ int remesa_context_submit_gears_attribute_scene(struct pipe_context *,
 int remesa_context_submit_gears_homogeneous_scene(struct pipe_context *,
  const struct pipe_draw_info *,const struct pipe_draw_start_count_bias *,
  const struct remesa_linked_scene_request *options,struct pipe_fence_handle **);
+/* Explicit context-local cold-scene LAB adapter for ordinary draw_vbo.
+ * Reuses the homogeneous submit/fence/failure path and canonical banks4/3/4,
+ * Zclear1. Bound ISP/viewport, shaders, constants and raw geometry remain the
+ * source of the scene. Unsupported raster/sampling state is refused. No cap,
+ * API version, kernel gate or production admission change; a matching native
+ * backend is still required. Existing COLOR/Z contents remain unsupported.
+ * No resource IO or submission occurs when enabling. Serialized API entry. */
+int remesa_context_enable_homogeneous_draw_lab(struct pipe_context *);
 
 struct remesa_shader_host_pipeline_request;
 struct remesa_shader_host_pipeline;

@@ -107,10 +107,11 @@ No expected image was uploaded to the GPU, and the earlier GLXGears path was
 not changed.
 
 The next integration is the ordinary API route to this executor. Reuse the
-existing Mesa/OpenGL context and demonstrated `glDrawArrays` frontend. Its
-ordinary `draw_vbo` still refuses this resource backend/depth path, and its
-current `viewport_transform_lowered` contract differs from this hardware
-homogeneous mode. Both contracts must agree before routing an API draw here;
-simply removing the draw guard or changing advertised capabilities would not
-establish correct execution. General shader/state/API coverage and continuous
-production submission remain additional work.
+existing Mesa/OpenGL context and demonstrated `glDrawArrays` frontend. Default
+`draw_vbo` admission still refuses this resource backend/depth path. A separate
+context-local LAB adapter now delegates the callback to the existing native
+homogeneous submit/fence path; it does not change screen/API capabilities.
+The [frontend coordinate audit](opengl-native-coordinate-contract.md) also
+corrects the earlier assumption about `viewport_transform_lowered`: that hint
+does not inject viewport arithmetic here. General shader/state/API coverage,
+pass preservation and continuous production submission remain additional work.
