@@ -1218,6 +1218,25 @@ int remesa_context_window_viewport_snapshot(struct pipe_context *p,uint32_t dept
     !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
  return window_viewport_request(c(p),depth_bits,out);
 }
+int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *p,
+ struct remesa_vertex_parameter_values *out)
+{
+ if(!p||p->draw_vbo!=draw||!out||
+    (uintptr_t)out%_Alignof(struct remesa_vertex_parameter_values)||
+    !context_state_output_valid(c(p),out,sizeof(*out)))return EINVAL;
+ struct context *ctx=c(p);
+ struct remesa_ta_window_viewport_request viewport;
+ int e=window_viewport_request(ctx,24,&viewport);if(e)return e;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(r(ctx->target)->write_error)return r(ctx->target)->write_error;
+ struct remesa_vertex_parameter_values values={0};
+ for(unsigned i=0;i<3;i++){
+  memcpy(&values.coefficient_bits[i],&ctx->viewport.scale[i],4);
+  memcpy(&values.coefficient_bits[4+i],&ctx->viewport.translate[i],4);
+ }
+ values.coefficient_bits[3]=UINT32_C(0x3f800000);
+ *out=values;return 0;
+}
 int remesa_context_window_viewport_encode(struct pipe_context *p,uint32_t depth_bits,
  unsigned char out[28])
 {
@@ -2446,6 +2465,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
  memset(out,0,sizeof(*out));
 }
 #else
+int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *p,struct remesa_vertex_parameter_values *out)
+{(void)p;(void)out;return ENOTSUP;}
 int remesa_context_linked_isp_snapshot(struct pipe_context *p,struct remesa_isp_opaque_triangle_request *out)
 {(void)p;(void)out;return ENOTSUP;}
 int remesa_context_window_viewport_snapshot(struct pipe_context *p,uint32_t bits,struct remesa_ta_window_viewport_request *out)

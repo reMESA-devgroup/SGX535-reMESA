@@ -52,9 +52,9 @@ static struct pipe_surface *surface(struct pipe_context *ctx,struct pipe_resourc
 {const struct pipe_surface t={.format=res->format};return ctx->create_surface(ctx,res,&t);}
 int main(int argc,char **argv)
 {
- CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<24);
+ CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<26);
  bool matrix=mode==22||mode==23;
- unsigned width=mode==1||mode==14||mode==23?640:mode==2||mode==15?641:mode==3?1600:1280,height=mode==1||mode==14||mode==23?640:mode==2||mode==15?479:mode==3?768:800;
+ unsigned width=mode==1||mode==14||mode==23||mode==25?640:mode==2||mode==15?641:mode==3?1600:1280,height=mode==1||mode==14||mode==23||mode==25?640:mode==2||mode==15?479:mode==3?768:800;
  glsl_type_singleton_init_or_ref();struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
  struct remesa_device d={0};struct remesa_persistent_config cfg={.ops=&target_ops,.priv=&f,.context=9200,.va_start=0x20000000,.va_end=0x45000000,.byte_budget=96u*1024u*1024u,.resource_only_backend=true,.resource_limits={2048,2048,128,16u*1024u*1024u}};
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
@@ -108,6 +108,25 @@ int main(int argc,char **argv)
   CHECK(options.state.viewport.path==REMESA_TA_VIEWPORT_MATRIX_WINDOW&&f.creates==creates&&f.cpu_maps==maps);
  }
  struct remesa_scene_capture capture={0},before=capture;
+ if(mode>=24){
+  const struct pipe_viewport_state viewport={.scale={width*.5f,-(float)height*.5f,.5f},.translate={width*.5f,height*.5f,.5f}};
+  ctx->set_viewport_states(ctx,0,1,&viewport);CHECK(!remesa_context_error(ctx));
+  struct remesa_vertex_parameter_values values;unsigned maps=f.cpu_maps,creates=f.creates;
+  CHECK(!remesa_context_window_viewport_parameters_snapshot(ctx,&values));
+  CHECK(f.cpu_maps==maps&&f.creates==creates);
+  void *parameters=NULL;CHECK(!remesa_persistent_vertex_parameters_prepare(&d,&values,4,&parameters));
+  struct remesa_persistent_vertex_parameters_backing backing;
+  CHECK(!remesa_persistent_vertex_parameters_snapshot(&d,parameters,&backing));
+  struct backing *bytes=get(&f,backing.image.handle);CHECK(bytes);
+  for(unsigned i=0;i<16;i++)CHECK(shader_pds_le32(bytes->bytes+4+4*i)==values.coefficient_bits[i]);
+  CHECK(backing.image.state_bytes==80&&backing.effective_source_dwords==17&&backing.transfer_dwords==20);
+  d.ops->destroy_bo(d.priv,parameters);
+  ctx->surface_destroy(ctx,cs);ctx->surface_destroy(ctx,zs);ctx->destroy(ctx);
+  remesa_resource_reference(&color,NULL);remesa_resource_reference(&depth,NULL);remesa_resource_reference(&vb,NULL);
+  screen->destroy(screen);CHECK(f.creates==f.destroys&&f.pins==f.unpins&&!dispatch_calls);
+  CHECK(!remesa_persistent_close(&d));glsl_type_singleton_decref();
+  puts("PASS actual bound Gallium viewport -> common owned PARAM source/PDS/EE/TA, raw shader input untouched, no scene/native dispatch; GPU0");return 0;
+ }
  unsigned oldcreates=f.creates,oldmaps=f.cpu_maps;
  CHECK(remesa_context_prepare_linked_scene(ctx,&info,&draw,&options,(void *)&info)==EINVAL);
  CHECK(remesa_context_prepare_linked_scene(ctx,&info,&draw,&options,(void *)&draw)==EINVAL);

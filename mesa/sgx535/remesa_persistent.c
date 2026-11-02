@@ -65,7 +65,7 @@ struct memory {
  bool linked_region;
  uint32_t event_pixel_bank;
  struct remesa_use_entry_plan state_use_entry;
- unsigned state_kind;
+ unsigned state_kind,state_parameter_dwords;
  size_t state_bytes,state_use_offset,state_pds_offset,state_ta_offset,state_ta_bytes;
  struct shader_upload *shader_dependency;
  struct linked_program *linked_program;
@@ -1606,10 +1606,13 @@ static int isp_update_lease(struct persistent *d,struct memory *b,
 }
 static int state_update_prepare(struct remesa_device *device,
  const uint8_t *source_state,size_t source_bytes,unsigned kind,uint32_t bank,
- struct shader_upload *dependency,struct memory *linked_dependency,void **out)
+ struct shader_upload *dependency,struct memory *linked_dependency,
+ uint32_t coefficient_dwords,void **out)
 {
  int e;
- if(!source_bytes||source_bytes%4||source_bytes/4>16)return ENOTSUP;
+ const bool parameters=kind==REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS;
+ if(!source_bytes||source_bytes%4||
+    (parameters?(!coefficient_dwords||coefficient_dwords>127||source_bytes>512):source_bytes/4>16))return ENOTSUP;
  const bool scene_close=kind==REMESA_PERSISTENT_STATE_SCENE_CLOSE;
  const size_t use_offset=(source_bytes+15u)&~(size_t)15u;
  const size_t pds_offset=(use_offset+16u+31u)&~(size_t)31u;
@@ -1617,8 +1620,10 @@ static int state_update_prepare(struct remesa_device *device,
  const size_t ta_bytes=scene_close?12u:8u;
  /* Preserve all108 legacy bytes, including the final unused zero word. */
  const size_t image_bytes=source_bytes==8?ISP_UPDATE_BYTES:ta_offset+ta_bytes;
- uint8_t image[192]={0};if(image_bytes>sizeof(image))return E2BIG;
- memcpy(image+ISP_UPDATE_STATE,source_state,source_bytes);
+ uint8_t image[640]={0};if(image_bytes>sizeof(image))return E2BIG;
+ /* For PARAM, source_state holds only coefficient_dwords*4 initialized bytes;
+  * source_bytes names the transfer span. Prefix VA derives from the owner. */
+ if(!parameters)memcpy(image+ISP_UPDATE_STATE,source_state,source_bytes);
  /* Reuse the independently verified original n=1..16 state auxiliary operands.
   * Numeric classes are not asserted as architectural register-bank names. */
  const struct remesa_usse_cpu_move move={.source={2,0},.destination={1,0},
@@ -1626,9 +1631,13 @@ static int state_update_prepare(struct remesa_device *device,
  const struct remesa_usse_cpu_three_source tail={.source={{0,0},{2,(uint32_t)(source_bytes/4)},{2,0}},
   .source_extension={0,1,1},.word0_control21=1,.word1_control18=1};
  size_t written=0;
- e=remesa_usse_cpu_move_encode(&move,image+use_offset,8,&written);if(e)return e;
+ if(parameters){
+  const struct remesa_usse_cpu_control_ee ee={.record_last=1};
+  e=remesa_usse_cpu_control_ee_encode(&ee,image+use_offset,8,&written);
+ }else e=remesa_usse_cpu_move_encode(&move,image+use_offset,8,&written);
+ if(e)return e;
  if(written!=8)return EPROTO;
- e=remesa_usse_cpu_three_source_encode(&tail,image+use_offset+8,8,&written);
+ if(!parameters)e=remesa_usse_cpu_three_source_encode(&tail,image+use_offset+8,8,&written);
  if(e)return e;
  if(written!=8)return EPROTO;
  /* Reject invalid banks before allocating backing. Actual bank ownership is
@@ -1639,9 +1648,10 @@ static int state_update_prepare(struct remesa_device *device,
  e=allocate_class(d,PAGE_BYTES,&object,REMESA_VA_PROGRAM);if(e)return e;
  struct memory *b=object;b->isp_update=true;b->scene_close=scene_close;
  b->state_kind=kind;b->state_bytes=source_bytes;b->state_use_offset=use_offset;
+ b->state_parameter_dwords=coefficient_dwords;
  b->state_pds_offset=pds_offset;b->state_ta_offset=ta_offset;b->state_ta_bytes=ta_bytes;
  const struct remesa_use_entry_request use={.allocation_address=b->va,
-  .allocation_bytes=b->allocated,.entry_offset=use_offset,.program_bytes=16,
+  .allocation_bytes=b->allocated,.entry_offset=use_offset,.program_bytes=parameters?8:16,
   .bank=bank,.data_master=REMESA_USE_VERTEX};
  struct remesa_use_entry_plan entry;uint32_t fixup;
  e=remesa_use_entry_prepare(&use,&entry);if(e)goto fail;
@@ -1653,9 +1663,18 @@ static int state_update_prepare(struct remesa_device *device,
   const struct remesa_use_entry_plan *other=&linked_dependency->linked_pds->program->linked_program->entry[i];
   if(entry.register_offset==other->register_offset&&entry.register_word!=other->register_word){e=EBUSY;goto fail;}
  }
+ if(parameters){
+  const struct remesa_pds_parameter_source_request source={b->va,b->allocated,0,
+   coefficient_dwords,(uint32_t)(source_bytes/4)};
+  e=remesa_pds_structure_encode_parameter_source(&source,source_state,
+   coefficient_dwords*4u,image,source_bytes,&written);
+  if(e)goto fail;
+  if(written!=source_bytes){e=EPROTO;goto fail;}
+ }
  const struct remesa_pds_state_image_request pds={
   .source_allocation_address=b->va,.source_allocation_bytes=b->allocated,
-  .source_offset=ISP_UPDATE_STATE,.state_dwords=(uint32_t)(source_bytes/4),.use_lower19=fixup};
+  .source_offset=ISP_UPDATE_STATE,.state_dwords=(uint32_t)(source_bytes/4),.use_lower19=fixup,
+  .task_profile=parameters?REMESA_PDS_STATE_TASK_PARAMETERS:REMESA_PDS_STATE_TASK_ISP};
  uint8_t mask[REMESA_PDS_STRUCTURE_STATE_BYTES];
  e=remesa_pds_structure_encode_state_image(&pds,image+pds_offset,mask,
                                          sizeof(mask),&written);if(e)goto fail;
@@ -1666,7 +1685,9 @@ static int state_update_prepare(struct remesa_device *device,
   const struct remesa_ta_scene_close_request close={b->va,b->allocated,
    pds_offset,REMESA_PDS_STRUCTURE_STATE_BYTES};
   e=remesa_ta_scene_close_encode(&close,image+ta_offset);
- } else e=remesa_ta_state_reference_encode(b->va+pds_offset,(uint32_t)(source_bytes/4),false,image+ta_offset);
+ } else if(parameters)e=remesa_ta_parameter_reference_encode(b->va+pds_offset,
+  (uint32_t)(source_bytes/4),image+ta_offset);
+ else e=remesa_ta_state_reference_encode(b->va+pds_offset,(uint32_t)(source_bytes/4),false,image+ta_offset);
  if(e)goto fail;
  if(dependency){b->shader_dependency=dependency;++dependency->state_refs;}
  if(linked_dependency){b->linked_dependency=linked_dependency;++linked_dependency->refs;}
@@ -1676,9 +1697,60 @@ static int state_update_prepare(struct remesa_device *device,
  b->readable=true;*out=b;return 0;
 fail:
  destroy_bo(d,b);
- if(linked_dependency&&b->live){*out=b;return EOWNERDEAD;}
+ if((linked_dependency||parameters)&&b->live){*out=b;return EOWNERDEAD;}
  if(b->live&&b->quarantined)return dependency?shader_quarantine(d,dependency):EOWNERDEAD;
  return e;
+}
+int remesa_persistent_vertex_parameters_prepare(struct remesa_device *device,
+ const struct remesa_vertex_parameter_values *request,uint32_t bank,void **out)
+{
+ return remesa_persistent_vertex_parameter_block_prepare(device,
+  (const uint32_t *)(const void *)request,16,20,bank,out);
+}
+int remesa_persistent_vertex_parameter_block_prepare(struct remesa_device *device,
+ const uint32_t *coefficient_bits,uint32_t coefficient_dwords,
+ uint32_t transfer_dwords,uint32_t bank,void **out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ if(!coefficient_dwords||coefficient_dwords>127||!transfer_dwords||transfer_dwords>128)return ENOTSUP;
+ const size_t bytes_count=coefficient_dwords*4u;
+ if(!coefficient_bits||(uintptr_t)coefficient_bits%_Alignof(uint32_t)||
+    bytes_count>UINTPTR_MAX-(uintptr_t)coefficient_bits||
+    overlaps(coefficient_bits,bytes_count,out,sizeof(*out)))return EINVAL;
+ if(*out)return EBUSY;
+ uint8_t bytes[508],preview[512];size_t written;
+ for(unsigned i=0;i<coefficient_dwords;i++)for(unsigned j=0;j<4;j++)
+  bytes[4*i+j]=(uint8_t)(coefficient_bits[i]>>(8*j));
+ /* Validate the existing source/DMA policy before allocating. This address is
+  * private to the dry encode; the actual source is rebuilt from its live VA. */
+ const struct remesa_pds_parameter_source_request check={0x20000000,4096,0,
+  coefficient_dwords,transfer_dwords};
+ e=remesa_pds_structure_encode_parameter_source(&check,bytes,bytes_count,
+  preview,sizeof(preview),&written);if(e)return e;
+ return state_update_prepare(device,bytes,transfer_dwords*4u,
+  REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS,bank,NULL,NULL,coefficient_dwords,out);
+}
+int remesa_persistent_vertex_parameters_snapshot(const struct remesa_device *device,void *object,
+ struct remesa_persistent_vertex_parameters_backing *out)
+{
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct remesa_persistent_memory_backing memory;
+ e=remesa_persistent_memory_snapshot(device,object,&memory);if(e)return e;
+ const struct memory *b=object;
+ if(!b->isp_update||b->state_kind!=REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS||
+    !b->state_parameter_dwords)return EINVAL;
+ if(!b->readable)return EAGAIN;
+ struct remesa_persistent_vertex_parameters_backing value={
+  .image={.owner=memory.owner,.generation=memory.generation,.gpu_va=memory.gpu_va,
+   .handle=memory.handle,.allocation_bytes=memory.allocation_bytes,
+   .state_offset=0,.state_bytes=b->state_bytes,.use_offset=b->state_use_offset,.use_bytes=8,
+   .pds_offset=b->state_pds_offset,.pds_bytes=60,.ta_offset=b->state_ta_offset,.ta_bytes=8,
+   .use_entry=b->state_use_entry},
+  .coefficient_dwords=b->state_parameter_dwords,
+  .effective_source_dwords=1u+b->state_parameter_dwords,
+  .transfer_dwords=(uint32_t)(b->state_bytes/4)};
+ memcpy(value.image.pds_known_mask,b->state_pds_known,sizeof(value.image.pds_known_mask));
+ *out=value;return 0;
 }
 int remesa_persistent_isp_update_prepare(struct remesa_device *device,
  const struct remesa_isp_opaque_triangle_request *request,uint32_t bank,void **out)
@@ -1689,7 +1761,7 @@ int remesa_persistent_isp_update_prepare(struct remesa_device *device,
  if(*out)return EBUSY;
  struct remesa_isp_opaque_triangle_request r;memcpy(&r,request,sizeof(r));
  uint8_t state[8];e=remesa_isp_opaque_triangle_data_encode(&r,state);if(e)return e;
- return state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_ISP_WORD0,bank,NULL,NULL,out);
+ return state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_ISP_WORD0,bank,NULL,NULL,0,out);
 }
 int remesa_persistent_scene_close_prepare(struct remesa_device *device,uint32_t width,
  uint32_t height,uint32_t bank,void **out)
@@ -1697,7 +1769,7 @@ int remesa_persistent_scene_close_prepare(struct remesa_device *device,uint32_t 
  int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
  if(*out)return EBUSY;
  uint8_t state[8];e=remesa_ta_scene_close_data_encode(width,height,state);if(e)return e;
- e=state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_SCENE_CLOSE,bank,NULL,NULL,out);
+ e=state_update_prepare(device,state,8,REMESA_PERSISTENT_STATE_SCENE_CLOSE,bank,NULL,NULL,0,out);
  if(!e){struct memory *b=*out;b->depth_width=width;b->depth_height=height;}
  return e;
 }
@@ -1773,7 +1845,7 @@ static int constant_state_prepare(struct remesa_device *device,void *token,
  else e=remesa_ta_constant_draw_state_encode(&state,bytes);
  if(e)return e;
  return state_update_prepare(device,bytes,length,after_zclear?REMESA_PERSISTENT_STATE_AFTER_ZCLEAR:
-  REMESA_PERSISTENT_STATE_CONSTANT_DRAW,bank,dependency,NULL,out);
+  REMESA_PERSISTENT_STATE_CONSTANT_DRAW,bank,dependency,NULL,0,out);
 }
 int remesa_persistent_constant_state_prepare(struct remesa_device *device,void *token,
  const struct remesa_persistent_constant_state_request *request,uint32_t bank,void **out)
@@ -1790,7 +1862,7 @@ int remesa_persistent_fragment_state_prepare(struct remesa_device *device,void *
  e=owned_fragment_reference(device,token,false,&binding,&dependency);if(e)return e;
  uint8_t bytes[16];e=remesa_ta_fragment_binding_encode(&binding,bytes);if(e)return e;
  return state_update_prepare(device,bytes,sizeof(bytes),REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE,
-  bank,dependency,NULL,out);
+  bank,dependency,NULL,0,out);
 }
 int remesa_persistent_zclear_state_prepare(struct remesa_device *device,void *token,
  uint32_t bank,void **out)
@@ -1801,7 +1873,7 @@ int remesa_persistent_zclear_state_prepare(struct remesa_device *device,void *to
  e=owned_fragment_reference(device,token,true,&binding,&dependency);if(e)return e;
  uint8_t bytes[44];e=remesa_ta_scene_zclear_state_encode(&binding,bytes);if(e)return e;
  return state_update_prepare(device,bytes,sizeof(bytes),REMESA_PERSISTENT_STATE_SCENE_ZCLEAR,
-  bank,dependency,NULL,out);
+  bank,dependency,NULL,0,out);
 }
 int remesa_persistent_scene_state_snapshot(const struct remesa_device *device,void *object,
  struct remesa_persistent_scene_state_backing *out)
@@ -2252,7 +2324,7 @@ int remesa_persistent_linked_state_prepare(struct remesa_device *device,void *pd
  memcpy(state+4,isp+4,4);memcpy(state+8,fs+4,12);
  memcpy(state+20,viewport+4,24);memcpy(state+44,scalar+4,12);
  e=state_update_prepare(device,state,sizeof(state),REMESA_PERSISTENT_STATE_LINKED_DRAW,
-  bank,NULL,pds,out);
+  bank,NULL,pds,0,out);
  if(!e){struct memory *b=*out;b->depth_width=r.viewport.framebuffer_width;
   b->depth_height=r.viewport.framebuffer_height;}
  return e;

@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT. Shared actual Gallium state fixture; GPU0. */
+#include "remesa_persistent.h"
 static int reject_viewport_fill(void *priv,const struct remesa_fill_region *fill)
 {(void)priv;(void)fill;assert(!"viewport encoding must not issue a fill");return ENOTSUP;}
 static void check_window_viewports(void)
@@ -10,8 +11,11 @@ static void check_window_viewports(void)
  struct pipe_context *c=s->context_create(s,NULL,0);assert(c);
  unsigned char out[28],saved[28],expected[28];memset(out,0xa5,sizeof(out));memcpy(saved,out,sizeof(out));
  struct remesa_ta_window_viewport_request typed,saved_typed;memset(&typed,0xa5,sizeof typed);saved_typed=typed;
+ struct remesa_vertex_parameter_values parameters,saved_parameters;
+ memset(&parameters,0xa5,sizeof parameters);saved_parameters=parameters;
  assert(remesa_context_window_viewport_encode(c,24,out)==ENODATA&&!memcmp(out,saved,28));
  assert(remesa_context_window_viewport_snapshot(c,24,&typed)==ENODATA&&!memcmp(&typed,&saved_typed,sizeof typed));
+ assert(remesa_context_window_viewport_parameters_snapshot(c,&parameters)==ENODATA&&!memcmp(&parameters,&saved_parameters,sizeof parameters));
  const unsigned sizes[][2]={{1280,800},{640,640},{641,479},{1600,768}};
  for(unsigned k=0;k<4;k++){
   unsigned w=sizes[k][0],h=sizes[k][1];
@@ -35,6 +39,14 @@ static void check_window_viewports(void)
     typed.x==q.x&&typed.y==q.y&&typed.width==q.width&&typed.height==q.height&&
     typed.depth_bits==q.depth_bits&&typed.near_z==q.near_z&&typed.far_z==q.far_z&&typed.path==q.path);
    assert(!remesa_ta_window_viewport_encode(&typed,expected)&&!memcmp(out,expected,28));saved_typed=typed;
+   assert(!remesa_context_window_viewport_parameters_snapshot(c,&parameters));
+   for(unsigned axis=0;axis<3;axis++){
+    assert(!memcmp(&parameters.coefficient_bits[axis],&v.scale[axis],4));
+    assert(!memcmp(&parameters.coefficient_bits[4+axis],&v.translate[axis],4));
+   }
+   assert(parameters.coefficient_bits[3]==0x3f800000);
+   for(unsigned axis=7;axis<16;axis++)assert(!parameters.coefficient_bits[axis]);
+   saved_parameters=parameters;
    assert(rec.maps==maps&&rec.allocs==allocs&&!remesa_context_error(c));
    memcpy(saved,out,28);
    assert(remesa_context_window_viewport_encode(c,32,out)==ENOTSUP&&!memcmp(out,saved,28));
@@ -44,6 +56,10 @@ static void check_window_viewports(void)
    assert(remesa_context_window_viewport_snapshot(c,24,(void *)c)==EINVAL);
    assert(remesa_context_window_viewport_snapshot(c,24,(void *)((unsigned char *)&typed+1))==EINVAL);
    assert(remesa_context_window_viewport_snapshot(c,24,(void *)(UINTPTR_MAX-3))==EINVAL);
+   assert(remesa_context_window_viewport_parameters_snapshot(c,(void *)target)==EINVAL);
+   assert(remesa_context_window_viewport_parameters_snapshot(c,(void *)c)==EINVAL);
+   assert(remesa_context_window_viewport_parameters_snapshot(c,(void *)((unsigned char *)&parameters+1))==EINVAL);
+   assert(remesa_context_window_viewport_parameters_snapshot(c,(void *)(UINTPTR_MAX-3))==EINVAL);
    const struct pipe_viewport_state good=v;
    for(unsigned bad=0;bad<9;bad++){
     v=good;
@@ -61,6 +77,7 @@ static void check_window_viewports(void)
     c->set_viewport_states(c,0,1,&v);
     assert(remesa_context_window_viewport_encode(c,24,out)!=0&&!memcmp(out,saved,28));
     assert(remesa_context_window_viewport_snapshot(c,24,&typed)!=0&&!memcmp(&typed,&saved_typed,sizeof typed));
+    assert(remesa_context_window_viewport_parameters_snapshot(c,&parameters)!=0&&!memcmp(&parameters,&saved_parameters,sizeof parameters));
    }
    c->set_viewport_states(c,0,1,&good);assert(!remesa_context_error(c));
   }

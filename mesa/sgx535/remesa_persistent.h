@@ -240,8 +240,33 @@ enum remesa_persistent_state_kind {
  REMESA_PERSISTENT_STATE_ISP_WORD0=1, REMESA_PERSISTENT_STATE_SCENE_CLOSE=2,
  REMESA_PERSISTENT_STATE_CONSTANT_DRAW=3, REMESA_PERSISTENT_STATE_SCENE_ZCLEAR=4,
  REMESA_PERSISTENT_STATE_AFTER_ZCLEAR=5, REMESA_PERSISTENT_STATE_FRAGMENT_UPDATE=6,
- REMESA_PERSISTENT_STATE_LINKED_DRAW=7
+ REMESA_PERSISTENT_STATE_LINKED_DRAW=7,
+ REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS=8
 };
+/* Owned parameter source using the physically exercised dense16-coefficient,
+ * prefix17/transfer20-DWORD policy. Exact float bits, not vertex evaluation.
+ * Self-address, existing EE8 auxiliary, PARAM PDS60 and TA8 all derive from
+ * this allocation. No caller VA/CODE, submission, bank acquisition or shader
+ * consumption claim. Bank conflicts remain a whole-scene obligation.
+ * Preparation verifies its one-time immutable upload; metadata snapshots do
+ * no provider IO. Ordinary rollback and uncertain retention match state owners.
+ */
+struct remesa_vertex_parameter_values { uint32_t coefficient_bits[16]; };
+int remesa_persistent_vertex_parameters_prepare(struct remesa_device *,
+ const struct remesa_vertex_parameter_values *,uint32_t use_bank,void **bo);
+/* Same owner for live shader blocks, including the existing gears36/40-word
+ * profiles. Count declares initialized coefficient words, not allocation or
+ * shader consumption. The existing source encoder validates exact/rounded
+ * transfer count and one-descriptor DMA admission before any allocation. */
+int remesa_persistent_vertex_parameter_block_prepare(struct remesa_device *,
+ const uint32_t *coefficient_bits,uint32_t coefficient_dwords,
+ uint32_t transfer_dwords,uint32_t use_bank,void **bo);
+struct remesa_persistent_vertex_parameters_backing {
+ struct remesa_persistent_isp_update_backing image;
+ uint32_t coefficient_dwords,effective_source_dwords,transfer_dwords;
+};
+int remesa_persistent_vertex_parameters_snapshot(const struct remesa_device *,
+ void *bo,struct remesa_persistent_vertex_parameters_backing *);
 /* Explicit f41 draw delta /54c5 green clear state, not complete first-scene
  * state. All fragment references derive from this shader token's owned PDS;
  * no caller VA or borrowed program bytes are accepted. New state retains the

@@ -36,6 +36,13 @@ struct remesa_ta_window_viewport_request;
  * Disjoint aligned output storage required; errors preserve the output. */
 int remesa_context_window_viewport_snapshot(struct pipe_context *,uint32_t depth_bits,
  struct remesa_ta_window_viewport_request *);
+struct remesa_vertex_parameter_values;
+/* Two dense vec4s: bound scale.xyz/1 and translate.xyz/0, plus eight zero
+ * coefficient words for the existing16-word upload policy. No vertex values
+ * are evaluated. This supplies affine parameters, not perspective divide or
+ * proof that arbitrary W is supported by a consuming program. */
+int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *,
+ struct remesa_vertex_parameter_values *);
 struct remesa_shader_program_report;
 struct remesa_shader_pipeline;
 struct remesa_shader_linkage;

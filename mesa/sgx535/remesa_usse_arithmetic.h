@@ -54,9 +54,10 @@ int remesa_usse_cpu_parameter_vertex_encode(
  * two dense vec4 values after the source prefix. source_dwords declares the
  * initialized source span INCLUDING that prefix (9..128); allocation, upload,
  * task resources and lifetime remain caller obligations. It is not CODE size
- * or proof that every declared word is read by the shader. CPU construction
- * only: later coefficients, this operation and matrix transforms are not
- * physically qualified by the earlier one-parameter ADD result. */
+ * or proof that every declared word is read by the shader. A separate physical
+ * MAD pair qualified PARAM0=(1,1,1,1), PARAM1.x=0/2.125 with transfer20,
+ * producing the same two-column shift (parameter-mad-physical-pair-20261024T071000Z).
+ * Non-unit multipliers, other components and full transforms remain unqualified. */
 struct remesa_usse_cpu_parameter_mad_vertex {
  uint32_t position_base,multiply_parameter_base,add_parameter_base;
  uint32_t source_dwords,reserved;
