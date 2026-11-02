@@ -87,6 +87,7 @@ struct resource {
  void *host_data; /* CPU input storage; copied to owned GEM at scene preparation. */
  struct remesa_texture_layout layout;
  struct pipe_fence_handle *writer; int write_error; bool has_contents;
+ bool retired_color_map;
  struct context *native_clear_owner; /* Unissued clear; never CPU-readable. */
  struct remesa_render_pass pass;struct remesa_pass_ticket ticket;
 };
@@ -143,11 +144,22 @@ static struct resource *r(struct pipe_resource *p) { return (struct resource *)p
 static int resource_map_backing(struct pipe_screen *p,struct resource *b,bool write,void **out)
 {
  if(b->host_data){*out=b->host_data;return 0;}
+ struct screen *sc=s(p);
+ if(!write&&sc->linked_attachment_storage&&b->base.format==PIPE_FORMAT_B8G8R8A8_UNORM&&
+    b->base.bind==PIPE_BIND_RENDER_TARGET&&sc->device.ops->map_retired_color){
+  int error=sc->device.ops->map_retired_color(&sc->device,b->bo,out);
+  if(!error||*out)b->retired_color_map=true;
+  if(error!=ENODATA||*out){if(error==EOWNERDEAD)b->write_error=error;return error;}
+ }
  return s(p)->device.ops->map(s(p)->device.priv,b->bo,write,out);
 }
 static void resource_unmap_backing(struct pipe_screen *p,struct resource *b,bool write)
 {
- if(!b->host_data)s(p)->device.ops->unmap(s(p)->device.priv,b->bo,write);
+ if(b->retired_color_map){
+  int error=write?EOWNERDEAD:s(p)->device.ops->unmap_retired_color(&s(p)->device,b->bo);
+  if(error)b->write_error=EOWNERDEAD; /* retain uncertain lease; never normal-unmap */
+  else b->retired_color_map=false;
+ }else if(!b->host_data)s(p)->device.ops->unmap(s(p)->device.priv,b->bo,write);
 }
 
 /* New host inspection/build APIs must not publish into their own owner or
@@ -511,6 +523,10 @@ static void unmap(struct pipe_context *p,struct pipe_transfer *pt)
  /* Lease mode must match map(), even when an explicit-flush write map
   * committed no ranges. Dirty tracks content epochs, not lease ownership. */
  resource_unmap_backing(p->screen,r(pt->resource),t->write);
+ if(r(pt->resource)->write_error){
+  c(p)->error=r(pt->resource)->write_error;
+  if(c(p)->error==EOWNERDEAD)c(p)->failed_submission=true;
+ }
  if(t->dirty){
   int error=remesa_render_pass_cpu_write(&r(pt->resource)->pass);
   if(error)r(pt->resource)->write_error=error;
@@ -2666,6 +2682,7 @@ struct pipe_screen *remesa_screen_create_owned(struct remesa_device *device,int 
     !device->ops->submit || !device->ops->wait || !device->ops->destroy_fence) return NULL;
  if((device->ops->prepare_shader_programs||device->ops->submit_shader_programs||device->ops->destroy_shader_programs)&&
     (!device->ops->prepare_shader_programs||!device->ops->submit_shader_programs||!device->ops->destroy_shader_programs))return NULL;
+ if(!!device->ops->map_retired_color!=!!device->ops->unmap_retired_color)return NULL;
  sc=calloc(1,sizeof(*sc));if(!sc) return NULL;sc->device=*device;sc->refs=1;sc->release_device=release;
  sc->base.destroy=destroy_screen;sc->base.get_name=name;sc->base.get_vendor=vendor;sc->base.context_create=create_context;
  set_capabilities(sc);

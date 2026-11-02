@@ -736,6 +736,8 @@ static void destroy_fence(void *data,void *object)
  if(j->released) memset(j,0,sizeof(*j));
  else {int e=wait_job(d,j,0,true);if(!e)memset(j,0,sizeof(*j));}
 }
+static int map_retired_color(struct remesa_device *,void *,void **);
+static int unmap_retired_color(struct remesa_device *,void *);
 static const struct remesa_device_ops device_ops={
  .allocate=allocate,.destroy_bo=destroy_bo,.map=map_bo,.unmap=unmap_bo,
  .submit=submit,.wait=wait_job,.destroy_fence=destroy_fence,
@@ -748,6 +750,7 @@ static const struct remesa_device_ops device_ops={
  .prepare_linked_scene=remesa_persistent_linked_scene_prepare,
  .submit_linked_scene=remesa_persistent_scene_capture_submit,
  .release_linked_scene=remesa_persistent_scene_capture_release,
+ .map_retired_color=map_retired_color,.unmap_retired_color=unmap_retired_color,
 };
 int remesa_persistent_open(struct remesa_device *device,const struct remesa_persistent_config *cfg)
 {
@@ -3896,6 +3899,46 @@ int remesa_persistent_scene_color_unmap(struct remesa_device *device,
  int e=d->cfg.ops->cpu_unmap(d->cfg.priv,b->handle,false);
  if(e)return scene_color_fault(d);
  c->read_color=NULL;b->cpu_mapped=false;b->scene_color_read=false;drop_memory(d,b);return 0;
+}
+static int map_retired_color(struct remesa_device *device,void *object,void **out)
+{
+ if((uintptr_t)out%_Alignof(void *))return EINVAL;
+ int e=remesa_persistent_shader_output_check(device,out,sizeof(*out));if(e)return e;
+ if(*out)return EBUSY;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(d->failed)return EOWNERDEAD;
+ if(!owns_memory(d,b)||!b->live)return EINVAL;
+ if(b->quarantined)return EOWNERDEAD;
+ struct scene_capture *selected=NULL;unsigned slot=0;bool held=false;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++)if(d->scenes[i].live){
+  struct scene_capture *c=&d->scenes[i];
+  if(c->count>REMESA_PERSISTENT_BUFFERS)return EPROTO;
+  for(unsigned k=0;k<c->count;k++)if(c->held[k]==b){
+   held=true;e=scene_color_role(c,b);if(e)return e;
+   if(c->published_operation){selected=c;slot=i;}
+  }
+ }
+ if(!held)return ENODATA;
+ if(!selected)return EAGAIN;
+ const struct remesa_scene_capture token={d->cfg.context,selected->serial,slot,0};
+ const void *cpu=NULL;e=remesa_persistent_scene_color_map(device,token,&cpu);if(e)return e;
+ if(overlaps(out,sizeof(*out),cpu,b->allocated))return scene_color_fault(d);
+ *out=(void *)cpu;return 0;
+}
+static int unmap_retired_color(struct remesa_device *device,void *object)
+{
+ if(!device||device->ops!=&device_ops||!device->priv)return EINVAL;
+ struct persistent *d=device->priv;struct memory *b=object;
+ if(d->failed)return EOWNERDEAD;
+ if(!owns_memory(d,b)||!b->live)return EINVAL;
+ struct scene_capture *selected=NULL;unsigned slot=0;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++)if(d->scenes[i].live&&d->scenes[i].read_color==b){
+  if(selected)return scene_color_fault(d);
+  selected=&d->scenes[i];slot=i;
+ }
+ if(!selected)return ENOENT;
+ const struct remesa_scene_capture token={d->cfg.context,selected->serial,slot,0};
+ return remesa_persistent_scene_color_unmap(device,token);
 }
 
 static int linked_scene_prepare(struct remesa_device *device,

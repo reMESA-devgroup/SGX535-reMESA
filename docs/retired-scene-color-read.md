@@ -52,9 +52,9 @@ host ownership/coherence-contract tests, without GPU execution or rendered
 pixels. They do not qualify the new kernel candidate, sustained OpenGL, X11
 presentation, GL2.1/GLES2 or the complete driver.
 
-The next integration is to retain the scene in the frontend and route its
-read transfer through this lease, then connect the general native session
-without confusing caller packets with the fixed catalogue admission. Dynamic
-input updates, broader API coverage, complete desktop 2D/3D and installation
-remain unfinished. The previously reported boot error must also be understood
-before qualifying the new kernel candidate physically.
+The [Gallium transfer integration](scene-color-frontend.md) now routes eligible
+texture READs and presentation snapshots through this lease. Automatic retained
+draw dispatch, general native session admission and changing inputs remain
+separate work. Broader API coverage, complete desktop 2D/3D and installation
+remain unfinished. The reported first-load HOLD must also be diagnosed before
+qualifying the new kernel candidate physically.

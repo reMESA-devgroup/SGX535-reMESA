@@ -30,5 +30,5 @@ int remesa_present_snapshot(struct pipe_context *ctx,struct pipe_resource *res,v
  }
  for(unsigned y=0;y<res->height0;y++)
   memcpy((unsigned char *)dst+y*stride,(const unsigned char *)src+y*transfer->stride,row);
- ctx->texture_unmap(ctx,transfer);return 0;
+ ctx->texture_unmap(ctx,transfer);return remesa_context_error(ctx);
 }

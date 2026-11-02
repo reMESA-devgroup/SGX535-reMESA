@@ -76,6 +76,13 @@ struct remesa_device_ops {
   * These hooks do not admit ordinary draws or change graphics capabilities. */
  int (*submit_linked_scene)(struct remesa_device *,struct remesa_scene_capture,void **);
  int (*release_linked_scene)(struct remesa_device *,struct remesa_scene_capture);
+ /* Optional pair: synchronized READ of an exact retired COLOR retained by
+  * an idle scene. ENODATA alone means no retained scene owns this BO and
+  * permits the ordinary map path. Other errors are authoritative. The same
+  * non-NULL/error lease contract as map applies. Close always READ, reports
+  * uncertainty, never guesses source/session retirement or writable unmap. */
+ int (*map_retired_color)(struct remesa_device *,void *bo,void **);
+ int (*unmap_retired_color)(struct remesa_device *,void *bo);
 
 };
 /* Explicit target load contract. Current physical executor is REPLACE only.
