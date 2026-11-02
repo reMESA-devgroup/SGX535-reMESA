@@ -55,3 +55,24 @@ consumed attempt or send this protocol to an older module.
 Full OpenGL 2.1/GLES2 coverage, general clipping/perspective and continuous
 production submission remain separate work. This client does not advertise
 those capabilities or replace the existing working GLXGears path.
+
+## Independent pixel and control expectations
+
+`tools/remesa/gears_scene_oracle.py prepare` builds a separate LAB expectation
+for the sealed positive witness. It accepts only the preserved input hashes
+and the two closed targets. Coverage uses the original exact rational
+sample-centre construction. The 1280×800 COLOR result matches the retained
+physical readback byte for byte; Z24 matches inside the old 48×48 footprint.
+The newly cleared remainder is explicitly expected to contain `0xffffff`.
+
+`verify` requires the manifest SHA-256 pinned before submission. It checks all
+COLOR bits and the low 24 depth bits, reports mismatch counts and exits with
+failure on disagreement. Only the undefined X8 depth byte is ignored. Pixel
+agreement alone never grants physical qualification. In particular, the
+actual syscall-model outputs fail this pixel gate at both resolutions.
+
+Prepared expectations, native/UBSan/i486 control exports from the existing
+validators, and source/guard/lifecycle requirements are pinned under
+`/home/gama/sgx535-offline/gears-pixel-oracles-20261102/v1/PRELAUNCH_ORACLES.json`.
+No new rasterizer or encoder was added to the driver. These calculations are
+LAB expectations and are never uploaded to the GPU or used for presentation.
