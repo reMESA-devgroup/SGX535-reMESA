@@ -27,6 +27,12 @@ release or retry. File/device loss is rejected before another executor call.
 
 ## Remaining scratch initialization contract
 
+The restricted physical FAST already reused its two DPM pools after three cold
+frames. Its existing producer, write exclusion and cache-domain rules are the
+donor for this integration; see [the retained/general comparison](general-dpm-reuse-contract.md).
+The missing general-job contract below does not invalidate that earlier proof
+or require another DPM encoder.
+
 Keeping the source lease does not make rendered scratch pristine again.
 Publication consumes `zero_pristine` on GPU-written REGION and DPM objects.
 The next cold scene preparation requires authenticated zero origin for those
