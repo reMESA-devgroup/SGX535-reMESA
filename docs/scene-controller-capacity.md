@@ -53,8 +53,10 @@ without new warnings and is not installed. Protected physical evidence is
 unchanged. Production rendering, caps and the working GLXGEARS path are
 untouched.
 
-Next, add a separate explicit 18-binding request and complete trace ABI,
-connect its exact catalogue and client, qualify transport and fault paths,
+The [separate wire format and userspace transport](gears-scene-wire.md) now
+define and validate the 18-binding request and complete trace. Kernel
+registration and versioned publication remain pending. Next connect its exact
+catalogue and client, qualify the complete path,
 and prepare captures from the preserved positive physical geometry and
 coefficient witness with independently pinned pixel/control/integrity oracles.
 Only then perform fresh recoverable Mini 12 experiments. Generic test

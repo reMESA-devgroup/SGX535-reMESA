@@ -11,7 +11,9 @@ struct held {uint32_t id;size_t bytes;uint64_t gpu_va;void *cpu;bool write,poiso
 struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_session;struct remesa_memory_recorder recorder;struct held objects[32];
  uint64_t private_session,private_sequence,private_operation;
  uint32_t private_maximum,private_pds_id;bool private_attempted,private_active,private_poison,scene_attempted;
- struct remesa_scene_probe_request scene_response;};
+ struct remesa_scene_probe_request scene_response;
+ unsigned scene_protocol;uint32_t gears_access[18];
+ struct remesa_gears_scene_probe_request gears_response;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)
@@ -258,7 +260,7 @@ int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
   r.ids[i]=b->id;
  }
  r.version=1;r.profile=profile;r.context=d->context;r.budget_ms=budget;before=r;
- d->scene_attempted=true;
+ d->scene_attempted=true;d->scene_protocol=1;
  int e=ioctl(d->fd,DRM_IOCTL_REMESA_SCENE_PROBE,&r);
  d->scene_response=r;
  *out=r; /* Preserve raw evidence, including unsuccessful/malformed responses. */
@@ -303,8 +305,99 @@ int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *d,
 {
  if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_scene_probe_request)||
     scene_host_overlap(out,sizeof(*out),d,sizeof(*d)))return EINVAL;
- if(!d->scene_attempted)return ENODATA;
+ if(!d->scene_attempted||d->scene_protocol!=1)return ENODATA;
  *out=d->scene_response;return 0;
+}
+_Static_assert(sizeof(struct remesa_gears_scene_probe_request)==152,"separate18-binding LAB ABI");
+_Static_assert(offsetof(struct remesa_gears_scene_probe_request,operation)==96,"explicit request padding");
+_Static_assert(sizeof(struct remesa_gears_scene_trace)==4280,"complete18-binding trace");
+_Static_assert(sizeof(struct remesa_gears_scene_trace_request)==4296,"complete trace query ABI");
+int remesa_linux_memory_gears_scene_lab_submit(struct remesa_linux_memory *d,
+ const struct remesa_scene_packet *packet,uint32_t profile,uint32_t budget,
+ struct remesa_gears_scene_probe_request *out)
+{
+ struct remesa_gears_scene_probe_request r={0},before;
+ if(!d||!packet||!out||(uintptr_t)packet%_Alignof(struct remesa_scene_packet)||
+    (uintptr_t)out%_Alignof(struct remesa_gears_scene_probe_request)||
+    scene_host_overlap(packet,sizeof(*packet),out,sizeof(*out))||
+    scene_host_overlap(d,sizeof(*d),out,sizeof(*out))||
+    scene_host_overlap(d,sizeof(*d),packet,sizeof(*packet)))return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active)return EBUSY;
+ if(d->scene_attempted)return EALREADY;
+ if(d->recorder.record)return EOPNOTSUPP;
+ if(!profile||profile>REMESA_GEARS_SCENE_PROFILE_COUNT||!budget||budget>10000||
+    !remesa_scene_packet_valid(packet)||packet->owner!=d->context||
+    packet->binding_count!=18||packet->use_count!=11||packet->window_count!=2)return EINVAL;
+ const unsigned width=profile==1?1280:640,height=profile==1?800:640;
+ if(packet->controls.width!=width||packet->controls.height!=height||
+    packet->controls.schema!=2||packet->controls.depth_finalize!=1||packet->controls.ta_bytes!=104)return EINVAL;
+ for(unsigned i=0;i<18;i++){
+  struct held *b=find(d,packet->bindings[i].id);
+  if(!b||!b->gpu_va)return EINVAL;
+  if(b->poison)return EOWNERDEAD;
+  if(b->cpu)return EBUSY;
+  r.ids[i]=b->id;
+ }
+ r.version=2;r.profile=profile;r.context=d->context;r.budget_ms=budget;before=r;
+ for(unsigned i=0;i<18;i++)d->gears_access[i]=packet->bindings[i].access;
+ d->scene_attempted=true;d->scene_protocol=2;
+ int e=ioctl(d->fd,DRM_IOCTL_REMESA_GEARS_SCENE_PROBE,&r);
+ d->gears_response=r;*out=r; /* Preserve raw evidence after every entered ioctl. */
+ if(e||memcmp(&r,&before,offsetof(struct remesa_gears_scene_probe_request,operation))||
+    r.reserved[0]||r.reserved[1]||!r.operation||r.cookie!=r.operation||
+    r.core!=0x01130000u||r.revision!=0x00010201u||r.pds_base!=0x20000000u||
+    r.phase!=9||r.ledger!=7||r.error||r.retained||r.stages!=15)return private_lab_uncertain(d);
+ return 0;
+}
+enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *opaque,
+ const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)
+{
+ struct remesa_linux_memory *d=opaque;
+ if(!d||!submit||!out||(uintptr_t)submit%_Alignof(struct remesa_gpu_scene_submit)||
+    (uintptr_t)out%_Alignof(struct remesa_gpu_scene_receipt)||!submit->packet||!submit->operation||submit->context!=d->context||
+    scene_host_overlap(out,sizeof(*out),d,sizeof(*d))||scene_host_overlap(out,sizeof(*out),submit,sizeof(*submit))||
+    scene_host_overlap(out,sizeof(*out),submit->packet,sizeof(*submit->packet)))return REMESA_NOT_ISSUED;
+ if(d->private_poison)return REMESA_ISSUANCE_AMBIGUOUS;
+ if(d->scene_attempted)return REMESA_NOT_ISSUED;
+ struct remesa_gears_scene_probe_request response;
+ unsigned profile=submit->packet->controls.width==1280?1:2;
+ int error=remesa_linux_memory_gears_scene_lab_submit(d,submit->packet,profile,1000,&response);
+ if(error)return d->private_poison?REMESA_ISSUANCE_AMBIGUOUS:REMESA_NOT_ISSUED;
+ *out=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,
+  .retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
+}
+int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *d,
+ struct remesa_gears_scene_probe_request *out)
+{
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_gears_scene_probe_request)||
+    scene_host_overlap(out,sizeof(*out),d,sizeof(*d)))return EINVAL;
+ if(!d->scene_attempted||d->scene_protocol!=2)return ENODATA;
+ *out=d->gears_response;return 0;
+}
+int remesa_linux_memory_gears_scene_lab_trace(struct remesa_linux_memory *d,
+ struct remesa_gears_scene_trace *out)
+{
+ if(!d||!out||(uintptr_t)out%_Alignof(struct remesa_gears_scene_trace)||
+    scene_host_overlap(out,sizeof(*out),d,sizeof(*d)))return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(!d->scene_attempted||d->scene_protocol!=2)return ENODATA;
+ struct remesa_gears_scene_trace_request q={.version=2,.context=d->context};
+ int error=ioctl(d->fd,DRM_IOCTL_REMESA_GEARS_SCENE_TRACE,&q),saved=errno;
+ *out=q.trace; /* A diagnostic query cannot undo proven execution retirement. */
+ if(error)return error<0?saved:EIO;
+ const struct remesa_scene_probe_trace *t=&q.trace.prefix;
+ const struct remesa_gears_scene_probe_request *r=&d->gears_response;
+ if(q.version!=2||q.reserved||q.context!=d->context||t->version!=2||t->bytes!=sizeof(q.trace)||
+    t->context!=d->context||t->operation!=r->operation||t->cookie!=r->cookie||t->profile!=r->profile||
+    t->stages!=15||t->phase!=9||t->ledger!=7||t->error||t->retained||t->reserved||
+    t->binding_count!=18||t->event_count>64||t->load_count!=29||t->ta_count!=31||t->raster_count!=20)return EPROTO;
+ for(unsigned i=0;i<18;i++){
+  const struct remesa_scene_trace_binding *b=i<17?&t->bindings[i]:&q.trace.last_binding;
+  struct held *h=find(d,r->ids[i]);
+  if(!h||b->id!=h->id||b->address!=h->gpu_va||b->bytes!=h->bytes||b->access!=d->gears_access[i])return EPROTO;
+ }
+ return 0;
 }
 static int private_lab_output_valid(const struct remesa_private_session_lab_request *out)
 {

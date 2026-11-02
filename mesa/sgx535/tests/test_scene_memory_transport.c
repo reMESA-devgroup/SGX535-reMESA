@@ -125,4 +125,5 @@ int main(void)
  assert(remesa_linux_memory_scene_lab_submit(d,&p,5,1000,&out)==EOPNOTSUPP&&scenecalls==before_calls);
  assert(!remesa_linux_memory_detach(d));
  puts("PASS scene capture resource transport: single ioctl, complete immutable/identity/retirement receipt, all-resource poison on22 uncertain responses, local metadata/lease/alias refusal; synthetic backing/GPU0");
+ return 0;
 }

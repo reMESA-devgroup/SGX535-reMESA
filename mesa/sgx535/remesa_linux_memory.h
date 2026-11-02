@@ -8,6 +8,7 @@
 #include "remesa_retained_transport.h"
 #include "remesa/private_session_lab_uapi.h"
 #include "remesa/scene_probe_uapi.h"
+#include "remesa/gears_scene_probe_uapi.h"
 /* Borrow fd/context already bound by the future kernel per-file integration.
  * Never discovers/installs a driver or opens a live node. Current stock/native
  * installations do not provide this resource service. Archived experimental
@@ -114,6 +115,23 @@ enum remesa_dispatch remesa_linux_memory_gallium_matrix_scene_lab_dispatch(void 
  * no ioctl/hash/readback. Requires an entered attempt and disjoint output. */
 int remesa_linux_memory_scene_lab_response(const struct remesa_linux_memory *,
  struct remesa_scene_probe_request *);
+
+/* Separate18-binding/11USE gears LAB transport. Requires a matching separately
+ * registered kernel ABI/catalogue, not the old17-binding module. Same once-only,
+ * ownership, immutable receipt, identity, retirement and all-resource poison
+ * contract as scene_lab_submit. Never enables a gate, hashes or reads pixels. */
+int remesa_linux_memory_gears_scene_lab_submit(struct remesa_linux_memory *,
+ const struct remesa_scene_packet *,uint32_t profile,uint32_t budget_ms,
+ struct remesa_gears_scene_probe_request *);
+enum remesa_dispatch remesa_linux_memory_gears_scene_lab_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+int remesa_linux_memory_gears_scene_lab_response(const struct remesa_linux_memory *,
+ struct remesa_gears_scene_probe_request *);
+/* Optional LAB query after authenticated retirement. One read-only ioctl, no
+ * readback/hash/retry. Raw trace output survives query failure. Invalid trace
+ * refuses diagnostic approval without undoing the already proven retirement. */
+int remesa_linux_memory_gears_scene_lab_trace(struct remesa_linux_memory *,
+ struct remesa_gears_scene_trace *);
 
 /* Synchronous typed native copy on this exact owned fd/context. Caller starts
  * version/context/response fields at zero; local owned IDs/mappings and leases
