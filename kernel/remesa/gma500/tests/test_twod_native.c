@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include "native_source_defs.h"
 #include "../remesa_twod_native.h"
 struct psb_mmu_pd {struct drm_device *dev;u32 root;int error;};
@@ -15,6 +16,7 @@ static u32 registers[0x5000/4];
 static unsigned mode,base_writes,acks,sleeps,barriers,route_calls,native_reads,power_loss_reads;
 static u64 clock_ns;
 static unsigned packet_words=10,alpha_writes,initial_alpha,base_sleeps;
+static bool record_retirement;
 #ifdef REMESA_TWOD_VENDOR_STREAM
 static int vendor_stream;
 #endif
@@ -127,7 +129,9 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  struct drm_psb_private p={.dev=&dev,.sgx_reg=(void*)1,.fifo=_PSB_C2_SOCIF_EMPTY,.base=0x28000000};
  struct psb_mmu_pd pd={&dev,0x12345000,0};
  struct remesa_twod_native native={0};struct remesa_twod_completion receipt;
+ struct remesa_twod_retirement proof={0};
  struct remesa_twod_launch launch={.dev=&dev,.pd=&pd,.ticket={77,1,0,1},.count=2};
+ if(record_retirement)launch.retirement=&proof;
  struct remesa_twod_copy copy={.source={1,0x40001000,0x00fff000,width,height,width*4,1},
   .destination={2,0x41000000,0x01000000,width,height,width*4,1},.request_base=0x40000000,.width=width,.height=height};
 #ifdef REMESA_TWOD_FILL_STREAM
@@ -237,6 +241,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
   if(fault==47)registers[0x0e1c/4]^=1;
   reads=native_reads;
   error=remesa_twod_native_executor.retire(&native,&launch,cookie);
+  if(error&&record_retirement)CHECK(!proof.native_retired&&!proof.gem_retired);
   if(fault==20){CHECK(error==-EIO&&native.failed&&native.reservation.held&&native_reads==reads);return;}
   if(fault==42||fault>=47){
    CHECK(error==-EIO&&native.failed&&native.reservation.held&&!producer_depth);
@@ -246,6 +251,17 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
   }
   if(fault==9||fault==17){CHECK(error==-EIO&&native.failed&&native.reservation.held);return;}
   CHECK(!error&&!native.live&&!native.reservation.held&&!twod_irq_owner&&!p.remesa_twod_owner);
+  if(record_retirement){
+   CHECK(proof.native_retired&&!proof.gem_retired&&proof.dev==&dev&&proof.pd==&pd);
+   CHECK(proof.ticket.context==launch.ticket.context&&proof.ticket.operation==launch.ticket.operation&&
+    proof.ticket.slot==launch.ticket.slot&&proof.ticket.generation==launch.ticket.generation&&proof.cookie==cookie);
+   CHECK(proof.destination_id==launch.plan.destination_id&&
+    proof.destination_first==launch.plan.destination_first&&proof.destination_end==launch.plan.destination_end);
+   CHECK(proof.default_root==pd.root&&proof.request_base==launch.plan.request_base&&proof.restored_request_base==0x28000000);
+   CHECK(proof.packet_dwords==packet_words&&proof.core==0x01130000&&proof.revision==0x10201);
+   CHECK(proof.status1==_PSB_CE_TWOD_COMPLETE&&!proof.status2);
+   memset(&proof,0,sizeof proof);
+  }
   CHECK(p.base==0x28000000&&base_writes==initial_base_writes+2&&!p.resets);
   CHECK(registers[0x0e1c/4]==initial_alpha);
   CHECK(alpha_writes==(packet_words!=10?2u*(iteration+1):0));
@@ -260,6 +276,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(void)
 {
+ record_retirement=getenv("REMESA_TEST_TWOD_RETIREMENT")!=NULL;
  CHECK(!reservation_test_main());
  native_case(1280,800,0);native_case(640,640,0);native_case(641,479,0);
  unsigned faults=21;

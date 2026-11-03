@@ -6,6 +6,21 @@
 #define REMESA_TWOD_FIFO_EMPTY 0x80u
 #define REMESA_TWOD_BLIT_BUSY (1u << 24)
 struct psb_mmu_pd;
+/* Kernel-only record for a later owned 2D->3D transition. Identity pointers
+ * are borrowed, never references or authority to dereference after owner/FD
+ * loss. This records existing retirement checks; it does NOT restore a
+ * first-owner source lineage, suppress producers or authorize a 3D issue.
+ * Native fills it transactionally after IRQ/base restoration and release.
+ * GEM adds gem_retired only after backing holds and executor are released. */
+struct remesa_twod_retirement {
+ struct drm_device *dev;
+ struct psb_mmu_pd *pd;
+ struct remesa_memory_ticket ticket;
+ u64 cookie,destination_id,destination_first,destination_end;
+ u32 default_root,request_base,restored_request_base,packet_dwords;
+ u32 core,revision,status1,status2;
+ bool native_retired,gem_retired;
+};
 /* Trusted kernel views, held throughout this operation. Not a user ABI. */
 struct remesa_twod_launch {
  struct drm_device *dev;
@@ -14,6 +29,9 @@ struct remesa_twod_launch {
  struct remesa_twod_copy_plan plan;
  struct remesa_memory_view views[2];
  unsigned count;
+ /* Optional output in stable, disjoint caller storage; no userspace pointer.
+  * Ignored until successful native retirement; failure leaves it unchanged. */
+ struct remesa_twod_retirement *retirement;
 };
 struct remesa_twod_completion {
  struct remesa_memory_ticket ticket;
@@ -52,6 +70,9 @@ struct remesa_twod_job {
  struct remesa_twod_launch launch;
  u64 cookie;
  bool live;
+ /* Retained after successful job cleanup, replaced on the next issue.
+  * A missing native record stays zero; no inferred/fabricated receipt. */
+ struct remesa_twod_retirement retirement;
 };
 int remesa_gem_twod_issue(struct remesa_gem_memory *,struct remesa_memory_ticket,
  const struct remesa_twod_native_ops *,void *,struct remesa_twod_job *);

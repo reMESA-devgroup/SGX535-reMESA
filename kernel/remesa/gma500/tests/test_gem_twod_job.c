@@ -3,17 +3,21 @@
 #define main preflight_test_main
 #include "test_gem_twod.c"
 #undef main
+#include <stdlib.h>
 #include "../remesa_gem_twod_job.inc"
 struct native_model {
  struct remesa_gem_memory *memory;
  unsigned stage,mode,initial_flush,starts;
 };
+static bool record_retirement;
+static unsigned proof_fault;
 static int model_start(void *opaque,const struct remesa_twod_launch *l,u64 *cookie)
 {
  struct native_model *m=opaque;struct remesa_gem_memory *s=m->memory;
  struct retained_job *j=ticket_job(s,l->ticket);
  CHECK(s->lock.held&&j&&j->state==REMESA_JOB_ISSUED&&j->attached);
  CHECK(l->dev==s->dev&&l->pd==s->pd&&l->count==j->count);
+ CHECK(l->retirement);
  CHECK(l->count==1||l->count==2);
  CHECK(flushes==m->initial_flush+l->count);
  CHECK(!m->stage);m->stage=1;m->starts++;
@@ -65,13 +69,35 @@ static int model_retire(void *opaque,const struct remesa_twod_launch *l,u64 cook
  CHECK(m->memory->lock.held&&m->stage==3&&cookie==0x123456789ULL);
  CHECK(j&&j->attached&&j->state==REMESA_JOB_VISIBLE);
  for(unsigned i=0;i<j->count;i++)CHECK(m->memory->bo[j->ids[i]&31].holds==1);
- m->stage=4;return m->mode==13?-EIO:0;
+ m->stage=4;
+ if(m->mode==13)return -EIO;
+ if(record_retirement){
+  *l->retirement=(struct remesa_twod_retirement){.dev=l->dev,.pd=l->pd,.ticket=l->ticket,
+   .cookie=cookie,.destination_id=l->plan.destination_id,.destination_first=l->plan.destination_first,
+   .destination_end=l->plan.destination_end,.default_root=0x12345000,.request_base=l->plan.request_base,
+   .restored_request_base=0x28000000,.packet_dwords=l->plan.dwords,.core=0x01130000,.revision=0x10201,
+   .status1=REMESA_TWOD_EVENT_COMPLETE,.native_retired=true};
+  struct remesa_twod_retirement *r=l->retirement;
+  switch(proof_fault){
+  case 0:break;case 1:r->dev=NULL;break;case 2:r->pd=NULL;break;
+  case 3:r->ticket.context++;break;case 4:r->ticket.operation++;break;
+  case 5:r->ticket.slot++;break;case 6:r->ticket.generation++;break;case 7:r->cookie++;break;
+  case 8:r->destination_id++;break;case 9:r->destination_first++;break;case 10:r->destination_end--;break;
+  case 11:r->default_root=0;break;case 12:r->default_root++;break;case 13:r->request_base^=0x10000000;break;
+  case 14:r->packet_dwords++;break;case 15:r->core++;break;case 16:r->revision++;break;
+  case 17:r->status1=0;break;case 18:r->status1|=1;break;case 19:r->status2=1;break;
+  case 20:r->gem_retired=true;break;
+  default:CHECK(0);
+  }
+ }
+ return 0;
 }
 static const struct remesa_twod_native_ops model_ops={model_start,model_poll,model_visible,model_retire};
 static void quarantined(struct remesa_twod_job *run)
 {
  struct remesa_gem_memory *s=run->memory;struct retained_job *j=ticket_job(s,run->launch.ticket);
  CHECK(run->live&&j&&j->attached&&j->quarantined&&j->state==REMESA_JOB_QUARANTINED);
+ CHECK(!run->retirement.gem_retired);
  CHECK(s->executor==&twod_reserved_executor&&s->executor_context==run);
  for(unsigned i=0;i<j->count;i++)CHECK(s->bo[j->ids[i]&31].holds==1&&s->bo[j->ids[i]&31].quarantine);
  CHECK(remesa_gem_job_cancel(s,run->launch.ticket)==-EBUSY);
@@ -139,7 +165,15 @@ static void lifecycle_case(unsigned width,unsigned height,int same,unsigned mode
   if(mode==18)access_bad=1;
   e=remesa_gem_twod_retire(&run);
   if(mode==13||mode==18){CHECK(e==-EIO);quarantined(&run);return;}
-  CHECK(!e&&model.stage==4&&!memcmp(&run,&zero,sizeof run));
+  if(proof_fault){CHECK(e==-EPROTO);quarantined(&run);return;}
+  CHECK(!e&&model.stage==4);
+  if(record_retirement){
+   CHECK(!run.live&&!run.memory&&!run.context&&!run.ops);
+   CHECK(run.retirement.native_retired&&run.retirement.gem_retired&&run.retirement.cookie==0x123456789ULL);
+   CHECK(run.retirement.dev==s->dev&&run.retirement.pd==s->pd&&twod_ticket_equal(run.retirement.ticket,ticket));
+   CHECK(run.retirement.destination_id==dst&&run.retirement.restored_request_base==0x28000000);
+   zero=run; /* A retained receipt is not a live job or reusable authority. */
+  }else CHECK(!memcmp(&run,&zero,sizeof run));
   CHECK(!a->holds&&!b->holds&&!s->executor&&!s->executor_context);
   CHECK(!ticket_job(s,ticket));
   CHECK(gems==allocations&&vmap_calls==maps);
@@ -153,6 +187,7 @@ static void lifecycle_case(unsigned width,unsigned height,int same,unsigned mode
 #endif
 int REMESA_TWOD_JOB_TEST_MAIN(void)
 {
+ record_retirement=getenv("REMESA_TEST_TWOD_RETIREMENT")!=NULL;
  lifecycle_case(1280,800,0,0);lifecycle_case(640,640,0,0);
  lifecycle_case(641,479,0,0);lifecycle_case(32,32,1,0);
  for(unsigned mode=1;mode<=21;mode++){
@@ -160,6 +195,11 @@ int REMESA_TWOD_JOB_TEST_MAIN(void)
   if(!child){lifecycle_case(32,32,0,mode);_exit(0);}
   int status;CHECK(waitpid(child,&status,0)==child);
   CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
+ }
+ if(record_retirement)for(unsigned fault=1;fault<=20;fault++){
+  pid_t child=fork();CHECK(child>=0);
+  if(!child){proof_fault=fault;lifecycle_case(32,32,0,0);_exit(0);}
+  int status;CHECK(waitpid(child,&status,0)==child);CHECK(WIFEXITED(status)&&!WEXITSTATUS(status));
  }
  printf("PASS %u parent lifecycle checks plus 21 joined fault/cross-engine CPU models; no GPU operations\n",checks);
  return 0;

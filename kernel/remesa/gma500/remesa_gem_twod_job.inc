@@ -72,7 +72,8 @@ int remesa_gem_twod_issue(struct remesa_gem_memory *s,struct remesa_memory_ticke
   drm_clflush_pages(b->pages,b->inserted);
  }
  dma_wmb();
- *r=next;j->attached=true;s->executor=&twod_reserved_executor;s->executor_context=r;
+ *r=next;r->launch.retirement=&r->retirement;
+ j->attached=true;s->executor=&twod_reserved_executor;s->executor_context=r;
  /* The following callback may emit commands even when it returns an error. */
  j->state=REMESA_JOB_ISSUED;
  error=ops->start(context,&r->launch,&r->cookie);j->cookie=r->cookie;
@@ -127,17 +128,35 @@ int remesa_gem_twod_publish(struct remesa_twod_job *r)
 int remesa_gem_twod_retire(struct remesa_twod_job *r)
 {
  struct remesa_gem_memory *s;struct retained_job *j;unsigned i;int error=-ENOENT;
+ struct remesa_twod_retirement proof={0};
  if(!r||!r->live||!r->memory)return -EINVAL;
  s=r->memory;mutex_lock(&s->lock);j=twod_owned_job(r);if(!j)goto done;
  if(j->quarantined){error=-EIO;goto done;}
  if(j->state!=REMESA_JOB_VISIBLE){error=-EBUSY;goto done;}
  error=twod_check_bindings(s,j);if(error)goto done;
  error=r->ops->retire(r->context,&r->launch,r->cookie);
- if(error){error=job_fault(s,j,error);goto done;}
+ if(error){r->retirement.gem_retired=false;error=job_fault(s,j,error);goto done;}
+ /* Optional native output is evidence only if bound to this exact held job.
+  * Old adapters without a native record produce no new certificate. */
+ if(r->retirement.native_retired){
+  proof=r->retirement;
+  if(proof.gem_retired||proof.dev!=s->dev||proof.pd!=s->pd||
+     !twod_ticket_equal(proof.ticket,r->launch.ticket)||proof.cookie!=r->cookie||
+     proof.destination_id!=r->launch.plan.destination_id||
+     proof.destination_first!=r->launch.plan.destination_first||
+     proof.destination_end!=r->launch.plan.destination_end||
+     proof.request_base!=r->launch.plan.request_base||proof.packet_dwords!=r->launch.plan.dwords||
+     !proof.default_root||(proof.default_root&4095U)||
+     proof.core!=0x01130000U||proof.revision!=0x10201U||
+     proof.status1!=REMESA_TWOD_EVENT_COMPLETE||proof.status2){
+   r->retirement.gem_retired=false;error=job_fault(s,j,-EPROTO);goto done;
+  }
+ }
  j->state=REMESA_JOB_ACKNOWLEDGED;j->attached=false;
  s->executor=NULL;s->executor_context=NULL;
  for(i=0;i<j->count;i++)s->bo[j->ids[i]&31].holds--;
  drop_job_views(j);kfree(j->commands);j->commands=NULL;j->live=false;
  memset(r,0,sizeof(*r));
+ if(proof.native_retired){proof.gem_retired=true;r->retirement=proof;}
  done:mutex_unlock(&s->lock);return error;
 }

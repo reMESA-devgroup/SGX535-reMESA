@@ -246,6 +246,7 @@ static int twod_native_visible(void *opaque,const struct remesa_twod_launch *l,u
 static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u64 cookie)
 {
  struct remesa_twod_native *b=opaque;struct drm_psb_private *dev_priv;
+ struct remesa_twod_retirement proof={0};
  unsigned long flags,irq_flags;u64 serial;int error;
 #ifdef REMESA_TWOD_VENDOR_STREAM
  bool producer=false;
@@ -273,12 +274,24 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
 #endif
  if(!error)error=twod_native_capture(dev_priv,NULL);
  if(!error)error=remesa_twod_irq_mark_retired_locked(&b->reservation,cookie);
+ if(!error&&l->retirement){
+  /* Consume the ledger already checked above, under its existing IRQ lock.
+   * No extra MMIO reads, ACK, reset, flush or completion poll is added. */
+  proof.dev=l->dev;proof.pd=l->pd;proof.ticket=l->ticket;proof.cookie=cookie;
+  proof.destination_id=l->plan.destination_id;
+  proof.destination_first=l->plan.destination_first;proof.destination_end=l->plan.destination_end;
+  proof.default_root=b->root;proof.request_base=l->plan.request_base;
+  proof.restored_request_base=b->reservation.saved_base;proof.packet_dwords=TWOD_NATIVE_PACKET_WORDS(l);
+  proof.core=b->core;proof.revision=b->revision;
+  proof.status1=b->reservation.pending1;proof.status2=b->reservation.pending2;
+ }
  if(!error)error=remesa_twod_release_locked(dev_priv,&b->reservation);
 #ifdef REMESA_TWOD_VENDOR_STREAM
  if(producer)remesa_route_source_producer(0);
 #endif
  sgx535_gma500_fixed_irq_unlock(irq_flags);spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
  if(error){b->failed=true;return error;}
+ if(l->retirement){proof.native_retired=true;*l->retirement=proof;}
  serial=b->serial;memset(b,0,sizeof(*b));b->serial=serial;return 0;
 }
 const struct remesa_twod_native_ops remesa_twod_native_executor={
