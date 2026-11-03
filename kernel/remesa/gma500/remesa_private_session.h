@@ -44,11 +44,24 @@ int remesa_private_session_dpm_locked(struct remesa_gem_memory *,struct remesa_m
  * new image authority or hash is accepted here. Seal once, before source_begin,
  * after seal_dpm; user WRITE/write-LEASE/SYNC remain denied until idle release.
  * Reuse checks the same complete READ set/IDs/generations under fresh holds.
- * No typed updates are permitted by this first immutable-input contract. */
+ * This seal itself never authorizes a CPU update or changes byte admission. */
 int remesa_private_session_seal_scene_inputs(struct remesa_gem_memory *,const void *,
  struct remesa_memory_ticket,u32 read_mask);
 int remesa_private_session_scene_inputs_locked(struct remesa_gem_memory *,
  struct remesa_memory_ticket,u32 read_mask);
+/* Kernel-only patch of an admitted READ input after acknowledged retirement.
+ * Caller retains the outer DRM/source entry and serializes policy lifetime.
+ * A pure, bounded validator must authorize the exact ID, data-only window and
+ * contents from the initially authenticated program/descriptor. Never pass a
+ * user-supplied policy, function or raw userspace pointer. This helper does not
+ * authenticate programs or widen general-session catalogue admission.
+ * The copied patch is at most512 bytes, DWORD aligned and within one page.
+ * Checks complete idle ownership under endpoint then memory lock, keeps every
+ * input sealed and flushes only the affected page before the next GPU use.
+ * Refusal/map failure changes no content. There is no public ioctl or lease. */
+int remesa_private_session_patch_scene_input(struct remesa_gem_memory *,
+ const void *,u64 retired_operation,u32 id,u64 offset,const void *,unsigned,
+ const void *policy,int (*validate)(const void *,u32,u64,const void *,unsigned));
 /* Trusted general-session preparation/closure only. The caller retains the
  * endpoint/source lease; claim locks memory, check/retired require it locked.
  * A warm job references a prior acknowledged operation, never zero provenance.

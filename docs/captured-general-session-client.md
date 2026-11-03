@@ -50,6 +50,16 @@ It always reports zero proven GPU operations and no physical qualification.
 These fixtures must never be uploaded as hardware evidence or a rendering
 payload. The unchanged pixel oracles and prior physical artifacts are retained.
 
-Physical cold/warm qualification of this joined path is still pending. Complete
+Physical cold/warm qualification passed at 1280×800 and 640×640. Each size ran
+two separate frontend submissions on one native session. Native operation IDs
+were 2 and 3; both retired with phase 9, ledger 7 and stages 15. COLOR and Z24
+matched the existing oracles, all 13 READ inputs and four guards remained
+intact, and both experiments completed CLOSE, memory cleanup and verified
+recovery to the stock kernel. The module identified the SGX535 rev121.
+
+The consolidated result is
+`/home/gama/sgx535-offline/captured-general-session-physical-20261102/FINAL_PAIR_RESULT.json`.
+This proves four GPU jobs through the joined frontend/session path. It does
+not measure sustained FPS or qualify ordinary OpenGL draws. Complete
 GL2.1/GLES2, dynamic authenticated inputs, production submission, desktop
 integration and an installable driver remain unfinished.

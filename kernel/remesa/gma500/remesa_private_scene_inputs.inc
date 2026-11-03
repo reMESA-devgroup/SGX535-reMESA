@@ -82,3 +82,65 @@ int remesa_private_session_scene_inputs_locked(struct remesa_gem_memory *s,
   if(j->ids[i]!=s->private_scene_input_ids[i]||s->bo[j->ids[i]&31].holds!=1)return -EACCES;
  return 0;
 }
+
+/* Kernel-only data transaction. Ordinary memory WRITE/LEASE/SYNC continue to
+ * reject these sealed inputs. The authenticated caller supplies a pure typed
+ * policy; a userspace pointer or a caller-provided mask is not admission. */
+int remesa_private_session_patch_scene_input(struct remesa_gem_memory *s,
+ const void *owner,u64 retired_operation,u32 id,u64 offset,const void *data,
+ unsigned bytes,const void *policy,
+ int (*validate)(const void *,u32,u64,const void *,unsigned))
+{
+ u8 staged[512];struct backing *b;void *cpu;unsigned i,page;int error=-EACCES;
+ if(!s||!owner||!retired_operation||!id||!data||!policy||!validate||
+    !bytes||bytes>sizeof(staged)||(offset&3)||(bytes&3)||
+    (offset&(PAGE_SIZE-1))>PAGE_SIZE-bytes)return -EINVAL;
+ /* Snapshot before validation: the exact validated bytes are committed, even
+  * if a trusted caller's original staging storage aliases the destination. */
+ memcpy(staged,data,bytes);
+ mutex_lock(&endpoint_lock);if(endpoint!=s)goto done;
+ mutex_lock(&s->lock);
+ if(s->private_session!=owner)goto unlock;
+ if(s->private_device_lost||!s->file){error=-ENODEV;goto unlock;}
+ if(s->private_source_poisoned){error=-EIO;goto unlock;}
+ if(!s->private_source_held||!s->private_dpm_ids[0]||!s->private_dpm_ids[1]||
+    !s->private_scene_binding_count||!s->private_scene_input_mask)goto unlock;
+ if(!s->private_dpm_ready){error=-ENODATA;goto unlock;}
+ if(s->private_dpm_retired_operation!=retired_operation){error=-ESTALE;goto unlock;}
+ for(i=0;i<2;i++)if(!private_dpm_domain(s,&s->bo[s->private_dpm_ids[i]&31])){
+  error=-EACCES;goto unlock;
+ }
+ if(s->stream_bound||s->executor||s->ta_cache_domains||s->private_work_owned||
+    s->pds_write_guard){error=-EBUSY;goto unlock;}
+ for(i=0;i<5;i++)if(s->private_input_ids[i]){error=-EBUSY;goto unlock;}
+ for(i=0;i<6;i++)if(s->private_work_ids[i]){error=-EBUSY;goto unlock;}
+ /* No prepared/issued/unretired job, CPU alias or output read lease may
+  * coexist with the transaction, including aliases on another scene role. */
+ for(i=0;i<8;i++)if(s->jobs[i].live){error=-EBUSY;goto unlock;}
+ for(i=0;i<OBJECTS;i++)if(s->bo[i].live&&
+    (s->bo[i].holds||s->bo[i].lease||s->bo[i].cpu||s->bo[i].quarantine||
+     atomic_read(&s->bo[i].color_vmas))){
+  error=-EBUSY;goto unlock;
+ }
+ error=scene_input_objects_locked(s);if(error)goto unlock;
+ for(i=0;i<s->private_scene_binding_count;i++)
+  if((s->private_scene_input_mask&((u32)1<<i))&&s->private_scene_input_ids[i]==id)break;
+ if(i==s->private_scene_binding_count){error=-EACCES;goto unlock;}
+ b=&s->bo[id&31];
+ if(offset>b->gem.size||bytes>b->gem.size-offset){error=-ERANGE;goto unlock;}
+ error=validate(policy,id,offset,staged,bytes);if(error)goto unlock;
+ page=(unsigned)(offset/PAGE_SIZE);
+ /* READ-only GPU inputs have no device writes to invalidate. Reuse only a
+  * stable mapping retained by this backing, otherwise map one affected page.
+  * No GEM allocation, pool clear, full input read/compare or hash is performed. */
+ if(b->cached_job_view)cpu=(u8 *)b->cached_job_view+(u64)page*PAGE_SIZE;
+ else cpu=vmap(b->pages+page,1,VM_MAP,PAGE_KERNEL);
+ if(!cpu){error=-ENOMEM;goto unlock;}
+ memcpy((u8 *)cpu+(offset&(PAGE_SIZE-1)),staged,bytes);
+ drm_clflush_pages(b->pages+page,1);dma_wmb();
+ if(!b->cached_job_view)vunmap(cpu);
+ b->zero_pristine=false;
+ error=0;
+ unlock:mutex_unlock(&s->lock);
+ done:mutex_unlock(&endpoint_lock);return error;
+}

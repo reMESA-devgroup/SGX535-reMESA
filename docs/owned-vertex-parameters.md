@@ -1,5 +1,20 @@
 # Owned vertex parameters for viewport integration
 
+This document records the initial parameter-owner and affine viewport work.
+Its rejected MATRIX_WINDOW experiment and remaining-work discussion below
+describe that experiment, not the current status of every scene path. The
+later captured frontend/general-session path has physically passed at
+1280×800 and 640×640 with the existing homogeneous scene, parameter owner,
+PDS/USE/TA encoders, retirement and exact COLOR/Z24 expectations. See
+[the joined session results](captured-general-session-client.md).
+
+Do not rebuild those encoders to address the next lifecycle gap. Published
+parameter objects and captured READ inputs are currently immutable. Updating
+them between submissions needs a coordinated frontend, Linux transport and
+kernel ownership/visibility contract; an idle fence alone does not authorize
+a CPU write. The finite physical results do not qualify arbitrary uniforms,
+programs, clipping or complete OpenGL 2.1/GLES2.
+
 The physical clip/MATRIX_WINDOW experiment retired but produced only clear.
 That result remains rejected. The next missing piece is executable vertex
 transformation and its owned parameters, rather than another state encoder.
