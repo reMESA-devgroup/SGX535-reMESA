@@ -54,8 +54,50 @@ constitute hardware evidence. `ORACLE_INDEPENDENT_TESTS.json` records the
 scanline check and all 240 source-byte mutations.
 
 `boot/INITRD_BUILD.json` and `boot/INIT_CHAIN_TEST_RESULTS.json` describe the
-offline image and parent/script/module identity checks. The new image has
-not been installed or booted as part of this preparation. No new physical
-OpenGL pass, FPS gain, full OpenGL 2.1/GLES 2.0 support, complete desktop or
-installability is established by these tools. First qualify 1280x800 in a
-fresh recoverable boot; qualify 640x640 separately only after a valid result.
+offline image and parent/script/module identity checks. They record the
+image's original undeployed state; the later physical outcome is below.
+
+## First physical attempt: source claim refused, stock recovered
+
+`PHYSICAL_FAILURE_AUDIT.json` records the actual 1280x800 attempt. Experimental
+boot `702fbca9-9391-457d-9fbe-1157dc795e6f` passed module/observer identity,
+first-load, fresh source and all eight N controls. The stock GRUB configuration
+and saved default were restored before enabling only memory, fill and matrix.
+
+The actual OpenGL client reached native COLOR fill, operation/cookie 1/1,
+stages31, core01130000/revision00010201 and retirement. This attempt did not
+independently read back the fill's pixels. Matrix submission then returned
+`error=-EBUSY`, operation/cookie0, phase/ledger0 and stages8 (clean closure).
+**No 3D job was issued**, no COLOR/Z oracle pass occurred and no FPS was
+measured. The frontend reported ENOTSUP and the collector correctly failed
+without retry or manual GEM cleanup. The original failure evidence is intact.
+
+The source guard changed from fresh reasons0 to INTERFERENCE32/UNPROVEN after
+the native 2D producer interval. The actual source route explicitly poisons
+the first-owner lineage on any producer after startup. Ending that interval
+does not restore it. The ordinary matrix source claim therefore cannot
+follow this fill. `source-predecessor-model/RESULT.json` reproduces the
+refusal with the actual extracted claim/producer code and frozen guard, on
+native/UBSan/i486. It also proves that merely claiming the source before the
+fill still poisons it. This is an integration gap, not an encoder, shader,
+geometry or GPU retirement failure.
+
+All controls returned to N. Stock boot
+`272f9114-00d8-4ced-bad4-ddd2cf717409`, its exact module note, absent experimental
+endpoints, restored GRUB and no pending operations were verified. No new
+collected kernel fault lines appeared relative to the pre-test dmesg; the
+existing backlight and ACPI boot warnings are preserved in the audit. All 31
+protected artifacts remain unchanged. The 640x640 physical attempt was not
+run after this refusal.
+
+The next component is an explicit owned 2D-to-3D source/lifetime contract
+using the existing GEM/private owner, reservation, IRQ cookie, retirement,
+MMU restoration and coherency machinery. It must account for the native fill
+before any FIFO/base publication and carry its attributable completion into
+the subsequent 3D admission. It must refuse foreign producers, wrong owners,
+late events, incomplete retirement and uncertain restoration. Preserve the
+old frozen LAB guard and its rejection behavior; do not clear its reasons,
+invent a fresh lineage, skip COLOR clear or suppress producer reporting to
+make this test pass. Qualify that contract offline before the next fresh
+physical boot. Full OpenGL 2.1/GLES 2.0, desktop coexistence, continuous normal
+submissions, performance and installability remain unfinished.
