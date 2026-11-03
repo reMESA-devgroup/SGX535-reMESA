@@ -13,8 +13,15 @@
 #include "remesa/general_parameter_uapi.h"
 #include "remesa/matrix_submit_uapi.h"
 struct remesa_linux_memory;
+/* Optional normal-session continuation, selected before the first draw.
+ * Each call still requires a complete native retirement receipt. Close is an
+ * idle source/backing close before destroying protected COLOR; errors retain
+ * ownership. No new device/queue, diagnostics or gate enable is introduced. */
+int remesa_linux_memory_matrix_continuous(struct remesa_linux_memory *,bool);
+int remesa_linux_memory_matrix_close(struct remesa_linux_memory *);
 /* Ordinary typed matrix packet, separate from all LAB catalogue selectors.
- * One attempted ioctl per endpoint, no retry. Native identity/retirement and
+ * Default one attempted ioctl; explicit continuation permits fresh retired
+ * jobs in the same session, without retrying uncertain work. Native identity/retirement and
  * successful kernel/source closure are required; uncertainty poisons ownership.
  * No hashes, INFO transfers, readback or gate enable performed here. */
 int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *,

@@ -1,6 +1,31 @@
 /* SPDX-License-Identifier: MIT */
 _Static_assert(sizeof(struct remesa_matrix_submit_request)==2344,"matrix submit ABI");
 _Static_assert(offsetof(struct remesa_matrix_submit_request,operation)==2288,"matrix submit input prefix");
+int remesa_linux_memory_matrix_continuous(struct remesa_linux_memory *d,bool enable)
+{
+ if(!d)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active||d->private_attempted||d->scene_attempted)return EBUSY;
+ if(d->recorder.record)return EOPNOTSUPP;
+ d->matrix_continuous=enable;return 0;
+}
+int remesa_linux_memory_matrix_close(struct remesa_linux_memory *d)
+{
+ struct remesa_matrix_submit_request r={.version=1,.flags=REMESA_MATRIX_CLOSE_SESSION},before;
+ if(!d)return EINVAL;
+ if(d->private_poison)return EOWNERDEAD;
+ if(d->private_active)return EBUSY;
+ if(!d->matrix_continuous||!d->matrix_session_open||d->scene_protocol!=3)return ENOENT;
+ for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
+ r.context=d->context;before=r;
+ int rc=ioctl(d->fd,DRM_IOCTL_REMESA_MATRIX_SUBMIT,&r);
+ d->matrix_response=r;d->matrix_recorded=true;
+ if(rc||memcmp(&r,&before,offsetof(struct remesa_matrix_submit_request,operation))||
+    r.error||r.retained||r.response_reserved[0]||r.response_reserved[1]||r.stages!=8||
+    r.operation||r.cookie||r.core||r.revision||r.pds_base||r.phase||r.ledger)
+  return private_lab_uncertain(d);
+ d->matrix_session_open=false;d->matrix_color=0;return 0;
+}
 int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
  const struct remesa_scene_packet *packet,uint32_t budget,struct remesa_matrix_submit_request *out)
 {
@@ -11,9 +36,10 @@ int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
     scene_host_overlap(packet,sizeof(*packet),out,sizeof(*out)))return EINVAL;
  if(d->private_poison)return EOWNERDEAD;
  if(d->private_active)return EBUSY;
- if(d->scene_attempted||d->private_attempted)return EALREADY;
+ if(d->private_attempted||(d->scene_attempted&&
+    !(d->matrix_continuous&&d->matrix_session_open&&d->scene_protocol==3)))return EALREADY;
  if(d->recorder.record)return EOPNOTSUPP;
- r.context=d->context;r.packet=*packet;
+ r.context=d->context;r.packet=*packet;r.flags=d->matrix_continuous?REMESA_MATRIX_KEEP_SESSION:0;
  if(!remesa_matrix_submit_request_valid(&r))return EINVAL;
  for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
  for(unsigned i=0;i<packet->binding_count;i++){
@@ -39,13 +65,13 @@ int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
   if(r.error>=0||r.error<-4095||r.cookie||r.phase||r.ledger||
      !((r.stages==8&&!r.operation)||(r.stages==9&&r.operation>d->copy_operation&&
        r.operation>d->private_operation&&r.operation<=UINT32_MAX)))return private_lab_uncertain(d);
-  return -r.error;
+  d->matrix_session_open=false;return -r.error;
  }
- if(r.stages!=15||!r.operation||r.operation>UINT32_MAX||
+ if(r.stages!=(d->matrix_continuous?(7U|REMESA_MATRIX_SESSION_READY):15U)||!r.operation||r.operation>UINT32_MAX||
     r.operation<=d->copy_operation||r.operation<=d->private_operation||r.cookie!=r.operation||
     r.core!=0x01130000U||r.revision!=0x10201U||r.pds_base!=0x20000000U||r.phase!=9||r.ledger!=7)
   return private_lab_uncertain(d);
- d->private_operation=r.operation;return 0;
+ d->private_operation=r.operation;d->matrix_session_open=d->matrix_continuous;d->matrix_color=d->matrix_continuous?r.packet.controls.color_id:0;return 0;
 }
 enum remesa_dispatch remesa_linux_memory_matrix_dispatch(void *opaque,
  const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)

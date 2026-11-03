@@ -10,7 +10,8 @@ struct remesa_matrix_fill_owner {
  struct remesa_scene_probe base; /* stable common owner, offset zero */
  struct remesa_twod_retirement retirement;
  u32 color,width,height,stride;
- bool active,failed;
+ bool active,failed,continuous;
+ u64 last_draw_operation;
 };
 static struct remesa_matrix_fill_owner *matrix_fill_owner;
 int remesa_matrix_fill_begin(struct drm_device *dev,struct drm_file *file,
@@ -27,7 +28,7 @@ int remesa_matrix_fill_begin(struct drm_device *dev,struct drm_file *file,
     r->destination.stride!=(u64)r->width*4)return -EOPNOTSUPP;
  mutex_lock(&scene_probe_lock);mutex_lock(&endpoint_lock);s=endpoint;
  if(!s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost){error=-EACCES;goto unlock;}
- if(scene_probe_consumed||general_session||
+ if((scene_probe_consumed&&(!matrix_fill_owner||!matrix_fill_owner->continuous))||general_session||
     (scene_probe_retained&&(!matrix_fill_owner||scene_probe_retained!=&matrix_fill_owner->base))){error=-EBUSY;goto unlock;}
  error=twod_fill_command(s,r,&command,uses,&count);if(error)goto unlock;
  if(count!=1){error=-EPROTO;goto unlock;}

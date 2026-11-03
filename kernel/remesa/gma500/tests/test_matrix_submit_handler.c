@@ -5,6 +5,7 @@
 #undef main
 static void *general_session;
 static unsigned matrix_executes;
+static bool ready_fault_after_execute;
 #include "../remesa_gem_twod_job.h"
 /* Typed fill command construction has its own real retained-core tests. */
 #include "remesa_twod_fill_uapi.h"
@@ -38,7 +39,7 @@ int remesa_owned_fill_claim(struct drm_device *d,const void *owner,u64 destinati
 int remesa_owned_fill_ready(struct drm_device *d,const void *owner)
 {
  CHECK(d==endpoint->dev&&endpoint->private_session==owner);
- if(fault==CLAIM)return -EIO;
+ if(fault==CLAIM||(ready_fault_after_execute&&matrix_executes))return -EIO;
  return endpoint->private_source_held&&!endpoint->private_source_poisoned?0:-EACCES;
 }
 int remesa_owned_fill_complete(const void *owner,const struct remesa_twod_retirement *proof)
@@ -47,7 +48,7 @@ int remesa_owned_fill_complete(const void *owner,const struct remesa_twod_retire
  return 0; /* Source/native/GEM join is exercised by its actual-code fixture. */
 }
 static void remesa_stream_source_poison(const void *owner)
-{CHECK(endpoint->private_session==owner&&endpoint->lock.held);endpoint->private_source_poisoned=true;}
+{CHECK(endpoint->private_session==owner&&endpoint_lock.held);endpoint->private_source_poisoned=true;}
 #include "../remesa_matrix_submit.inc"
 #ifndef REMESA_MATRIX_CONTROLLER_FIXTURE
 int main(int argc,char **argv)

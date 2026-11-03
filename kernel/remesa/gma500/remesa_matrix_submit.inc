@@ -12,21 +12,43 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
  struct remesa_gem_memory *s;struct drm_psb_private *dev_priv;unsigned i;int error,cleanup=0;
  BUILD_BUG_ON(sizeof(*r)!=2344);BUILD_BUG_ON(offsetof(struct remesa_matrix_submit_request,operation)!=2288);
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
- if(!memory_enabled||!matrix_submit_enabled)return -EOPNOTSUPP;
+ if(r->flags!=REMESA_MATRIX_CLOSE_SESSION&&(!memory_enabled||!matrix_submit_enabled))return -EOPNOTSUPP;
  if(!remesa_matrix_submit_request_valid(r))return -EINVAL;
  mutex_lock(&scene_probe_lock);
- if(scene_probe_consumed||general_session||
+ if(r->flags==REMESA_MATRIX_CLOSE_SESSION){
+  struct remesa_matrix_fill_owner *m=matrix_fill_owner;
+  if(!m||!m->continuous||scene_probe_retained!=&m->base){error=-ENOENT;goto done;}
+  p=&m->base;s=p->memory;mutex_lock(&endpoint_lock);
+  if(endpoint!=s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost||
+     s->private_session!=p||m->active||m->failed||p->guard.held||p->backend.active||
+     p->execution_consumed){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
+  mutex_lock(&s->lock);error=private_session_owner(s,p);
+  if(!error)error=private_session_idle(s);
+  mutex_unlock(&s->lock);mutex_unlock(&endpoint_lock);
+  if(error)goto done;
+  error=remesa_private_session_source_end(s,p);
+  if(!error){p->source_claimed=false;error=remesa_private_session_release(s,p);}
+  if(error){
+   mutex_lock(&endpoint_lock);
+   if(endpoint==s)remesa_matrix_fill_failed_locked(s,p);else m->failed=true;
+   mutex_unlock(&endpoint_lock);r->error=error;r->retained=1;error=0;goto done;
+  }
+  scene_probe_retained=NULL;matrix_fill_owner=NULL;kfree(p);r->stages=8;error=0;goto done;
+ }
+ if((scene_probe_consumed&&(!matrix_fill_owner||!matrix_fill_owner->continuous))||general_session||
     (scene_probe_retained&&(!matrix_fill_owner||scene_probe_retained!=&matrix_fill_owner->base))){error=-EBUSY;goto done;}
  if(matrix_fill_owner){
   struct remesa_matrix_fill_owner *m=matrix_fill_owner;p=&m->base;s=p->memory;
   mutex_lock(&endpoint_lock);
   if(endpoint!=s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost||
      s->private_session!=p||!s->private_source_held||s->private_source_poisoned||!p->source_claimed){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
+  if(m->retirement.ticket.operation<=m->last_draw_operation){error=-ESTALE;mutex_unlock(&endpoint_lock);goto done;}
   if(m->active||m->failed||!m->retirement.gem_retired||m->color!=r->packet.controls.color_id||
      m->width!=r->packet.controls.width||m->height!=r->packet.controls.height){error=-EBUSY;mutex_unlock(&endpoint_lock);goto done;}
   mutex_lock(&s->lock);s->private_matrix_constructing=false;mutex_unlock(&s->lock);
   mutex_unlock(&endpoint_lock);
  }else{
+  if(r->flags&REMESA_MATRIX_KEEP_SESSION){error=-EOPNOTSUPP;goto done;}
   p=kzalloc(sizeof(*p),GFP_KERNEL);if(!p){error=-ENOMEM;goto done;}
   error=remesa_private_session_acquire(dev,file,r->context,p,&p->memory);
   if(error){kfree(p);p=NULL;goto done;}
@@ -85,6 +107,29 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
  error=remesa_gem_private_release(&p->job.loan);if(error)goto cancel_locked;
  error=remesa_twod_release(dev_priv,&p->guard);if(error)goto cancel_locked;
  error=remesa_gem_job_retire(s,p->job.snapshot.ticket);if(error)goto cancel_locked;
+ if(r->flags&REMESA_MATRIX_KEEP_SESSION){
+  struct remesa_matrix_fill_owner *m=matrix_fill_owner;
+  /* Every operation below has ALREADY retired, restored the root, released
+   * its private loan/native reservation and dropped the real GEM holds.
+   * Keep only the existing source/backing lease; never reset boot lineage. */
+  mutex_lock(&s->lock);error=private_session_owner(s,p);
+  if(!error)error=private_session_idle(s);
+  if(!error)error=remesa_owned_fill_ready(dev,p);
+  if(!error&&(!m||&m->base!=p))error=-EPROTO;
+  if(!error){
+   memset(&p->job,0,sizeof(p->job));memset(&p->backend,0,sizeof(p->backend));
+   memset(&p->observation,0,sizeof(p->observation));p->execution_consumed=false;
+   m->last_draw_operation=r->operation;m->continuous=true;
+   s->private_matrix_constructing=true;r->stages|=REMESA_MATRIX_SESSION_READY;
+  }
+  mutex_unlock(&s->lock);
+  if(error){
+   if(m && &m->base==p)m->failed=true;
+   mutex_lock(&s->lock);s->private_source_poisoned=true;mutex_unlock(&s->lock);
+   remesa_stream_source_poison(p);goto cancel_locked;
+  }
+  mutex_unlock(&endpoint_lock);r->retained=0;error=0;goto done;
+ }
  goto unlock_cleanup;
  reacquire_cancel:mutex_lock(&endpoint_lock);
  cancel_locked:

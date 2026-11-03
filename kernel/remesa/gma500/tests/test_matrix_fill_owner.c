@@ -7,7 +7,7 @@
 #include "../remesa_matrix_construct.inc"
 int main(int argc,char **argv)
 {
- CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<31);
+ CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<38);
  struct drm_psb_private priv={(void*)1};struct drm_device dev={&priv};struct drm_file file={1};
  struct remesa_gem_memory memory={.dev=&dev,.file=&file,.context=77,.root={0,0xdfffffffULL},.pd=(void*)1};
  struct remesa_scene_probe_binding bindings[18]={0};endpoint=&memory;
@@ -90,6 +90,8 @@ int main(int argc,char **argv)
   for(unsigned i=0;i<11;i++)p->uses[i]=(struct remesa_scene_packet_use){32+i,0,8,4,0,0};
   p->windows[0]=(struct remesa_scene_packet_window){33,0,6,34,0,48,3,0};
   p->windows[1]=(struct remesa_scene_packet_window){35,0,6,36,0,144,3,0};
+  if(mode>=31)draw.flags=REMESA_MATRIX_KEEP_SESSION;
+  if(mode==37)ready_fault_after_execute=true;
   if(mode==4)fault=CLAIM;
   if(mode==24)memory.private_source_held=false;
   if(mode==25)memory.private_source_poisoned=true;
@@ -104,6 +106,40 @@ int main(int argc,char **argv)
    CHECK(result<0&&!matrix_executes&&memory.private_session==owner&&matrix_fill_owner);return 0;
   }
   CHECK(!result);
+  if(mode==37){
+   CHECK(draw.error&&draw.retained&&matrix_fill_owner->failed&&!memory.private_matrix_constructing&&
+         memory.private_source_poisoned&&memory.private_source_held&&memory.private_session==owner);
+   CHECK(!memory.jobs[0].live&&!memory.executor&&matrix_executes==1);return 0;
+  }
+  if(mode>=31){
+   CHECK(!draw.error&&draw.stages==23&&!draw.retained&&matrix_fill_owner&&matrix_fill_owner->continuous);
+   CHECK(memory.private_session==owner&&memory.private_source_held&&memory.private_matrix_constructing&&scene_probe_consumed);
+   CHECK(!matrix_fill_owner->base.execution_consumed&&!matrix_fill_owner->base.job.memory&&!memory.jobs[0].live&&!memory.executor);
+   struct remesa_matrix_submit_request repeat=draw;
+   repeat.operation=repeat.cookie=0;repeat.core=repeat.revision=repeat.pds_base=repeat.phase=repeat.ledger=repeat.retained=repeat.stages=0;
+   CHECK(remesa_matrix_submit_ioctl(&dev,&repeat,&file)==-ESTALE&&matrix_executes==1);
+   if(mode==32||mode==33){
+    fill.operation=fill.cookie=fill.stages=0;
+    CHECK(!remesa_matrix_fill_begin(&dev,&file,&fill,&other)&&other==owner);
+    proof.ticket.operation=92;proof.cookie=18;fill.operation=92;fill.cookie=18;fill.stages=31;
+    mutex_lock(&endpoint_lock);CHECK(!remesa_matrix_fill_finish(&memory,owner,&fill,&proof));mutex_unlock(&endpoint_lock);
+    model_operation=93;
+    CHECK(!remesa_matrix_submit_ioctl(&dev,&repeat,&file)&&!repeat.error&&repeat.stages==23&&repeat.operation==93&&matrix_executes==2);
+   }
+   struct remesa_matrix_submit_request close={.version=1,.flags=REMESA_MATRIX_CLOSE_SESSION,.context=77};
+   if(mode==34){close.packet.owner=77;CHECK(remesa_matrix_submit_ioctl(&dev,&close,&file)==-EINVAL);close.packet.owner=0;}
+   if(mode==33)fault=SOURCE_END;
+   if(mode==35)memory_enabled=matrix_submit_enabled=false;
+   if(mode==36){
+    memory.bo[0].lease=true;
+    CHECK(remesa_matrix_submit_ioctl(&dev,&close,&file)==-EBUSY&&matrix_fill_owner&&!matrix_fill_owner->failed);
+    memory.bo[0].lease=false;
+   }
+   CHECK(!remesa_matrix_submit_ioctl(&dev,&close,&file));
+   if(mode==33){CHECK(close.error&&close.retained&&memory.private_session==owner&&matrix_fill_owner->failed&&!memory.private_matrix_constructing);return 0;}
+   CHECK(!close.error&&close.stages==8&&!close.retained&&!close.operation&&!close.cookie&&allocs==frees);
+   CHECK(!memory.private_session&&!memory.private_source_held&&!matrix_fill_owner&&scene_probe_consumed);return 0;
+  }
   if(mode==29||mode==30){
    CHECK(draw.error&&draw.retained&&matrix_executes==1&&memory.private_session==owner&&matrix_fill_owner);return 0;
   }

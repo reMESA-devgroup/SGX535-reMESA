@@ -25,6 +25,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--root', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--supervisor-draws', type=int, choices=(1, 2, 10, 100), default=1)
     a = p.parse_args()
     a.output.mkdir(parents=True, exist_ok=False)
     result = dict(GPU_operations=0, physical_qualification=False, sizes=[], faults=0, lifecycle=[])
@@ -155,15 +156,17 @@ def main():
                  mock.patch.object(supervisor.os, 'close') as closed, \
                  mock.patch.object(supervisor.subprocess, 'run', run), \
                  mock.patch.object(supervisor.memory_api, 'Memory', Memory), \
-                 mock.patch.object(supervisor.archive, 'verify', verify):
+                 mock.patch.object(supervisor.archive, 'verify' if a.supervisor_draws == 1 else 'verify_continuous', verify):
                 try:
-                    report = supervisor.collect(Path('/no-real-device'), dest, *args, client, client_sha)
+                    report = supervisor.collect(Path('/no-real-device'), dest, *args, client, client_sha, a.supervisor_draws)
                     assert fault == 'ok' and report['memory_cleanup'] == 'complete'
                 except (ValueError, RuntimeError, subprocess.TimeoutExpired):
                     assert fault != 'ok'
                 opened.assert_called_once()
                 closed.assert_called_once_with(99)
                 assert run.call_count == 1
+                command = run.call_args.args[0]
+                assert (command[-1] == '--execute') if a.supervisor_draws == 1 else (command[-2:] == ['--execute', str(a.supervisor_draws)])
             stored = json.loads((dest/'SUPERVISOR-CAPTURE.json').read_text())
             if fault in ('client', 'timeout', 'archive', 'global_info', 'object_info'):
                 assert not requests and stored['memory_cleanup'] == 'suppressed_after_uncertain_or_invalid_evidence'

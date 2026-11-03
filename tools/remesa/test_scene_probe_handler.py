@@ -43,7 +43,7 @@ if a.matrix_submit:
  names=re.search(r'enum \{(.*?)\};',(w/'kernel/remesa/gma500/tests/test_scene_probe_handler.c').read_text(),re.S)[1].replace('\n','').split(',')
  excluded={'DUPALLOC','VA','SIZE','HASH','OK_INIT','OK640_INIT','OK_FINAL','OK640_FINAL','OK_GALLIUM','OK640_GALLIUM','VA_GALLIUM','HASH_GALLIUM','WRONG_LEGACY','OK_MATRIX','OK640_MATRIX','VA_MATRIX','HASH_MATRIX','WRONG_WINDOW'}
  matrix_cases=[i for i,name in enumerate(names) if name.strip() not in excluded]
- if a.matrix_fill:matrix_cases=list(range(9 if a.matrix_fill_endpoint else 31))
+ if a.matrix_fill:matrix_cases=list(range(9 if a.matrix_fill_endpoint else 38))
 
 if a.extended_captures:
  lines=[]

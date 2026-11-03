@@ -8,6 +8,7 @@
 enum {OK,OK640,CAP,DISABLED,MEMDISABLED,INVALID,ALLOC,DUPALLOC,BACKING,LOST,POWER,CORE,REV,PDS,
  VA,SIZE,GEN,LEASE,HOLD,PIN,RESERVED,QUAR,VMA,ZERO,CPU_ALIAS,STREAM,EXECUTOR,TA,CEILING,LIVE,
  RESERVE,CLAIM,PREPARE,PREPARE_HELD,HASH,EARLY_EXEC,EXEC,NO_RECEIPT,LOAN_DROP,GUARD_DROP,JOB_DROP,SOURCE_END,BACKING_END,LOST_AFTER_CLAIM,OK_INIT,OK640_INIT,OK_FINAL,OK640_FINAL,OK_GALLIUM,OK640_GALLIUM,VA_GALLIUM,HASH_GALLIUM,WRONG_LEGACY,OK_MATRIX,OK640_MATRIX,VA_MATRIX,HASH_MATRIX,WRONG_WINDOW,CASE_COUNT};
+static u64 model_operation=91;
 static unsigned fault,checks,reads,allocs,frees,dup_calls,hashes,reserves,claims,executions,source_ends,backing_ends;
 static bool administrator=true,memory_enabled=true,powered=true;
 static struct mutex endpoint_lock;
@@ -44,7 +45,7 @@ static void *kmemdup(const void *p,size_t n,int flags)
 {dup_calls++;if(fault==DUPALLOC)return NULL;void *b=kzalloc(n,flags);if(b)memcpy(b,p,n);return b;}
 static unsigned msecs_to_jiffies(unsigned n){CHECK(n==1000);return n;}
 static struct retained_job *ticket_job(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
-{return s->jobs[0].live&&t.operation==91?&s->jobs[0]:NULL;}
+{return s->jobs[0].live&&t.operation==model_operation?&s->jobs[0]:NULL;}
 int remesa_private_session_acquire(struct drm_device *dev,struct drm_file *file,u64 context,const void *owner,struct remesa_gem_memory **out)
 {
  CHECK(!endpoint_lock.held);*out=NULL;
@@ -84,7 +85,7 @@ int remesa_gem_scene_packet_prepare(struct remesa_gem_memory *s,const struct rem
  CHECK(endpoint_lock.held&&s->private_session&&s->private_source_held&&guard->held&&remesa_scene_packet_valid(p)&&p->owner==s->context&&p->binding_count==expected_count);
  CHECK(p->actions.region_id>=32&&p->actions.table_id>=32&&p->actions.parameter_id>=32&&p->controls.color_id>=32);
  if(fault==PREPARE)return -EINVAL;
- c->memory=s;c->state=REMESA_SCENE_JOB_PREPARED;c->count=expected_count;c->snapshot.ticket=(struct remesa_memory_ticket){.context=s->context,.generation=1,.operation=91};
+ c->memory=s;c->state=REMESA_SCENE_JOB_PREPARED;c->count=expected_count;c->snapshot.ticket=(struct remesa_memory_ticket){.context=s->context,.generation=1,.operation=model_operation};
  c->loan.live=true;c->loan.memory=s;c->loan.ticket=c->snapshot.ticket;c->loan.guard=guard;guard->mmu_owner=&c->loan;
  s->jobs[0].live=true;s->executor=&c->loan;
  for(unsigned i=0;i<expected_count;i++){
@@ -108,15 +109,15 @@ int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,struct sgx535_gm
 {
  CHECK(endpoint_lock.held&&c->memory->private_session==owner&&c->memory->private_source_held&&c->loan.guard->held&&hashes==expected_reads&&ticks==1000&&samples==100000&&!b->active&&!o->state);executions++;
  if(fault==EARLY_EXEC)return -EIO;
- c->loan.execution_attempted=true;c->loan.execution_started=true;c->memory->jobs[0].cookie=91;
+ c->loan.execution_attempted=true;c->loan.execution_started=true;c->memory->jobs[0].cookie=model_operation;
  if(fault==EXEC)return -EIO;
- c->session.phase=SGX535_PHASE_RETIRED;c->session.observed_events=7;c->session.sequence=91;
- c->state=REMESA_SCENE_JOB_ACKNOWLEDGED;c->loan.execution_retired=fault!=NO_RECEIPT;o->state=1;o->event_count=2;o->zero_samples=3;o->events[0]=(struct remesa_stream_source_event){4,91,0x2000,0,0,5};o->events[1]=(struct remesa_stream_source_event){4,91,4,0,3,8};o->event_ns[0]=1234567890123ULL;o->event_ns[1]=1234567890456ULL;return 0;
+ c->session.phase=SGX535_PHASE_RETIRED;c->session.observed_events=7;c->session.sequence=model_operation;
+ c->state=REMESA_SCENE_JOB_ACKNOWLEDGED;c->loan.execution_retired=fault!=NO_RECEIPT;o->state=1;o->event_count=2;o->zero_samples=3;o->events[0]=(struct remesa_stream_source_event){4,(u32)model_operation,0x2000,0,0,5};o->events[1]=(struct remesa_stream_source_event){4,(u32)model_operation,4,0,3,8};o->event_ns[0]=1234567890123ULL;o->event_ns[1]=1234567890456ULL;return 0;
 }
 int remesa_gem_private_release(struct remesa_gem_private *loan)
 {CHECK(endpoint_lock.held&&loan->execution_retired&&loan->live&&endpoint->jobs[0].live);if(fault==LOAN_DROP)return -EIO;loan->guard->mmu_owner=NULL;memset(loan,0,sizeof(*loan));endpoint->executor=NULL;return 0;}
 int remesa_gem_job_retire(struct remesa_gem_memory *s,struct remesa_memory_ticket t)
-{CHECK(endpoint_lock.held&&t.operation==91&&s->jobs[0].live&&!s->executor&&!current_guard->held);if(fault==JOB_DROP)return -EIO;s->jobs[0].live=false;for(unsigned i=0;i<expected_count;i++)s->bo[i].holds=0;return 0;}
+{CHECK(endpoint_lock.held&&t.operation==model_operation&&s->jobs[0].live&&!s->executor&&!current_guard->held);if(fault==JOB_DROP)return -EIO;s->jobs[0].live=false;for(unsigned i=0;i<expected_count;i++)s->bo[i].holds=0;return 0;}
 #include "../remesa_scene_probe.inc"
 static int invoke_gears_wire(struct drm_device *dev,struct drm_file *file,struct remesa_scene_probe_request *n,const u32 *ids)
 {

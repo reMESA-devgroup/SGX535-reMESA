@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Supervise one ordinary OpenGL draw; default plan only, no gate/boot changes.
+"""Supervise bounded ordinary OpenGL draws; default plan only, no gate/boot changes.
 
 Requires a separately qualified boot/controller. Verifies presealed inputs,
 retirement, pixels and remaining ownership before manual GEM cleanup. Never
@@ -16,13 +16,14 @@ import private_probe as memory_api
 import verify_normal_matrix_capture as archive
 
 
-def collect(device, output, fixture, oracle, size, manifest, manifest_sha, client, client_sha):
+def collect(device, output, fixture, oracle, size, manifest, manifest_sha, client, client_sha, draws=1):
+    archive.need(draws in (1, 2, 10, 100), 'bounded ordinary draw count')
     archive.preflight(fixture, oracle, size, manifest, manifest_sha)
     archive.need(archive.sha(client.read_bytes()) == client_sha, 'native client prelaunch pin')
     report = dict(status='PREPARING', identity=memory_api.device_identity(device),
                   native_client_sha256=client_sha, physical_qualification=False,
                   requires_outer_boot_source_recovery_audit=True,
-                  requested_API_draws=1, requested_3D_jobs=1, requested_2D_fills=1,
+                  requested_API_draws=draws, requested_3D_jobs=draws, requested_2D_fills=draws,
                   reference_framebuffers_uploaded_to_GPU=False)
 
     def save():
@@ -36,12 +37,16 @@ def collect(device, output, fixture, oracle, size, manifest, manifest_sha, clien
         save()
         start = time.monotonic()
         with (output/'native.stdout').open('xb') as stdout, (output/'native.stderr').open('xb') as stderr:
-            result = subprocess.run([str(client), str(fd), size, str(output), str(fixture), '--execute'],
-                                    pass_fds=(fd,), stdout=stdout, stderr=stderr, timeout=180)
+            argv = [str(client), str(fd), size, str(output), str(fixture), '--execute']
+            if draws != 1:
+                argv.append(str(draws))
+            result = subprocess.run(argv, pass_fds=(fd,), stdout=stdout, stderr=stderr,
+                                    timeout=600 if draws == 100 else 180)
         report['native_client_exit'] = result.returncode
         report['wall_seconds_including_diagnostics'] = time.monotonic()-start
         archive.need(result.returncode == 0, 'native client failed; no retry/manual cleanup')
-        checked = archive.verify(output, fixture, oracle, size, manifest, manifest_sha)
+        checked = (archive.verify_continuous(output, fixture, oracle, size, manifest, manifest_sha, draws)
+                   if draws != 1 else archive.verify(output, fixture, oracle, size, manifest, manifest_sha))
         report['archive'] = checked
         remaining = checked['remaining']
         memory = memory_api.Memory(fd, checked['context'])
@@ -91,6 +96,7 @@ def main():
     p.add_argument('--client-sha256', required=True)
     p.add_argument('--device', type=Path, default=Path('/dev/dri/card0'))
     p.add_argument('--execute', action='store_true')
+    p.add_argument('--draws', type=int, choices=(1, 2, 10, 100), default=1)
     a = p.parse_args()
     archive.preflight(a.fixture, a.oracle, a.size, a.manifest, a.manifest_sha256)
     archive.need(archive.sha(a.client.read_bytes()) == a.client_sha256, 'native client prelaunch pin')
@@ -98,11 +104,11 @@ def main():
     if not a.execute:
         (a.output/'PLAN.json').write_text(json.dumps(dict(status='PLAN_ONLY_NO_DEVICE_OPEN',
             GPU_operations=0, size=a.size, qualification_manifest_sha256=a.manifest_sha256,
-            client_sha256=a.client_sha256, requested_3D_jobs=1, requested_2D_fills=1), indent=2)+'\n')
+            client_sha256=a.client_sha256, requested_3D_jobs=a.draws, requested_2D_fills=a.draws), indent=2)+'\n')
         print('PLAN_ONLY_NO_DEVICE_OPEN')
         return
     print(collect(a.device, a.output, a.fixture, a.oracle, a.size, a.manifest,
-                  a.manifest_sha256, a.client, a.client_sha256)['status'])
+                  a.manifest_sha256, a.client, a.client_sha256, a.draws)['status'])
 
 
 if __name__ == '__main__':

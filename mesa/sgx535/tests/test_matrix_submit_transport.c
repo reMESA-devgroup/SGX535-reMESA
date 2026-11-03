@@ -14,9 +14,14 @@ int __wrap_ioctl(int fd,unsigned long command,...)
  if(command!=DRM_IOCTL_REMESA_MATRIX_SUBMIT)return inherited_general_ioctl(fd,command,data);
  struct remesa_matrix_submit_request *r=data;assert(remesa_matrix_submit_request_valid(r));matrix_calls++;
  if(mode==2){raw=*r;errno=reply_errno;return -1;}
+ if(r->flags==REMESA_MATRIX_CLOSE_SESSION){
+  r->stages=8;if(mode==9)r->cookie=1;raw=*r;return 0;
+ }
  if(mode==3||mode==4){r->error=-ENOMEM;r->stages=mode==3?8:9;r->operation=mode==3?0:100;raw=*r;return 0;}
  r->operation=r->cookie=100;r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
- r->phase=9;r->ledger=7;r->stages=15;
+ r->phase=9;r->ledger=7;r->stages=r->flags==REMESA_MATRIX_KEEP_SESSION?23:15;
+ if(mode>=7)r->operation=r->cookie=mode==10?101:100+matrix_calls;
+ if(mode==8)r->stages=15; /* Must not accept CLOSED for a KEEP request. */
  if(mode==1)((unsigned char *)r)[changed_byte]^=1;
  if(mode==5){r->error=-EOPNOTSUPP;r->retained=1;r->cookie=0;r->stages=1;r->phase=r->ledger=0;}
  raw=*r;return mode==6?1:0;
@@ -94,6 +99,33 @@ int main(void)
  assert(remesa_linux_memory_matrix_dispatch(d,&submit,&receipt)==REMESA_NOT_ISSUED&&matrix_calls==1&&memcalls==m);
  struct remesa_general_session_request lab;assert(remesa_linux_memory_general_open(d,ids,5,2,&lab)==EALREADY&&memcalls==m);
  matrix_cleanup(d);
+ for(unsigned length=2;length<=100;length=length==2?10:length==10?100:101){
+  mode=7;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
+  for(unsigned i=0;i<length;i++){
+   assert(!remesa_linux_memory_matrix_submit(d,&p,1000,&r));
+   assert(r.flags==REMESA_MATRIX_KEEP_SESSION&&r.stages==23&&r.operation==101+i);
+  }
+  assert(remesa_linux_memory_matrix_continuous(d,false)==EBUSY);
+  assert(!remesa_linux_memory_matrix_close(d));
+  assert(!remesa_linux_memory_matrix_response(d,&r)&&r.flags==REMESA_MATRIX_CLOSE_SESSION&&r.stages==8&&!r.operation);
+  assert(remesa_linux_memory_matrix_close(d)==ENOENT);
+  assert(remesa_linux_memory_matrix_submit(d,&p,1000,&r)==EALREADY);
+  matrix_cleanup(d);
+ }
+ mode=7;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
+ assert(!remesa_linux_memory_matrix_submit(d,&p,1000,&r));
+ matrix_cleanup(d);assert(matrix_calls==2); /* COLOR unmap closes before freeing. */
+ for(unsigned failure=8;failure<=10;failure++){
+  mode=failure;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
+  int e=remesa_linux_memory_matrix_submit(d,&p,1000,&r);
+  if(failure==8)assert(e==EOWNERDEAD);
+  else{
+   assert(!e);
+   if(failure==9)assert(remesa_linux_memory_matrix_close(d)==EOWNERDEAD);
+   else assert(remesa_linux_memory_matrix_submit(d,&p,1000,&r)==EOWNERDEAD);
+  }
+  matrix_poisoned(d);
+ }
  printf("PASS %u matrix byte/errno/retention faults plus aliases/mapping/limits, checked callback receipt and exactly1 submit with0 extra memory calls; GPU0\n",cases);
  return 0;
 }

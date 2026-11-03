@@ -45,11 +45,21 @@ static void output(const char *dir,const char *name,const void *data,size_t byte
 static uint64_t ns(void){struct timespec t;assert(!clock_gettime(CLOCK_MONOTONIC,&t));return (uint64_t)t.tv_sec*1000000000u+t.tv_nsec;}
 static uint32_t translate(const uint32_t old[18],const struct remesa_scene_packet *p,uint32_t id)
 {for(unsigned i=0;i<18;i++)if(old[i]==id)return p->bindings[i].id;assert(0);return 0;}
+#ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
+static unsigned continuous_frame;
+static uint32_t continuous_guard_ids[4];
+static uint64_t continuous_guard_addresses[4];
+static bool continuous_guards_ready;
+#endif
 static void expected_packet(const char *path,const struct remesa_scene_packet *p)
 {
  FILE *f=fopen(path,"rb");assert(f);struct remesa_scene_packet expected;assert(fread(&expected,1,sizeof expected,f)==sizeof expected&&fgetc(f)==EOF);assert(!fclose(f));assert(remesa_scene_packet_valid(&expected));
  uint32_t old[18];for(unsigned i=0;i<18;i++)old[i]=expected.bindings[i].id;
  expected.owner=p->owner;
+#ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
+ /* Permit only the serial predicted by the explicit GL frame loop. */
+ assert(continuous_frame);expected.serial=continuous_frame;
+#endif
  for(unsigned i=0;i<18;i++)expected.bindings[i].id=p->bindings[i].id;
  expected.actions.region_id=translate(old,p,expected.actions.region_id);expected.actions.table_id=translate(old,p,expected.actions.table_id);expected.actions.parameter_id=translate(old,p,expected.actions.parameter_id);
  uint32_t *control_ids[]={&expected.controls.color_id,&expected.controls.depth_id,&expected.controls.ta_id,&expected.controls.background_id,&expected.controls.event_id};
@@ -92,7 +102,11 @@ static void check_placement(struct remesa_linux_memory *m,const struct remesa_sc
  struct remesa_scene_fixture expected,actual={.version=1,.count=18};
  CHECK(fread(&expected,1,sizeof expected,f)==sizeof expected&&fgetc(f)==EOF&&!fclose(f));
  CHECK(expected.version==1&&expected.count==18);
- struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==18+REMESA_NATIVE_CLIENT_SOURCE_OWNERS);
+ unsigned expected_count=18+REMESA_NATIVE_CLIENT_SOURCE_OWNERS;
+#ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
+ if(continuous_guards_ready)expected_count+=4;
+#endif
+ struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv)&&inv.count==expected_count);
  for(unsigned i=0;i<18;i++){
   unsigned found=0;
   for(unsigned k=0;k<inv.count;k++)if(inv.entries[k].id==p->bindings[i].id){
@@ -107,6 +121,20 @@ static void check_placement(struct remesa_linux_memory *m,const struct remesa_sc
 }
 static void guards(struct remesa_linux_memory *m)
 {
+#ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
+ if(continuous_guards_ready){
+  struct remesa_linux_memory_inventory saved;CHECK(!remesa_linux_memory_inventory_snapshot(m,&saved));
+  for(unsigned g=0;g<4;g++){
+   unsigned found=0;
+   for(unsigned i=0;i<saved.count;i++)if(saved.entries[i].id==continuous_guard_ids[g]){
+    CHECK(saved.entries[i].gpu_va==continuous_guard_addresses[g]&&saved.entries[i].bytes==4096&&saved.entries[i].flags==REMESA_MEMORY_INVENTORY_LIVE);found++;
+   }
+   CHECK(found==1);
+  }
+  output(out_dir,"GUARD_IDS.bin",continuous_guard_ids,sizeof continuous_guard_ids);
+  output(out_dir,"GUARD_VA.bin",continuous_guard_addresses,sizeof continuous_guard_addresses);return;
+ }
+#endif
  struct remesa_linux_memory_inventory inv;CHECK(!remesa_linux_memory_inventory_snapshot(m,&inv));
  const struct remesa_persistent_ops *o=remesa_linux_memory_ops();
  const uint64_t ranges[3][2]={{0x20000000,0x28000000},{0x30000000,0x40000000},{0x40000000,0xe0000000}};
@@ -125,7 +153,11 @@ static void guards(struct remesa_linux_memory *m)
    unsigned char a5[4096];memset(a5,0xa5,sizeof a5);CHECK(!remesa_linux_memory_upload_pages(m,ids[n],0,a5,sizeof a5));n++;
   }
  }
- CHECK(n==4);output(out_dir,"GUARD_IDS.bin",ids,sizeof ids);output(out_dir,"GUARD_VA.bin",addresses,sizeof addresses);
+ CHECK(n==4);
+#ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
+ memcpy(continuous_guard_ids,ids,sizeof ids);memcpy(continuous_guard_addresses,addresses,sizeof addresses);continuous_guards_ready=true;
+#endif
+ output(out_dir,"GUARD_IDS.bin",ids,sizeof ids);output(out_dir,"GUARD_VA.bin",addresses,sizeof addresses);
 }
 static void dump_backing(struct remesa_linux_memory *m,const struct remesa_scene_packet *p,bool after)
 {
