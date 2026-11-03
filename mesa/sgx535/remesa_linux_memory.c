@@ -15,6 +15,8 @@ struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_se
  struct remesa_scene_probe_request scene_response;
  unsigned scene_protocol;uint32_t gears_access[18];
  struct remesa_gears_scene_probe_request gears_response;
+ struct remesa_matrix_submit_request matrix_response;
+ bool matrix_recorded;
  struct remesa_scene_packet general_packet;
  uint64_t general_host_operation;
  uint64_t general_update_sequence;
@@ -240,6 +242,7 @@ static bool scene_host_overlap(const void *a,size_t an,const void *b,size_t bn)
  return x<=y?y-x<an:x-y<bn;
 }
 #include "remesa_linux_general_session.inc"
+#include "remesa_linux_matrix_submit.inc"
 int remesa_linux_memory_scene_lab_submit(struct remesa_linux_memory *d,
  const struct remesa_scene_packet *packet,uint32_t profile,uint32_t budget,
  struct remesa_scene_probe_request *out)

@@ -46,11 +46,50 @@ static void input_file(const char *name,void *data,size_t size)
  char path[4096];fixture_path(path,name);FILE *f=fopen(path,"rb");
  CHECK(f&&fread(data,1,size,f)==size&&fgetc(f)==EOF&&!fclose(f));
 }
+#ifdef REMESA_OPENGL_NORMAL_NATIVE
+static int collect_fill(void *priv,const struct remesa_gpu_fill *fill)
+{
+ struct remesa_twod_fill_request r={.destination={fill->destination.id,fill->destination.width,
+  fill->destination.height,fill->destination.stride},.destination_x=fill->destination_x,
+  .destination_y=fill->destination_y,.width=fill->width,.height=fill->height,
+  .color=fill->color,.budget_ms=1000};
+ output(out_dir,"FILL-REQUEST.bin",&r,sizeof r);
+ uint64_t times[2]={ns(),0};int error=remesa_linux_memory_fill_2d(priv,&r);times[1]=ns();
+ output(out_dir,"FILL-RESULT.bin",&error,sizeof error);output(out_dir,"FILL-TIMES.bin",times,sizeof times);
+ if(!error)output(out_dir,"FILL-RESPONSE.bin",&r,sizeof r);
+ return error;
+}
+/* Qualification collector around the actual normal transport. All snapshots
+ * stay in this executable; the driver's callback has no diagnostic readback. */
+static enum remesa_dispatch collect_matrix(void *priv,const struct remesa_gpu_scene_submit *submit,
+ struct remesa_gpu_scene_receipt *receipt)
+{
+ struct remesa_linux_memory *m=priv;
+ timings[1]=ns();check_placement(m,submit->packet);guards(m);
+ dump_backing(m,submit->packet,false);timings[2]=ns();
+ enum remesa_dispatch result=remesa_linux_memory_matrix_dispatch(m,submit,receipt);
+ timings[3]=ns();
+ struct remesa_matrix_submit_request response;
+ int error=remesa_linux_memory_matrix_response(m,&response);
+ output(out_dir,"MATRIX-DISPATCH.bin",&result,sizeof result);
+ output(out_dir,"MATRIX-RECEIPT.bin",receipt,sizeof *receipt);
+ output(out_dir,"MATRIX-RESPONSE-RESULT.bin",&error,sizeof error);
+ if(!error)output(out_dir,"MATRIX-RESPONSE.bin",&response,sizeof response);
+ if(result==REMESA_ISSUED)dump_backing(m,submit->packet,true);
+ timings[4]=ns();return result;
+}
+#endif
 int main(int argc,char **argv)
 {
+#ifdef REMESA_OPENGL_NORMAL_NATIVE
+ if(argc!=6||strcmp(argv[5],"--execute")){
+  fprintf(stderr,"usage: opengl_matrix_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --execute\n");return 2;
+ }
+#else
  if(argc!=6||(strcmp(argv[5],"--prepare-only")&&strcmp(argv[5],"--execute")&&strcmp(argv[5],"--session-2"))){
   fprintf(stderr,"usage: opengl_homogeneous_native_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --prepare-only|--execute|--session-2\n");return 2;
  }
+#endif
  char *end;errno=0;long fd=strtol(argv[1],&end,10);if(errno||!*argv[1]||*end||fd<0||fd>INT_MAX)return 2;
  unsigned width,height;if(!strcmp(argv[2],"1280x800")){width=1280;height=800;}else if(!strcmp(argv[2],"640x640")){width=height=640;}else return 2;
  borrowed_fd=(int)fd;out_dir=argv[3];fixture_dir=argv[4];prepare_only=!strcmp(argv[5],"--prepare-only");timings[0]=ns();
@@ -63,9 +102,22 @@ int main(int argc,char **argv)
  cfg.placement[REMESA_VA_PROGRAM]=(struct remesa_persistent_va_range){0x20080000,0x20090000,4096};
  cfg.placement[REMESA_VA_RASTER]=(struct remesa_persistent_va_range){0x30000000,0x34000000,1048576};
  cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
- OK(remesa_persistent_open(&device,&cfg));OK(remesa_persistent_set_native_scene(&device,collect_native));
+ OK(remesa_persistent_open(&device,&cfg));
+#ifdef REMESA_OPENGL_NORMAL_NATIVE
+ (void)collect_native;
+ OK(remesa_persistent_set_native_draw_scene(&device,collect_matrix));
+ OK(remesa_persistent_set_native_fill(&device,collect_fill));
+#else
+ OK(remesa_persistent_set_native_scene(&device,collect_native));
+#endif
  glsl_type_singleton_init_or_ref();struct pipe_screen *screen=remesa_screen_create(&device);CHECK(screen);
- OK(remesa_screen_enable_linked_attachment_storage(screen));OK(remesa_screen_enable_homogeneous_frontend_lab(screen));
+ OK(remesa_screen_enable_linked_attachment_storage(screen));
+#ifdef REMESA_OPENGL_NORMAL_NATIVE
+ OK(remesa_screen_enable_native_fill(screen,remesa_persistent_fill_region));
+ OK(remesa_screen_enable_native_draws(screen));
+#else
+ OK(remesa_screen_enable_homogeneous_frontend_lab(screen));
+#endif
  struct pipe_resource *color=attachment(screen,width,height,false),*depth=attachment(screen,width,height,true);CHECK(color&&depth);
  /* Heap lifetime also covers retained/ambiguous failures: never leave Mesa
   * referring to expired frontend/drawable stack storage before process exit. */
@@ -76,7 +128,9 @@ int main(int argc,char **argv)
    .color_format=PIPE_FORMAT_B8G8R8A8_UNORM,.depth_stencil_format=PIPE_FORMAT_Z24X8_UNORM}};
  enum st_context_error context_error=ST_CONTEXT_SUCCESS;
  struct st_context *st=st_api_create_context(&b->frontend,&b->attrs,&context_error,NULL);CHECK(st);
+#ifndef REMESA_OPENGL_NORMAL_NATIVE
  OK(remesa_context_enable_homogeneous_api_lab(st->pipe,REMESA_HOMOGENEOUS_API_W2_CLAMPED));
+#endif
  b->drawable=(struct pipe_frontend_drawable){.stamp=1,.ID=9,.fscreen=&b->frontend,
   .visual=&b->attrs.visual,.validate=api_validate,.flush_front=api_front};
  CHECK(st_api_make_current(st,&b->drawable,&b->drawable));
@@ -137,7 +191,13 @@ int main(int argc,char **argv)
  CHECK(remaining.count==6&&info.objects==6&&info.pinned_objects==6&&!info.leases&&!info.held_jobs&&!info.quarantined);
  output(out_dir,"INVENTORY-REMAINING.bin",&remaining,sizeof remaining);output(out_dir,"INFO-RETURN.bin",&info,sizeof info);
  CHECK(screen->caps.graphics&&!screen->caps.accelerated);
- printf("OpenGL%u.%u native LAB draw=%u retired=%u readback=%u pipe=%u CPU_clears=%llu\n",report.computed_version/10,report.computed_version%10,
+ printf("OpenGL%u.%u native "
+#ifdef REMESA_OPENGL_NORMAL_NATIVE
+  "ordinary"
+#else
+  "LAB"
+#endif
+  " draw=%u retired=%u readback=%u pipe=%u CPU_clears=%llu\n",report.computed_version/10,report.computed_version%10,
   report.draw_called,report.retired,report.readback_bytes,report.pipe_error,(unsigned long long)report.cpu_clears);
  /* Supervisor owns the borrowed fd and six remaining frontend/guard BOs. */
  return 0;

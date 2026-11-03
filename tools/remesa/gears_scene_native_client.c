@@ -232,7 +232,8 @@ static enum remesa_dispatch collect_native(void *priv,const struct remesa_gpu_sc
    for(unsigned i=0;i<18;i++){
     const struct remesa_scene_trace_binding *b=i<17?&t->bindings[i]:&query.trace.last_binding;unsigned matches=0;
     CHECK(b->id==submit->packet->bindings[i].id&&b->access==submit->packet->bindings[i].access);
-    for(unsigned k=0;k<inv.count;k++)if(inv.entries[k].id==b->id){CHECK(inv.entries[k].gpu_va==b->address&&inv.entries[k].bytes==b->bytes);matches++;}CHECK(matches==1);
+    for(unsigned k=0;k<inv.count;k++)if(inv.entries[k].id==b->id){CHECK(inv.entries[k].gpu_va==b->address&&inv.entries[k].bytes==b->bytes);matches++;}
+    CHECK(matches==1);
    }
   }
  }

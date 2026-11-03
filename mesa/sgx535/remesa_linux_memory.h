@@ -11,7 +11,18 @@
 #include "remesa/gears_scene_probe_uapi.h"
 #include "remesa/general_session_uapi.h"
 #include "remesa/general_parameter_uapi.h"
+#include "remesa/matrix_submit_uapi.h"
 struct remesa_linux_memory;
+/* Ordinary typed matrix packet, separate from all LAB catalogue selectors.
+ * One attempted ioctl per endpoint, no retry. Native identity/retirement and
+ * successful kernel/source closure are required; uncertainty poisons ownership.
+ * No hashes, INFO transfers, readback or gate enable performed here. */
+int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *,
+ const struct remesa_scene_packet *,uint32_t budget_ms,struct remesa_matrix_submit_request *);
+enum remesa_dispatch remesa_linux_memory_matrix_dispatch(void *,
+ const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Last raw response, including errors; host snapshot only, no I/O. */
+int remesa_linux_memory_matrix_response(const struct remesa_linux_memory *,struct remesa_matrix_submit_request *);
 /* Bounded LAB general/native session, distinct from retained11-ID ABI.
  * No retry on an uncertain ioctl; all local objects then remain poisoned. */
 int remesa_linux_memory_general_open(struct remesa_linux_memory *,const uint32_t[18],
