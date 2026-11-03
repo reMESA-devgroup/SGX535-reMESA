@@ -68,3 +68,8 @@ submission/lifetime connection. A successful emitted-PDS check is not full
 source or execution authority. The complete driver, GL2.1/GLES2, desktop and
 installation goals remain open. Rollback leaves this additional prerequisite
 unused and retains the existing sparse/LAB contracts.
+
+The subsequent [ordinary matrix input checks](normal-matrix-input-admission.md)
+cover the selected source ISP/viewport/scalar, prefix-clear and numeric input
+domain, with a separate matrix executor entry. Those checks reuse this PDS
+prerequisite; they do not establish general shader/API or installation support.

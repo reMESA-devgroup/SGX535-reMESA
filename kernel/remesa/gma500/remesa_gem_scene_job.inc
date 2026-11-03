@@ -1,5 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After existing scene helpers. */
 #include "remesa_gem_scene_job.h"
+#ifdef __KERNEL__
+#include "remesa_matrix_draw_domain.h"
+#else
+#include "remesa/matrix_draw_domain.h"
+#endif
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *c)
 {
  int error;
@@ -155,6 +160,60 @@ int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *c)
   error=remesa_event_fetch_image(image,148,&decoded);if(error)return -error;
  }
  return 0;
+}
+
+int remesa_gem_scene_job_matrix_values_check_locked(struct remesa_gem_scene_job *c)
+{
+ unsigned r,n,parameter,seen=0;const u8 *coefficients,*vertices;int error;
+ error=remesa_gem_scene_job_pds_images_check_locked(c);if(error)return error;
+ if(c->ta.draw_count!=1||c->ta.reference_count!=9||c->states.count!=5||
+    c->ta.references[0].kind!=REMESA_TA_REF_INITIAL_STATE||c->vertices.count!=2||c->fragments.count!=2||
+    c->vertices.draws[1].use_bytes!=344||c->vertices.draws[1].stride_bytes!=48||
+    c->controls.command.schema!=2||c->controls.command.depth_finalize!=1||
+    c->controls.command.depth_cpp!=4||c->controls.command.clear_depth_bits!=0x3f800000U)return -EOPNOTSUPP;
+ parameter=c->states.count;
+ for(r=0;r<c->ta.reference_count;r++)if(c->ta.references[r].draw==1&&
+    c->ta.references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS){
+  for(n=0;n<c->states.count;n++)if(c->states.uploads[n].pds_id==c->ta.references[r].id&&
+     c->states.uploads[n].pds_offset==c->ta.references[r].byte_offset){
+   if(parameter!=c->states.count)return -EPROTO;
+   parameter=n;
+  }
+ }
+ if(parameter==c->states.count||c->states.uploads[parameter].source_bytes!=160)return -EOPNOTSUPP;
+ coefficients=scene_pds_image_view(c,c->states.uploads[parameter].source_id,
+  c->states.uploads[parameter].source_offset,160);
+ vertices=scene_pds_image_view(c,c->vertices.draws[1].vertex_id,c->vertices.draws[1].vertex_offset,
+  c->vertices.draws[1].vertex_bytes);
+ if(!coefficients||!vertices)return -EACCES;
+ error=remesa_matrix_draw_values(vertices,c->vertices.draws[1].vertex_bytes,
+  c->vertices.draws[1].vertex_bytes/48,48,coefficients+4,144);
+ if(error)return -error;
+ for(r=0;r<c->ta.reference_count;r++){
+  unsigned kind=c->ta.references[r].kind,bit;
+  const u8 *state;
+  if(kind!=REMESA_TA_REF_PREFIX_STATE&&kind!=REMESA_TA_REF_DRAW_STATE)continue;
+  bit=kind==REMESA_TA_REF_DRAW_STATE?2:1;
+  if(seen&bit)return -EPROTO;
+  seen|=bit;
+  for(n=0;n<c->states.count;n++)if(c->states.uploads[n].pds_id==c->ta.references[r].id&&
+     c->states.uploads[n].pds_offset==c->ta.references[r].byte_offset)break;
+  if(n==c->states.count)return -EPROTO;
+  state=scene_pds_image_view(c,c->states.uploads[n].source_id,c->states.uploads[n].source_offset,
+   c->states.uploads[n].source_bytes);if(!state)return -EACCES;
+  if(bit==2)error=remesa_matrix_draw_state_values(state,c->states.uploads[n].source_bytes,
+   c->controls.command.width,c->controls.command.height);
+  else{
+   const u8 *prefix=scene_pds_image_view(c,c->vertices.draws[0].vertex_id,c->vertices.draws[0].vertex_offset,
+    c->vertices.draws[0].vertex_bytes);
+   const u8 *indices=scene_pds_image_view(c,c->vertices.draws[0].index_id,c->vertices.draws[0].index_offset,
+    c->vertices.draws[0].index_bytes);
+   error=remesa_matrix_prefix_values(state,c->states.uploads[n].source_bytes,prefix,c->vertices.draws[0].vertex_bytes,
+    indices,c->vertices.draws[0].index_bytes,c->controls.command.width,c->controls.command.height);
+  }
+  if(error)return -error;
+ }
+ return seen==3?0:-EPROTO;
 }
 
 /* Default-PD authentication is deliberately before the MMU writer interval.

@@ -97,6 +97,13 @@ The existing kernel scene executor and its validators are reuse targets;
 complete input authority and source lifetime still need to be connected to
 the normal submitter before a physical API draw is safe.
 
+The subsequent [ordinary matrix input checks](normal-matrix-input-admission.md)
+join the selected PDS/source ISP, prefix-clear and vertex/PARAM domain checks.
+The separate kernel matrix executor enforces them before publication or issue.
+That integration has CPU/model and module-build evidence; the normal Linux
+transport, initialization/source ownership and physical API qualification
+remain pending. It does not enable a normal runtime dispatcher by itself.
+
 Offline evidence is recorded under
 `/home/gama/sgx535-offline/normal-draw-frontend-20261103/v1/`.
 Actual Mesa API/state-tracker tests pass in 1280x800 and 640x640 with modeled

@@ -5,9 +5,9 @@
 #include "remesa_stream_source.h"
 #include <linux/jiffies.h>
 #endif
-int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,
+static int scene_job_execute(struct remesa_gem_scene_job *c,
  struct sgx535_gma500_fixed_backend *b,struct remesa_stream_observation *observation,
- const void *source_owner,unsigned ticks,unsigned samples)
+ const void *source_owner,unsigned ticks,unsigned samples,bool matrix_inputs)
 {
  struct remesa_gem_memory *s;struct remesa_gem_private *loan;struct retained_job *j;
  unsigned i;int error;
@@ -26,6 +26,10 @@ int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,
  loan->execution_attempted=true;
  down_write(&s->pd->driver->sem);
  error=remesa_mmu_private_bind_locked(loan->owner);if(error)goto quarantine;
+ /* Ordinary matrix input authority is required under the actual held loan
+  * and private root, before service binding/publication or possible issue.
+  * The existing LAB/trusted-input entry keeps its original contract. */
+ if(matrix_inputs){error=remesa_gem_scene_job_matrix_values_check_locked(c);if(error)goto quarantine;}
  error=remesa_gem_scene_job_bind_service_locked(c);if(error)goto quarantine;
  error=remesa_scene_backend_begin(b,c);if(error)goto quarantine;
  /* Possible execution is recorded in the real retained job BEFORE any
@@ -63,3 +67,11 @@ int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,
  error=job_fault(s,j,error?error:-EIO);up_write(&s->pd->driver->sem);
  unlock:mutex_unlock(&s->lock);return error;
 }
+int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *c,
+ struct sgx535_gma500_fixed_backend *b,struct remesa_stream_observation *observation,
+ const void *source_owner,unsigned ticks,unsigned samples)
+{return scene_job_execute(c,b,observation,source_owner,ticks,samples,false);}
+int remesa_gem_scene_job_execute_matrix(struct remesa_gem_scene_job *c,
+ struct sgx535_gma500_fixed_backend *b,struct remesa_stream_observation *observation,
+ const void *source_owner,unsigned ticks,unsigned samples)
+{return scene_job_execute(c,b,observation,source_owner,ticks,samples,true);}

@@ -63,7 +63,54 @@ static void replay_pds_images(struct remesa_gem_scene_job *c)
  CHECK(vmap_calls==maps&&test_zeroed_pages==clears&&flushes==flush);
  printf("PASS complete PDS images: %u actual producer objects, %u reserved-byte mutations, stale/published/view refusal, no map/clear/flush/issue; GPU0\n",count,mutations);
 }
-static void scene_replay(const char *root,bool check_pds)
+static void replay_matrix_values(struct remesa_gem_scene_job *c)
+{
+ unsigned n,parameter,maps=vmap_calls,clears=test_zeroed_pages,flush=flushes,payload_cases=0;
+ CHECK(!remesa_gem_scene_job_matrix_values_check_locked(c));
+ parameter=c->states.count;
+ for(n=0;n<c->states.count;n++)if(c->states.uploads[n].source_bytes==160){CHECK(parameter==c->states.count);parameter=n;}
+ CHECK(parameter<c->states.count);
+ u8 *coefficients=(u8 *)scene_pds_image_view(c,c->states.uploads[parameter].source_id,
+  c->states.uploads[parameter].source_offset,160);CHECK(coefficients);coefficients+=4;
+ u8 *vertices=(u8 *)scene_pds_image_view(c,c->vertices.draws[1].vertex_id,c->vertices.draws[1].vertex_offset,
+  c->vertices.draws[1].vertex_bytes);CHECK(vertices);
+ struct {u8 *at;u32 bits;int expected;} cases[]={
+  {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+17*4,1,-EOPNOTSUPP},
+  {coefficients+28*4,0x40000000U,-EOPNOTSUPP},{coefficients+31*4,0x3f800000U,-EOPNOTSUPP},
+  {coefficients+35*4,1,-EOPNOTSUPP},{coefficients+35*4,0x80000000U,0},
+  {vertices,0x7fc00000U,-EOPNOTSUPP},{vertices+12,0,-EOPNOTSUPP},
+  {vertices+28,0,0},{vertices+28,0x80000000U,0},{vertices+28,0xbf800000U,-EOPNOTSUPP},
+  {vertices+32,1,-EOPNOTSUPP}};
+ for(n=0;n<sizeof cases/sizeof cases[0];n++){
+  u32 saved=remesa_ta_ref_word(cases[n].at);state_word(cases[n].at,cases[n].bits);
+  CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)==cases[n].expected);
+  CHECK(!remesa_gem_scene_job_pds_images_check_locked(c));state_word(cases[n].at,saved);
+ }
+ u8 saved_normal[12];memcpy(saved_normal,vertices+16,12);memset(vertices+16,0,12);
+ CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)==-EOPNOTSUPP);memcpy(vertices+16,saved_normal,12);
+ u8 saved_light[12];memcpy(saved_light,coefficients+32*4,12);memset(coefficients+32*4,0,12);
+ CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)==-EOPNOTSUPP);memcpy(coefficients+32*4,saved_light,12);
+ for(n=0;n<c->states.count;n++)if(c->states.uploads[n].source_bytes==44||c->states.uploads[n].source_bytes==60){
+  unsigned length=c->states.uploads[n].source_bytes;
+  u8 *state=(u8 *)scene_pds_image_view(c,c->states.uploads[n].source_id,c->states.uploads[n].source_offset,length);
+  CHECK(state);
+  /* Initial44 is already authenticated byte-for-byte by the existing
+   * closure; prefix44 and draw60 add the ordinary payload predicates. */
+  for(unsigned byte=0;byte<length;byte++)if(length==60?(byte<8||byte>=20):(byte<12||byte>=24)){
+   state[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);state[byte]^=1;payload_cases++;
+  }
+ }
+ u8 *prefix=(u8 *)scene_pds_image_view(c,c->vertices.draws[0].vertex_id,c->vertices.draws[0].vertex_offset,48);
+ u8 *index=(u8 *)scene_pds_image_view(c,c->vertices.draws[0].index_id,c->vertices.draws[0].index_offset,6);
+ CHECK(prefix&&index);
+ for(unsigned byte=0;byte<48;byte++){prefix[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);prefix[byte]^=1;payload_cases++;}
+ for(unsigned byte=0;byte<6;byte++){index[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);index[byte]^=1;payload_cases++;}
+ CHECK(!remesa_gem_scene_job_matrix_values_check_locked(c));
+ CHECK(!c->service.session&&!c->service.started&&!c->loan.execution_started&&!c->loan.host_published);
+ CHECK(vmap_calls==maps&&test_zeroed_pages==clears&&flushes==flush);
+ printf("PASS held ordinary matrix/lighting sources,14 numeric/padding/zero-normal/light cases,%u ISP/prefix cases, no FPU/render/map/clear/flush/issue; GPU0\n",payload_cases);
+}
+static void scene_replay(const char *root,unsigned checks)
 {
  struct remesa_scene_fixture image;struct remesa_scene_packet packet;
  replay_read(root,"placement.bin",&image,sizeof image);replay_read(root,"packet.bin",&packet,sizeof packet);
@@ -111,11 +158,32 @@ static void scene_replay(const char *root,bool check_pds)
  struct remesa_gem_scene_job *c=calloc(1,sizeof(*c));CHECK(c);
  int error=remesa_gem_scene_packet_prepare(s,&packet,&guard,c);
  printf("Mesa producer replay %ux%u: prepare=%d\n",packet.actions.width,packet.actions.height,error);fflush(stdout);CHECK(!error);
- if(check_pds){mutex_lock(&s->lock);replay_pds_images(c);mutex_unlock(&s->lock);}
+ if(checks){
+  mutex_lock(&s->lock);
+  if(checks&1)replay_pds_images(c);
+  if(checks&2)replay_matrix_values(c);
+  mutex_unlock(&s->lock);
+ }
  execute_context=c;execute_phase=execute_stages=execute_samples=execute_flushes=0;
  struct sgx535_gma500_fixed_backend backend={0};struct remesa_stream_observation observation={0};
  test_pfn_hook=execute_default_pfn;test_flush_hook=execute_flush;
- error=remesa_gem_scene_job_execute(c,&backend,&observation,s,10,20);
+ if(checks&4){
+  unsigned parameter=c->states.count;
+  mutex_lock(&s->lock);CHECK(!remesa_gem_scene_job_matrix_values_check_locked(c));
+  for(unsigned n=0;n<c->states.count;n++)if(c->states.uploads[n].source_bytes==160)parameter=n;
+  CHECK(parameter<c->states.count);
+  u8 *source=(u8 *)scene_pds_image_view(c,c->states.uploads[parameter].source_id,c->states.uploads[parameter].source_offset,160);
+  CHECK(source);state_word(source+4+31*4,0x3f800000U);mutex_unlock(&s->lock);
+  error=remesa_gem_scene_job_execute_matrix(c,&backend,&observation,s,10,20);
+  CHECK(error==-EOPNOTSUPP&&c->state==REMESA_SCENE_JOB_HELD&&c->loan.execution_attempted&&
+   !c->loan.execution_started&&!c->loan.host_published&&!c->service.started&&!c->service.session);
+  CHECK(!execute_stages&&!execute_samples&&!execute_flushes&&c->loan.live&&c->memory==s);
+  CHECK(remesa_gem_scene_job_cancel(c)==-EBUSY);
+  CHECK(remesa_gem_memory_close(s)==-EBUSY);
+  puts("PASS matrix executor refuses invalid source before service/publication/issue and retains actual job/loan/backing; model process exits without guessed cleanup, GPU0");return;
+ }
+ error=checks&2?remesa_gem_scene_job_execute_matrix(c,&backend,&observation,s,10,20):
+  remesa_gem_scene_job_execute(c,&backend,&observation,s,10,20);
  printf("Mesa producer replay %ux%u: execute=%d phase=%u ledger=%u stage=%u\n",packet.actions.width,packet.actions.height,error,c->session.phase,c->session.observed_events,execute_stages);fflush(stdout);
  CHECK(!error&&execute_phase==9&&execute_stages==19&&c->loan.execution_retired);
  test_pfn_hook=NULL;test_flush_hook=NULL;

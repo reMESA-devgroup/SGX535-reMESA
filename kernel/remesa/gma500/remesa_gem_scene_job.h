@@ -47,6 +47,15 @@ int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *);
  * source ownership; not a full input/execution certificate or runtime gate.
  * Existing LAB callers of bind_service are unchanged. */
 int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *);
+/* Existing ordinary matrix/lighting input domain, checked on the actual held
+ * clamped344/W2 vertex and PARAM sources after the PDS closure. Integer IEEE
+ * bounds only, no FPU or vertex transformation. Same locks/scratch rules.
+ * Also authenticates the existing source state15/full viewport/opaque LESS
+ * fields and consumed single-triangle Z-clear state/geometry, reusing the
+ * earlier fragment-reference and initial/close-source checks. Does not prove
+ * COLOR initialization, source ownership or issue. No normal ioctl or LAB
+ * admission is enabled by this prerequisite. */
+int remesa_gem_scene_job_matrix_values_check_locked(struct remesa_gem_scene_job *);
 /* Cancel only unissued/unbound preparation. Failure retains the context and
  * holds; never infer retirement/root restoration or release source state. */
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *);
@@ -63,6 +72,12 @@ struct sgx535_gma500_fixed_backend;struct remesa_stream_observation;
  * source lease and immutable complete images. Any consumed failure retains all
  * context/loan/source state; no retry/free. No registration or ioctl added. */
 int remesa_gem_scene_job_execute(struct remesa_gem_scene_job *,
+ struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,const void *,unsigned,unsigned);
+/* Same ordered transaction/source-owner contract, additionally requires the
+ * ordinary matrix input prerequisite before publication or service issue.
+ * Refusal after source/root bind retains/quarantines exactly as above; never
+ * infer safe retry, completion or release. No syscall or gate is registered. */
+int remesa_gem_scene_job_execute_matrix(struct remesa_gem_scene_job *,
  struct sgx535_gma500_fixed_backend *,struct remesa_stream_observation *,const void *,unsigned,unsigned);
 /* After real acknowledged execution only; separate from preparation cancel. */
 int remesa_gem_scene_job_retire(struct remesa_gem_scene_job *);

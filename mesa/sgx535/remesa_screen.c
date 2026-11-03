@@ -18,6 +18,7 @@
 #include "remesa_texture_descriptor.h"
 #include "remesa_nir_uniform.h"
 #include "remesa_pds_structure.h"
+#include "remesa/matrix_draw_domain.h"
 #ifdef REMESA_WITH_NIR
 #include "remesa_nir.h"
 #include "remesa_shader_ir.h"
@@ -1821,37 +1822,7 @@ static int native_draw_input_domain(const struct remesa_gears_geometry_view *vie
 {
  if(view->stride_dwords!=8||!view->vertices||!view->vertex_count||view->vertex_count>65535||
     view->bytes!=(uint64_t)view->vertex_count*32)return ENOTSUP;
- float constants[36];
- for(unsigned i=0;i<36;i++){
-  uint32_t bits=(uint32_t)source[4+4*i]|(uint32_t)source[5+4*i]<<8|
-   (uint32_t)source[6+4*i]<<16|(uint32_t)source[7+4*i]<<24;
-  memcpy(&constants[i],&bits,4);
-  if(!isfinite(constants[i])||fabsf(constants[i])>4)return ENOTSUP;
- }
- for(unsigned col=0;col<3;col++)for(unsigned row=0;row<4;row++){
-  float v=constants[16+4*col+row];
-  if(row==col){if(fabsf(v)>1)return ENOTSUP;}
-  else if(v!=0)return ENOTSUP;
- }
- for(unsigned i=28;i<31;i++)if(fabsf(constants[i])>.5f)return ENOTSUP;
- if(constants[31]!=2)return ENOTSUP;
- bool light=false;
- for(unsigned i=32;i<35;i++){
-  if(fabsf(constants[i])>1)return ENOTSUP;
-  if(fabsf(constants[i])>=.0625f)light=true;
- }
- if(!light||constants[35]!=0)return ENOTSUP;
- for(uint32_t i=0;i<view->vertex_count;i++){
-  float value[8];memcpy(value,(const unsigned char *)view->vertices+(size_t)i*32,sizeof value);
-  bool normal=false;
-  for(unsigned k=0;k<8;k++)if(!isfinite(value[k])||fabsf(value[k])>1)return ENOTSUP;
-  for(unsigned k=4;k<7;k++)if(fabsf(value[k])>=.0625f)normal=true;
-  /* Gallium pads a float3 NORMAL with W=1; explicit float4 inputs can
-   * retain W=0. The selected attribute-normal shader consumes XYZ only.
-   * Keep both canonical forms without changing the existing fetch bits. */
-  if(value[3]!=1||(value[7]!=0&&value[7]!=1)||!normal)return ENOTSUP;
- }
- return 0;
+ return remesa_matrix_draw_values(view->vertices,view->bytes,view->vertex_count,32,source+4,144);
 }
 #endif
 static int context_prepare_scene(struct pipe_context *p,

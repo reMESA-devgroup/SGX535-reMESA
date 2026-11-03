@@ -34,11 +34,13 @@ def main():
  p.add_argument('--native-source',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
  p.add_argument('--scene-actions',action='store_true',help='Test bound kernel scene action plans with17 real modeled allocations')
  p.add_argument('--pds-images-fixture',type=Path,action='append',default=[],help='Also check complete PDS images of an exported Mesa fixture (CPU model only; requires --scene-actions)')
+ p.add_argument('--matrix-values-fixture',type=Path,action='append',default=[],help='Also check ordinary W2 matrix/ISP/prefix source values (CPU model only; requires --scene-actions)')
  p.add_argument('--dpm',action='store_true',help='Test cold DPM provenance with full64MiB and indexed model PTEs')
  p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path)
  a=p.parse_args()
  if a.dpm and a.scene_actions:p.error('select one focused model')
  if a.pds_images_fixture and not a.scene_actions:p.error('--pds-images-fixture requires --scene-actions')
+ if a.matrix_values_fixture and not a.scene_actions:p.error('--matrix-values-fixture requires --scene-actions')
  w=Path(__file__).resolve().parents[2];n=a.native_source.resolve();o=a.output.resolve()
  if o.exists():raise FileExistsError(o)
  if o==n or o.is_relative_to(n):raise ValueError('output must be outside frozen native input')
@@ -82,7 +84,7 @@ def main():
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_use.h','remesa_gem_scene_use.inc']]
  files += [w/'mesa/sgx535'/name for name in ['remesa_program_registers.c','remesa_program_registers.h']]+[w/'include/remesa/scene_use_limits.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_ta.h','remesa_gem_scene_ta.inc']]+[w/'include/remesa/ta_references.h',w/'mesa/sgx535/remesa_ta_index.c',w/'mesa/sgx535/remesa_ta_index.h']
- files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_states.h','remesa_gem_scene_states.inc']]+[w/'include/remesa/state_upload.h',w/'include/remesa/scene_initial.h']
+ files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_states.h','remesa_gem_scene_states.inc']]+[w/'include/remesa/state_upload.h',w/'include/remesa/scene_initial.h',w/'include/remesa/matrix_draw_domain.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_vertices.h','remesa_gem_scene_vertices.inc']]+[w/'include/remesa/vertex_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_fragments.h','remesa_gem_scene_fragments.inc']]+[w/'include/remesa/fragment_fetch.h']
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_background.h','remesa_gem_scene_background.inc']]+[w/'include/remesa/background_fetch.h']
@@ -93,7 +95,7 @@ def main():
  if a.scene_actions:files += [w/'mesa/sgx535'/name for name in ['remesa_usse_arithmetic.c','remesa_usse_arithmetic.h','remesa_usse.c','remesa_usse.h']]
  files += [w/'kernel/remesa/gma500'/name for name in ['remesa_gem_scene_job.h','remesa_gem_scene_job.inc','remesa_gem_scene_execute.inc','remesa_gem_scene_packet.inc']]
  before={str(f):sha(f) for f in files};env={k:v for k,v in os.environ.items() if k not in ('LD_PRELOAD','LD_AUDIT','LD_LIBRARY_PATH')}
- for fixture in a.pds_images_fixture:
+ for fixture in a.pds_images_fixture+a.matrix_values_fixture:
   if not fixture.is_dir():p.error('missing exported fixture: '+str(fixture))
   for f in fixture.glob('*.bin'):before[str(f.resolve())]=sha(f)
  def run(label,cmd,ceiling):
@@ -119,6 +121,9 @@ def main():
     out=run(variant+'-state-images',runner+[str(exe),'--state-images'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
     for index,fixture in enumerate(a.pds_images_fixture):
      out=run(variant+'-pds-images-'+str(index),runner+[str(exe),'--pds-images-replay',str(fixture.resolve())],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
+    for index,fixture in enumerate(a.matrix_values_fixture):
+     out=run(variant+'-matrix-values-'+str(index),runner+[str(exe),'--matrix-values-replay',str(fixture.resolve())],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
+     out=run(variant+'-matrix-refusal-'+str(index),runner+[str(exe),'--matrix-execute-refusal',str(fixture.resolve())],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
  if any(sha(Path(f))!=h for f,h in before.items()):raise RuntimeError('source changed during qualification')
  (o/'RESULT.json').write_text(json.dumps(dict(status='BOUND_SCENE_JOB_AND_GENERAL_SERVICE_MODEL_PASS' if a.scene_actions else 'COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
 if __name__=='__main__':main()
