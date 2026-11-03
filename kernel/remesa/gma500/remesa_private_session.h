@@ -63,6 +63,15 @@ int remesa_private_session_patch_scene_input(struct remesa_gem_memory *,
  const void *,u64 retired_operation,u32 id,u64 offset,const void *,unsigned,
  const void *policy,int (*validate)(const void *,u32,u64,const void *,unsigned));
 struct remesa_parameter_patch_policy;
+struct remesa_gem_scene_job;
+/* Fully admitted, ACKNOWLEDGED job still owns its private loan and native
+ * holds. Retain this draw's already decoded PARAM policy before release.
+ * Locks endpoint then memory; output disjoint from memory/job and unchanged
+ * on error. Does not infer program authority from an arbitrary supplied job.
+ * Window generation here is the native BO generation, not a frontend token. */
+int remesa_private_session_bind_scene_parameters(struct remesa_gem_memory *,
+ const void *,const struct remesa_gem_scene_job *,unsigned draw,u32 maximum_abs_bits,
+ struct remesa_parameter_patch_policy *);
 /* Existing bounded PARAM profile policy, supplied by trusted admission and
  * kept immutable for the call. Cross-checks its context/address/size against
  * the actual sealed object while locked; never accepts raw user metadata as

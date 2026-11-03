@@ -46,20 +46,44 @@ resource-only endpoints and retains restricted shader/varying/primitive limits.
 Do not raise those advertised limits before their implementation is correct.
 The offline Mesa25.2.0 archive tests are separate from installed Mesa25.0.7.
 
-## Current integration boundary (reviewed 2026-11-01)
+## Current integration boundary (reviewed 2026-11-03)
 
 ISP, DATA, PDS and USSE already have implementations, original-constructor
 oracles and documented physical results in the selected paths. They are reuse
 targets, not a new reverse-engineering phase. See the current
 [general executor integration audit](general-executor-integration.md) for the
-source call graph, completed components and next bounded physical qualification.
+source call graph and completed components. Its historical next-step wording
+must be read alongside the newer joined-session results below.
 
-The concrete gap is capture-to-job dispatch plus a general service/backend
-adapter. Current execution still demands eleven fixed roles; the captured
-one-draw graph retains seventeen allocations. GEM/MMU capacity32, owned control
-snapshots, DPM29/TA31/raster20 actions, initialization mechanisms, private loans,
-source sessions, completion and retirement must be connected in one operation.
-Changing a count or clearing an incomplete bit is insufficient.
+Capture-to-job dispatch and the general service/backend adapter have now been
+connected and physically tested. The joined captured frontend/general-session
+path ran two separate frontend/native submissions at each of 1280x800 and
+640x640, with 18 native bindings, retirement, matching COLOR/Z24, unchanged
+READ inputs and guards, complete cleanup and verified stock recovery. See
+[the joined client](captured-general-session-client.md) and
+`/home/gama/sgx535-offline/captured-general-session-physical-20261102/FINAL_PAIR_RESULT.json`.
+The retained eleven-role path remains valid for its original scope; it is no
+longer the only general integration available.
+
+Changing uniforms between those submissions is still an integration task.
+The sealed DATA transaction and captured PARAM windows have offline/module
+qualification. The latest kernel candidate binds policy from the first
+acknowledged job's decoded native PARAM/TA plans before releasing its loan.
+That candidate has not been physically qualified, and frontend/Linux update
+transport is not yet connected. See [sealed input updates](sealed-scene-input-updates.md).
+
+These are integration milestones, not a percentage of complete OpenGL 2.1.
+The following API coverage still needs its own implementation audit and
+physical tests; success of a fixed scene does not establish it:
+
+| Area | Evidence boundary |
+| --- | --- |
+| GLSL 1.20 and program variation | Selected NIR/USSE programs are exercised; general language and shader combinations are not qualified |
+| Uniform and buffer updates | Frozen captured inputs pass; changing inputs through the ordinary frontend/native path remains unqualified |
+| Textures and samplers | The captured scene results do not establish format, filtering, wrapping or mipmap coverage |
+| Render states | Selected depth writes and Z-clear are proven; general blend, stencil and raster-state combinations need API coverage |
+| API object lifetime and synchronization | GEM/MMU/fence/retirement paths have scoped tests; those do not cover every GL object operation, error or reuse case |
+| Contexts, presentation and desktop | Isolated API draws and specialized glxgears are narrower than complete GL2.1/EGL/GLES contexts and desktop integration |
 
 Existing implementation references:
 

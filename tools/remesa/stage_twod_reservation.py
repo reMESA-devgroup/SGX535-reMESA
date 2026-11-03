@@ -602,7 +602,7 @@ def private_file_lost_sources(memory):
         '    (r->action==REMESA_MEM_LEASE && r->flags))\n'
         '  for(page=0;page<32;page++)if(s->private_scene_input_ids[page]==r->id)return -EPERM;\n'
         ' if(b->input_seal==2 && (r->action==REMESA_MEM_WRITE ||\n')
-    return memory + '\n#include "remesa_private_scene_inputs.inc"\n#include "remesa_private_memory_file_lost.inc"\n#include "remesa_private_session.inc"\n#include "remesa_private_session_dpm.inc"\n#include "remesa_private_session_source.inc"\n#include "remesa_private_session_scene.inc"\n#include "remesa_private_inputs.inc"\n'
+    return memory + '\n#include "remesa_private_scene_inputs.inc"\n#include "remesa_private_memory_file_lost.inc"\n#include "remesa_private_session.inc"\n#include "remesa_private_session_dpm.inc"\n#include "remesa_private_session_source.inc"\n#include "remesa_private_session_scene.inc"\n#include "remesa_private_scene_parameter_bind.inc"\n#include "remesa_private_inputs.inc"\n'
 
 
 def private_gem_lifetime_sources(native):
@@ -994,6 +994,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_session_source.inc', 'remesa_private_session_scene.inc',
                      'remesa_private_session_dpm.inc',
                      'remesa_private_scene_inputs.inc',
+                     'remesa_private_scene_parameter_bind.inc',
                      'remesa_general_session.inc',
                      'remesa_private_dpm_cache.inc',
                      'remesa_private_inputs.inc',

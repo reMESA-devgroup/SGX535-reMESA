@@ -61,6 +61,20 @@ There is still no ioctl or general-session caller for this update adapter.
 In particular, accepting window metadata structurally does not make an
 untrusted userspace description proof that a CODE object is a PARAM owner.
 
+The general-session candidate now retains its first draw's native policy after
+the first acknowledged execution, before private loan/job release. Binding
+uses the existing decoded TA reference and `states.uploads`, the same native
+ticket and source owner, real READ seals, IDs/generations, holds and backing
+address/size. It refuses early/stale/lost or inconsistent plans without changing
+the output. Later jobs retain the policy without rebinding it per frame.
+The embedded TA8 span describes the owned CPU producer layout, not another
+measured GPU fetch. Native-bound window generation is the kernel BO generation;
+it must not be compared with a frontend resource registry generation.
+
+This binds a policy; it does not add an update ioctl or permit changed bytes
+through the existing LAB full-image check. Binding failure after retirement
+poisons and retains the session, with no release/retry that guesses safety.
+
 ## Verification and integration still required
 
 Evidence is under
@@ -87,11 +101,18 @@ with the qualified generic Mesa libraries exercises captured windows at
 COLOR transfer, context and legacy tests. All are CPU models, not new GPU
 qualification.
 
-Before making this callable by the frontend, admission must bind the real
-parameter DATA window from the existing encoder metadata; the test policy is
-not a replacement for that admission. Linux transport and frontend capture
-state must participate in the same acknowledged update, including uncertainty
-handling. The general LAB catalogue still authenticates its complete original
+Native policy binding is tested under
+`/home/gama/sgx535-offline/native-parameter-binding-20261103/v1`.
+The memory/seal binder runs with injected retired plans in native, UBSan and
+i486. Separate controller tests inject the binder dependency and check all
+four existing profiles, first-job binding, reuse across three jobs, and
+post-retirement binding failure without release/retry. These models do not
+qualify the new kernel candidate on hardware.
+
+Before making updates callable by the frontend, Linux transport and frontend
+capture state must participate in the same acknowledged update, including
+uncertainty handling. Kernel-derived binding must remain the authority rather
+than an imported userspace description. The general LAB catalogue still authenticates its complete original
 inputs and must not be bypassed to accept changed bytes. A changing-input
 physical experiment needs its own presealed expectations before execution.
 The existing PDS/USSE/TA encoders and qualified program bytes need no rewrite.

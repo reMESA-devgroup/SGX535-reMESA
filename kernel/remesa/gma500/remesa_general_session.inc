@@ -1,11 +1,14 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Included after closed scene catalogues/helpers. Same scene_probe_lock. */
 #include "remesa_general_session_uapi.h"
+#include "remesa_parameter_window.h"
 struct remesa_general_lab_session {
  struct remesa_scene_probe p;
  struct scene_probe_selection selected;
  u64 serial,completed;unsigned maximum,profile;
  bool poisoned;
+ struct remesa_parameter_patch_policy parameter_policy;
+ bool parameter_policy_bound;
 };
 static struct remesa_general_lab_session *general_session;
 static int general_identity(struct drm_device *dev,struct remesa_general_session_request *r)
@@ -108,6 +111,13 @@ static int general_submit(struct remesa_general_lab_session *s,struct drm_device
  r->phase=p->job.session.phase;r->ledger=p->job.session.observed_events;
  if(error)goto failed;
  if(!p->job.loan.execution_retired||p->job.state!=REMESA_SCENE_JOB_ACKNOWLEDGED){error=-EPROTO;goto failed;}
+ /* Retain only after the existing full executor validated PARAM/TA and the
+  * first job retired. No views survive the subsequent loan/job release. */
+ if(!s->parameter_policy_bound){
+  error=remesa_private_session_bind_scene_parameters(p->memory,p,&p->job,1,0x44800000U,&s->parameter_policy);
+  if(error)goto failed;
+  s->parameter_policy_bound=true;
+ }
  mutex_lock(&endpoint_lock);
  error=remesa_gem_private_release(&p->job.loan);
  if(!error)error=remesa_twod_release(dev->dev_private,&p->guard);
