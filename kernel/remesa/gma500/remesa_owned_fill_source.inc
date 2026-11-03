@@ -2,8 +2,8 @@
 /* In the real source TU, after lost() and before valid(). The old first-owner
  * lifetime is still fed every producer interval and never repaired. Ordinary
  * owned lineage is copied ONCE before the clear, never after its retirement.
- * No caller currently activates this path; native and endpoint integration
- * must be qualified together before a physical execution. */
+ * The ordinary full-clear owner and authenticated native/GEM executor supply
+ * these internal calls. Joined qualification is required before physical use. */
 #ifdef REMESA_GENERAL_SCENE
 #include "remesa_gem_twod_job.h"
 #include "remesa_owned_fill_source.h"
@@ -46,7 +46,7 @@ static bool owned_fill_matches(const struct remesa_twod_launch *l)
   l->ticket.slot==p->ticket.slot&&l->ticket.generation==p->ticket.generation&&
   l->plan.destination_id==p->destination_id&&l->plan.destination_first==p->destination_first&&
   l->plan.destination_end==p->destination_end&&l->plan.request_base==p->request_base&&
-  l->plan.dwords==7&&l->count==1&&l->retirement;
+  l->plan.dwords==7&&l->count==1&&l->retirement&&l->source_owner==owned_fill.owner;
 }
 static bool owned_fill_proof(const struct remesa_twod_retirement *p,bool gem)
 {
@@ -85,12 +85,15 @@ int remesa_owned_fill_publish(const void *who,const struct remesa_twod_launch *l
  unsigned long f;int error=0;spin_lock_irqsave(&source_lock,f);
  if(!who||owned_fill.owner!=who||lease!=who||operation||poisoned||owned_fill.phase!=OF_READY||
     !sgx535_source_boot_valid(&owned_fill.lineage)||!owned_fill_history()||lifetime.producers_active||
-    !l||l->dev!=device||!l->pd||!l->retirement||l->count!=1||l->plan.dwords!=7||
+    !l||l->source_owner!=who||l->dev!=device||!l->pd||!l->retirement||l->count!=1||l->plan.dwords!=7||
     l->plan.destination_id!=owned_fill.destination||l->plan.destination_first>=l->plan.destination_end||
     !l->ticket.context||!l->ticket.operation||!l->ticket.generation||
     l->ticket.operation<=owned_fill.last_operation||!cookie||!root||(root&4095U)||
-    (l->plan.request_base&0x0fffffffU)||(saved_base&0x0fffffffU))error=owned_fill_fail();
+    (l->plan.request_base&0x0fffffffU))error=owned_fill_fail();
  else{
+  /* saved_base is the exact borrowed native register value, not the new
+   * packet address window. Existing qualified restoration permits values
+   * such as0x28000000; do not impose the packet window alignment on it. */
   owned_fill.launch=l;owned_fill.task=current;
   owned_fill.expected=(struct remesa_twod_retirement){.dev=l->dev,.pd=l->pd,.ticket=l->ticket,
    .cookie=cookie,.destination_id=l->plan.destination_id,.destination_first=l->plan.destination_first,

@@ -6,10 +6,11 @@ correctly retained `INTERFERENCE` after the 2D producer ended. A retirement
 record by itself cannot authorize the following draw, and claiming the old
 source lease before that producer does not fix the problem.
 
-This change implements the source-side contract needed for that particular
-`glClear` → `glDrawArrays` transition. It is **not activated by a production
-caller yet**. It does not make a new OpenGL call work on hardware, advertise a
-GL version, qualify desktop acceleration or provide a downloadable beta.
+The source contract is now connected to the ordinary full-clear owner and the
+authenticated GEM/native executor for this particular `glClear` → `glDrawArrays`
+transition. The existing matrix control still defaults to N. Offline integration
+is separate from hardware qualification; no new GL version, desktop acceleration
+or installable beta is advertised.
 
 `remesa_owned_fill_source.inc` lives under the real source lock. Its internal
 claim copies the already valid boot lineage once, before any clear publication.
@@ -38,33 +39,54 @@ added. Tests keep synthetic receipts separate from physical evidence.
 ## Validation
 
 Evidence directory:
+`/home/gama/sgx535-offline/owned-clear-integration-20261103/v1`.
+The preceding source-only commit remains recorded under
 `/home/gama/sgx535-offline/owned-fill-source-20261103/v1`.
 
-- `tests-final/RESULT.json`: 110 scenarios, native, UBSan and i486. Executes the
-  actual source fragment, original claim/producer/release/bind implementations
-  and frozen guard. Locks, tasks and retirement receipts are modeled.
-- `legacy-source-final/RESULT.json`: original first-owner producer refusal.
-- `scene-final/RESULT.json`: existing general and legacy routing, capsule,
-  no-hash closure and refusal scenarios with the full generated source.
-- `mmio-final/RESULT.json`: existing pthread authority/write linearization
-  model. The old `fixed_write` comparison is read explicitly from its frozen
-  baseline; the current source authority uses the inactive predecessor helpers.
-- `final/kbuild/RESULT.json`: full antiX i486 module compilation; not installed.
+- `source-final/RESULT.json`: 115 scenarios, native, UBSan and i486. Executes
+  the actual source fragment, original claim/producer/release/bind and frozen
+  guard. Locks, tasks and retirement receipts are modeled.
+- `native-final/RESULT.json`: 24 scenarios in those three variants. Actual
+  native/source/reservation/IRQ/packet code with modeled MMIO. Covers three
+  dimensions, repeated clear, foreign work, pre-cookie events, faults, timeout,
+  restoration, malformed receipts and late events. Final GEM receipt modeled.
+- `gem-final/RESULT.json`: 17 scenarios in those three variants. Actual GEM
+  issue derives its source owner from held endpoint metadata; invalid owners,
+  phases and destinations are refused before flush/attach/native start.
+- `owner-final/RESULT.json`: 31 controller scenarios in three variants, including
+  clear-to-draw source reuse, known unissued cancellation and uncertain cleanup.
+- `endpoint-final/RESULT.json`: nine joined fill endpoint cases in three variants;
+  source/native execution modeled. `controller-final` retains cold draw coverage,
+  and `closed-final` retains the old closed LAB controller coverage.
+- `tests-v2/RESULT.json`: the existing original/vendor/fill/LAB native/GEM/copy/fill
+  retirement regressions, optional receipts, three variants. Source owner NULL.
+- `file-loss/RESULT.json`: native/UBSan plus ordinary-profile UBSan; source loss
+  poisons the stable normal owner without releasing jobs, mappings or backing.
+- `final/kbuild/RESULT.json`: full antiX i486 module build; not installed.
 
 All of these are offline tests with **zero GPU operations**. Earlier failed
 harness runs and the intermediate module remain in the evidence directory.
 Only paths marked final are candidates for further work.
 
-## Next integration and physical experiment
+## Joined path and next physical experiment
 
-Wire the stable ordinary fill owner to the internal claim before publication.
-Carry its kernel-only identity through the authenticated GEM launch. Call the
-source hooks around both native producer intervals, including the IRQ-cookie
-installation boundary. Finish only with the exact successful native and GEM
-retirement record, then reuse the held source at matrix admission. Handle known
-unissued cancellation, foreign events and file/device loss without rearming or
-freeing uncertain backing. Keep CPU resource construction separate from MMIO
-authority. Test those joined paths offline before installing anything.
+The existing matrix fill owner claims source while endpoint and memory are
+locked, before returning to the fill endpoint. Ownership and idle checks are
+reused. GEM adds the kernel-only owner to its immutable launch only for that
+exact protected COLOR/full-fill phase. Native source accounting covers base and
+ALPHA publication, IRQ-cookie installation before FIFO, and restoration. A new
+capture before cookie installation retains any event caused by publication in
+its original source phase, before the existing ACK. The exact saved request
+base is restored; the new packet's 256 MiB window alignment is not imposed on
+borrowed state such as the previously tested `0x28000000` value.
+
+Only actual successful native retirement followed by GEM hold release permits
+`fill_finish` to enter the CPU construction phase. Matrix admission reuses this
+held source instead of reclaiming the first-owner source. A known unissued
+failure closes source before backing, or restores a previous retired clear only
+if source is still ready. An uncertain failure retains ownership. File/device
+loss poisons source and revokes construction without freeing backing. No closed
+LAB profile imports this authorization.
 
 The next physical test remains one ordinary 1280×800 clear and transformed draw,
 with independent COLOR/Z and guard checks after retirement, exact device/module

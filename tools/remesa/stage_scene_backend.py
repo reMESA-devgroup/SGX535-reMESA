@@ -47,7 +47,8 @@ def source_code(source):
 #endif
   sgx535_capsule_color(&o->evidence,o->backend->owner,''')
     # Concrete ordinary clear predecessor; old first-owner claim/producer
-    # implementations remain unchanged. No endpoint invokes its claim yet.
+    # implementations remain unchanged. The ordinary full-clear owner is the
+    # only endpoint that invokes the new internal claim.
     source=once(source,'static bool valid(struct sgx535_gma500_fixed_backend *b)',
         'static void lost(void);\n#include "remesa_owned_fill_source.inc"\nstatic bool valid(struct sgx535_gma500_fixed_backend *b)')
     source=once(source,'!lifetime.reasons && !lifetime.producers_active;',

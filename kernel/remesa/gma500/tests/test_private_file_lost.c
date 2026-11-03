@@ -31,7 +31,8 @@ struct resource {unsigned token;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;struct mutex lock;
  const void *private_session;
- struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded,private_matrix_constructing;
+ struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded,private_matrix_constructing,private_source_held,private_source_poisoned;
+ uint32_t private_matrix_color;
  struct resource exclude;unsigned device_refs,module_refs,power_refs;
 };
 struct trusted_stream {
@@ -47,7 +48,7 @@ static struct drm_file *owner;
 static struct drm_device *owner_device;
 static bool permanently_quarantined;
 static void remesa_stream_source_poison(const void *who)
-{assert(who==&stream&&rank==1);source_poison_calls++;}
+{assert((who==&stream&&rank==1)||(endpoint&&who==endpoint->private_session&&rank==2));source_poison_calls++;}
 #include "remesa_private_trusted_file_lost.inc"
 #include "remesa_private_memory_file_lost.inc"
 #include "remesa_private_stream_file_lost.inc"
@@ -100,6 +101,15 @@ static void fixture(bool resources)
 }
 int main(void)
 {
+#ifdef REMESA_GENERAL_SCENE
+ fixture(false);memory.private_session=&memory;memory.private_source_held=true;
+ memory.private_matrix_color=33;memory.private_matrix_constructing=true;
+ remesa_private_memory_file_lost(&dev,&file);
+ assert(memory.private_device_lost&&!memory.file&&!memory.private_matrix_constructing&&
+        memory.private_source_held&&memory.private_source_poisoned&&source_poison_calls==1&&!cleanup_calls);
+ assert(memory.private_session==&memory&&remesa_gem_memory_close(&memory)==-ENODEV);
+ remesa_private_memory_file_lost(&dev,&file);assert(source_poison_calls==1);
+#endif
  fixture(true);struct remesa_gem_memory before=memory;
  struct trusted_stream trusted_before=stream;struct remesa_stream bridge_before=bridge;
  remesa_private_stream_file_lost(&otherdev,&file);

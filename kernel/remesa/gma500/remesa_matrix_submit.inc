@@ -21,7 +21,7 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
   struct remesa_matrix_fill_owner *m=matrix_fill_owner;p=&m->base;s=p->memory;
   mutex_lock(&endpoint_lock);
   if(endpoint!=s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost||
-     s->private_session!=p){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
+     s->private_session!=p||!s->private_source_held||s->private_source_poisoned||!p->source_claimed){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
   if(m->active||m->failed||!m->retirement.gem_retired||m->color!=r->packet.controls.color_id||
      m->width!=r->packet.controls.width||m->height!=r->packet.controls.height){error=-EBUSY;mutex_unlock(&endpoint_lock);goto done;}
   mutex_lock(&s->lock);s->private_matrix_constructing=false;mutex_unlock(&s->lock);
@@ -57,9 +57,15 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
  metadata_done:mutex_unlock(&s->lock);if(error)goto cancel_locked;
  error=remesa_twod_reserve(dev_priv,&p->guard);if(error)goto cancel_locked;
  mutex_unlock(&endpoint_lock);
- error=remesa_private_session_source_begin(s,p);
+ /* A paired clear already owns the source acquired before its publication.
+  * Reclaiming the original first-owner source here would reject that history. */
+ if(p->source_claimed)error=remesa_owned_fill_ready(dev,p);
+ else{
+  error=remesa_private_session_source_begin(s,p);
+  if(!error)p->source_claimed=true;
+ }
  if(error)goto reacquire_cancel;
- p->source_claimed=true;scene_probe_consumed=true;
+ scene_probe_consumed=true;
  mutex_lock(&endpoint_lock);
  if(endpoint!=s||s->private_device_lost||s->file!=file||s->private_session!=p){error=-ENODEV;cleanup=-ENODEV;goto unlock_cleanup;}
  error=remesa_gem_scene_packet_prepare(s,&p->packet,&p->guard,&p->job);if(error)goto cancel_locked;

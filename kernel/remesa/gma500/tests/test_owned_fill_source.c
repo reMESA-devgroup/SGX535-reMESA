@@ -73,9 +73,9 @@ static void mutate(unsigned n)
 }
 int main(int argc,char **argv)
 {
- assert(argc==2);unsigned n=strtoul(argv[1],NULL,10);assert(n<110);
+ assert(argc==2);unsigned n=strtoul(argv[1],NULL,10);assert(n<115);
  lifetime=(struct sgx535_source_guard){.boot=SGX535_BOOT_READY,.prepared=1,.asserted_reset=127};
- launch=(struct remesa_twod_launch){.dev=&dev,.pd=&pd,.ticket={9,1,0,1},.count=1,.retirement=&output,
+ launch=(struct remesa_twod_launch){.dev=&dev,.pd=&pd,.ticket={9,1,0,1},.count=1,.retirement=&output,.source_owner=&token,
   .plan={.destination_id=33,.destination_first=0x10000000,.destination_end=0x103e8000,.request_base=0x10000000,.dwords=7}};
  proof=(struct remesa_twod_retirement){.dev=&dev,.pd=&pd,.ticket=launch.ticket,.cookie=7,.destination_id=33,
   .destination_first=launch.plan.destination_first,.destination_end=launch.plan.destination_end,
@@ -93,6 +93,20 @@ int main(int argc,char **argv)
  if(n==1){remesa_route_source_producer(1);remesa_route_source_producer(0);
   assert(remesa_owned_fill_claim(&dev,&token,33)==-EBUSY);assert(lifetime.reasons==32&&poisoned&&legacy_calls==2);return 0;}
  claim();
+ if(n==114){
+  assert(!remesa_owned_fill_publish(&token,&launch,0x1000,0x28000000,7));issued();
+  assert(!remesa_owned_fill_published(&launch,0));assert(!remesa_owned_fill_restore(&launch,7));
+  proof.restored_request_base=0x28000000;
+  assert(!remesa_owned_fill_restored(&launch,&proof,0));proof.gem_retired=true;
+  assert(!remesa_owned_fill_complete(&token,&proof)&&!remesa_owned_fill_ready(&dev,&token));return 0;
+ }
+ if(n>=110){
+  if(n==110){launch.source_owner=NULL;assert(remesa_owned_fill_publish(&token,&launch,0x1000,0,7));}
+  if(n==111){launch.source_owner=&task2;assert(remesa_owned_fill_publish(&token,&launch,0x1000,0,7));}
+  if(n==112){publish();launch.source_owner=&task2;assert(remesa_owned_fill_issued(&launch,7));}
+  if(n==113){running();launch.source_owner=NULL;assert(remesa_owned_fill_restore(&launch,7));}
+  goto failed;
+ }
  if(n>=84){
   if(n<=92){
    static const u32 reasons[]={1,2,4,8,16,64,128,256,512};
@@ -162,7 +176,10 @@ int main(int argc,char **argv)
  case 70:launch.plan.request_base++;goto bad_publish;
  case 71:assert(remesa_owned_fill_publish(&token,&launch,0,0,7));break;
  case 72:assert(remesa_owned_fill_publish(&token,&launch,0x1001,0,7));break;
- case 73:assert(remesa_owned_fill_publish(&token,&launch,0x1000,1,7));break;
+ case 73:
+  assert(!remesa_owned_fill_publish(&token,&launch,0x1000,0x28000000,7));issued();
+  assert(!remesa_owned_fill_published(&launch,0));assert(!remesa_owned_fill_restore(&launch,7));
+  assert(remesa_owned_fill_restored(&launch,&proof,0));break;
  case 74:assert(remesa_owned_fill_publish(&token,&launch,0x1000,0,0));break;
  case 75:publish();assert(remesa_owned_fill_issued(&launch,8));break;
  case 76:running();launch.ticket.generation++;assert(remesa_owned_fill_restore(&launch,7));break;

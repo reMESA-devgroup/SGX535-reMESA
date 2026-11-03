@@ -7,7 +7,7 @@
 #include "../remesa_matrix_construct.inc"
 int main(int argc,char **argv)
 {
- CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<23);
+ CHECK(argc==2);unsigned mode=(unsigned)strtoul(argv[1],NULL,10);CHECK(mode<31);
  struct drm_psb_private priv={(void*)1};struct drm_device dev={&priv};struct drm_file file={1};
  struct remesa_gem_memory memory={.dev=&dev,.file=&file,.context=77,.root={0,0xdfffffffULL},.pd=(void*)1};
  struct remesa_scene_probe_binding bindings[18]={0};endpoint=&memory;
@@ -35,7 +35,7 @@ int main(int argc,char **argv)
  }
  CHECK(!remesa_matrix_fill_begin(&dev,&file,&fill,&owner)&&owner);
  CHECK(memory.private_session==owner&&matrix_fill_owner&&matrix_fill_owner->active);
- CHECK(!memory.private_matrix_constructing&&memory.private_matrix_color==44&&!claims&&!matrix_executes);
+ CHECK(!memory.private_matrix_constructing&&memory.private_matrix_color==44&&!claims&&fill_claims==1&&memory.private_source_held&&!matrix_executes);
  const void *other=NULL;CHECK(remesa_matrix_fill_begin(&dev,&file,&fill,&other)==-EBUSY&&!other);
  struct remesa_memory_request request={.action=REMESA_MEM_CREATE};
  CHECK(!matrix_cpu_construct(&memory,&request));
@@ -59,7 +59,7 @@ int main(int argc,char **argv)
  case 21:fill.width--;break;case 22:fill.destination.stride--;break;
  }
  mutex_lock(&endpoint_lock);int error=remesa_matrix_fill_finish(&memory,owner,&fill,&proof);mutex_unlock(&endpoint_lock);
- if(mode>=5){CHECK(error==-EPROTO&&matrix_fill_owner->failed&&!memory.private_matrix_constructing&&memory.private_session==owner);return 0;}
+ if(mode>=5&&mode<=22){CHECK(error==-EPROTO&&matrix_fill_owner->failed&&!memory.private_matrix_constructing&&memory.private_session==owner);return 0;}
  CHECK(!error&&!matrix_fill_owner->active&&memory.private_matrix_constructing);
  CHECK(matrix_cpu_construct(&memory,&request));
  for(unsigned action=1;action<=14;action++){
@@ -79,9 +79,9 @@ int main(int argc,char **argv)
   memory.jobs[0].live=true;request=(struct remesa_memory_request){.action=REMESA_MEM_CREATE};
   CHECK(!matrix_cpu_construct(&memory,&request));memory.jobs[0].live=false;
  }
- if(mode==4){
-  /* Freeze for a real typed draw, then reproduce a source refusal without
-   * pretending this backing record repaired the first-owner lineage. */
+ if(mode==4||mode>=23){
+  /* Freeze for a real typed draw, then reproduce a source refusal or successful reuse of the source acquired before the clear.
+   * Execution is modeled here; actual source/native integration is separate. */
   struct remesa_matrix_submit_request draw={.version=1,.budget_ms=1000,.context=77};
   struct remesa_scene_packet *p=&draw.packet;*p=(struct remesa_scene_packet){.owner=77,.serial=1,.version=1,.binding_count=18,.use_count=11,.window_count=2};
   for(unsigned i=0;i<18;i++){p->bindings[i].id=32+i;p->bindings[i].access=bindings[i].access;}
@@ -90,11 +90,28 @@ int main(int argc,char **argv)
   for(unsigned i=0;i<11;i++)p->uses[i]=(struct remesa_scene_packet_use){32+i,0,8,4,0,0};
   p->windows[0]=(struct remesa_scene_packet_window){33,0,6,34,0,48,3,0};
   p->windows[1]=(struct remesa_scene_packet_window){35,0,6,36,0,144,3,0};
-  fault=CLAIM;CHECK(!remesa_matrix_submit_ioctl(&dev,&draw,&file));
-  CHECK(draw.error==-EIO&&draw.stages==8&&!draw.retained&&!draw.operation&&!matrix_executes&&claims==1);
+  if(mode==4)fault=CLAIM;
+  if(mode==24)memory.private_source_held=false;
+  if(mode==25)memory.private_source_poisoned=true;
+  if(mode==26)fault=CORE;
+  if(mode==27)fault=PREPARE;
+  if(mode==28)p->controls.color_id++;
+  if(mode==29)fault=SOURCE_END;
+  if(mode==30)fault=CASE_COUNT;
+  int result=remesa_matrix_submit_ioctl(&dev,&draw,&file);
+  CHECK(claims==0&&fill_claims==1); /* No second first-owner claim. */
+  if(mode==24||mode==25||mode==28){
+   CHECK(result<0&&!matrix_executes&&memory.private_session==owner&&matrix_fill_owner);return 0;
+  }
+  CHECK(!result);
+  if(mode==29||mode==30){
+   CHECK(draw.error&&draw.retained&&matrix_executes==1&&memory.private_session==owner&&matrix_fill_owner);return 0;
+  }
+  if(mode==23){CHECK(!draw.error&&draw.stages==15&&!draw.retained&&draw.operation==91&&matrix_executes==1);}
+  else CHECK(draw.error&&draw.stages==8&&!draw.retained&&!draw.operation&&!matrix_executes);
   CHECK(!memory.private_session&&!memory.private_matrix_constructing&&!memory.private_matrix_color&&!matrix_fill_owner&&allocs==frees);
   return 0;
  }
- printf("PASS normal fill backing case%u: construction/protectedCOLOR, source not approved, GPU0\n",mode);
+ printf("PASS normal fill owner case%u: source held/protectedCOLOR, modeled execution GPU0\n",mode);
  return 0;
 }

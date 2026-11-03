@@ -3,7 +3,8 @@
 """Actual closed scene controller, modeled dependencies. No device opened."""
 import argparse,hashlib,json,re,resource,subprocess,struct
 from pathlib import Path
-p=argparse.ArgumentParser(description=__doc__);p.add_argument('--module',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path);p.add_argument('--extended-captures',type=Path,help='Offline bound-export0/1 actual18-binding fixtures; no kernel catalogue installation');p.add_argument('--wire-v2',action='store_true',help='Exercise actual separately registered18-binding handlers');p.add_argument('--homogeneous',action='store_true',help='Explicit state15/W2 profiles3/4; requires --wire-v2');p.add_argument('--clamped-api',action='store_true',help='Actual API CODE344/state15 selectors5/6; requires --wire-v2');p.add_argument('--matrix-submit',action='store_true',help='Separate ordinary matrix controller; modeled source/execution dependencies');p.add_argument('--matrix-fill',action='store_true',help='Normal fill backing owner cases; requires --matrix-submit');a=p.parse_args()
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--module',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--i486-cc',type=Path);p.add_argument('--qemu-i386',type=Path);p.add_argument('--extended-captures',type=Path,help='Offline bound-export0/1 actual18-binding fixtures; no kernel catalogue installation');p.add_argument('--wire-v2',action='store_true',help='Exercise actual separately registered18-binding handlers');p.add_argument('--homogeneous',action='store_true',help='Explicit state15/W2 profiles3/4; requires --wire-v2');p.add_argument('--clamped-api',action='store_true',help='Actual API CODE344/state15 selectors5/6; requires --wire-v2');p.add_argument('--matrix-submit',action='store_true',help='Separate ordinary matrix controller; modeled source/execution dependencies');p.add_argument('--matrix-fill',action='store_true',help='Normal fill backing owner cases; requires --matrix-submit');p.add_argument('--matrix-fill-endpoint',action='store_true',help='Joined ordinary fill endpoint, including unissued source cleanup');a=p.parse_args()
+if a.matrix_fill_endpoint:a.matrix_submit=a.matrix_fill=True
 if a.homogeneous and (not a.wire_v2 or a.extended_captures):p.error('--homogeneous requires --wire-v2 without extended fixture override')
 if a.clamped_api and (not a.wire_v2 or a.homogeneous or a.extended_captures):p.error('--clamped-api requires --wire-v2 without another fixture mode')
 if a.matrix_fill and not a.matrix_submit:p.error('--matrix-fill requires --matrix-submit')
@@ -35,11 +36,14 @@ struct remesa_gem_memory {struct drm_device *dev;struct drm_file *file;u64 conte
 (o/'scene_probe_types.h').write_text(prefix+backend+suffix)
 fixture_inputs=[]
 if a.matrix_submit:
+ from test_private_source_mmio import extract
+ source=(m/'remesa_private_session_source.inc').read_text()
+ (o/'matrix_source_gate_actual.inc').write_text('\n'.join(extract(source,n) for n in ('private_session_owner','private_session_idle'))+'\n')
  (o/'remesa_matrix_submit_uapi.h').write_text((w/'include/remesa/matrix_submit_uapi.h').read_text().replace('"scene_packet.h"','"remesa_scene_packet.h"'))
  names=re.search(r'enum \{(.*?)\};',(w/'kernel/remesa/gma500/tests/test_scene_probe_handler.c').read_text(),re.S)[1].replace('\n','').split(',')
  excluded={'DUPALLOC','VA','SIZE','HASH','OK_INIT','OK640_INIT','OK_FINAL','OK640_FINAL','OK_GALLIUM','OK640_GALLIUM','VA_GALLIUM','HASH_GALLIUM','WRONG_LEGACY','OK_MATRIX','OK640_MATRIX','VA_MATRIX','HASH_MATRIX','WRONG_WINDOW'}
  matrix_cases=[i for i,name in enumerate(names) if name.strip() not in excluded]
- if a.matrix_fill:matrix_cases=list(range(23))
+ if a.matrix_fill:matrix_cases=list(range(9 if a.matrix_fill_endpoint else 31))
 
 if a.extended_captures:
  lines=[]
@@ -65,7 +69,8 @@ if a.extended_captures:
 rows=[];variants=[('native','cc',['-O2'],[]),('ubsan','cc',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'],[])]
 if a.i486_cc:variants.append(('i486',str(a.i486_cc),['-O2','-static','-march=i486'],[str(a.qemu_i386)]))
 for label,cc,flags,runner in variants:
- exe=o/label;cmd=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-Wno-unused-function',*flags,*(['-DREMESA_SCENE_CONTROLLER_EXTENDED'] if a.extended_captures else []),*(['-DREMESA_SCENE_CONTROLLER_WIRE_V2'] if a.wire_v2 else []),*(['-DREMESA_SCENE_CONTROLLER_HOMOGENEOUS'] if a.homogeneous else []),*(['-DREMESA_SCENE_CONTROLLER_CLAMPED_API'] if a.clamped_api else []),'-I'+str(o),'-I'+str(m),'-I'+str(w/'kernel/remesa/gma500'),'-I'+str(w/'include'),str(w/'kernel/remesa/gma500/tests'/('test_matrix_fill_owner.c' if a.matrix_fill else 'test_matrix_submit_handler.c' if a.matrix_submit else 'test_scene_probe_handler.c')),'-o',str(exe)]
+ exe=o/label;cmd=[cc,'-std=c11','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-Wno-unused-function',*flags,*(['-DREMESA_SCENE_CONTROLLER_EXTENDED'] if a.extended_captures else []),*(['-DREMESA_SCENE_CONTROLLER_WIRE_V2'] if a.wire_v2 else []),*(['-DREMESA_SCENE_CONTROLLER_HOMOGENEOUS'] if a.homogeneous else []),*(['-DREMESA_SCENE_CONTROLLER_CLAMPED_API'] if a.clamped_api else []),'-I'+str(o),'-I'+str(m),'-I'+str(w/'kernel/remesa/gma500'),'-I'+str(w/'include'),str(w/'kernel/remesa/gma500/tests'/('test_matrix_fill_endpoint.c' if a.matrix_fill_endpoint else 'test_matrix_fill_owner.c' if a.matrix_fill else 'test_matrix_submit_handler.c' if a.matrix_submit else 'test_scene_probe_handler.c')),'-o',str(exe)]
+ if a.matrix_fill_endpoint:cmd += ['-DREMESA_TWOD_COPY_IOCTL=1','-DREMESA_TWOD_VENDOR_STREAM=1','-DREMESA_TWOD_FILL_STREAM=1',str(w/'mesa/sgx535/remesa_twod.c')]
  for name,argv in [(label+'-build',cmd)]+[(label+'-'+str(c),runner+[str(exe),str(c)]) for c in (matrix_cases if a.matrix_submit else range(44 if a.extended_captures or a.wire_v2 else 58))]:
   def limits():resource.setrlimit(resource.RLIMIT_CORE,(0,0));resource.setrlimit(resource.RLIMIT_AS,((6*1024**3 if runner else 768*1024**2),)*2)
   q=subprocess.run(argv,capture_output=True,text=True,timeout=60,preexec_fn=limits);(o/(name+'.log')).write_text(q.stdout+q.stderr);rows.append({'label':name,'argv':argv,'exit':q.returncode});(o/'COMMANDS.json').write_text(json.dumps(rows,indent=2)+'\n')
@@ -77,4 +82,8 @@ if a.matrix_fill:files += [w/'kernel/remesa/gma500/tests/test_matrix_fill_owner.
 q={'status':'CLOSED_GENERAL_SCENE_ADMISSION_CONTROLLER_MODEL_PASS','GPU_operations':0,'cases':44 if a.extended_captures or a.wire_v2 else 58,'binding_capacity':18 if a.extended_captures or a.wire_v2 else 17,'public18_binding_wire_handler_exercised':a.wire_v2,'homogeneous_profiles':a.homogeneous,'clamped_api_profiles':a.clamped_api,'variants':len(variants),'scope':'Actual controller/envelope/profile translation; memory/crypto/source/hardware execution and lifetime dependencies modeled','sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},'commands':rows};
 if a.matrix_submit:q.update(status='ORDINARY_MATRIX_CONTROLLER_MODEL_PASS',cases=len(matrix_cases),binding_capacity=18,matrix_submit=True,case_names=[names[i].strip() for i in matrix_cases])
 if a.matrix_fill:q.update(status='ORDINARY_FILL_BACKING_OWNER_MODEL_PASS',matrix_fill=True,scope='Actual backing owner/CPU phase/normal draw refusal, fill/source/retirement dependencies modeled; no GPU or source admission',case_names=['owner_mode'+str(i) for i in matrix_cases])
+if a.matrix_fill_endpoint:
+ files += [w/'kernel/remesa/gma500/tests/test_matrix_fill_endpoint.c',w/'kernel/remesa/gma500/remesa_twod_fill.inc',w/'kernel/remesa/gma500/remesa_twod_copy.inc',w/'mesa/sgx535/remesa_twod.c']
+ q.update(status='JOINED_NORMAL_FILL_SOURCE_ENDPOINT_MODEL_PASS',matrix_fill_endpoint=True,scope='Actual fill/copy endpoint, backing owner and source-idle gates. Native execution and source callbacks modeled; separate actual native/source and GEM tests required.')
+ q['sources']={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files}
 (o/'RESULT.json').write_text(json.dumps(q,indent=2)+'\n');print(q['status'])

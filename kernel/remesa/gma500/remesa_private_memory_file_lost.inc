@@ -1,20 +1,32 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
-/* Same TU as endpoint; no unmap/unpin/free, PM, source/backend or MMU calls. */
+/* Same TU as endpoint; no unmap/unpin/free, PM, MMIO or MMU calls.
+ * Ordinary source loss is monotonic software poison, never hardware cleanup. */
 #include "remesa_private_file_lost.h"
 static void remesa_private_memory_lost(struct drm_device *dev,struct drm_file *file,bool all)
 {
  struct remesa_gem_memory *s;unsigned i;
+#ifdef REMESA_GENERAL_SCENE
+ const void *source_owner=NULL;
+#endif
  if(!dev||(!all&&!file))return;
  mutex_lock(&endpoint_lock);s=endpoint;
  if(s&&s->dev==dev&&(all||s->file==file)){
   mutex_lock(&s->lock);
   s->private_device_lost=true;s->file=NULL;
   s->private_matrix_constructing=false;
+#ifdef REMESA_GENERAL_SCENE
+  if(s->private_matrix_color&&s->private_source_held){
+   source_owner=s->private_session;s->private_source_poisoned=true;
+  }
+#endif
   for(i=0;i<8;i++)if(s->jobs[i].live){
    s->jobs[i].quarantined=true;s->jobs[i].state=REMESA_JOB_QUARANTINED;
   }
   for(i=0;i<OBJECTS;i++)if(s->bo[i].live)s->bo[i].quarantine=true;
   mutex_unlock(&s->lock);
+#ifdef REMESA_GENERAL_SCENE
+  if(source_owner)remesa_stream_source_poison(source_owner);
+#endif
  }
  mutex_unlock(&endpoint_lock);
 }

@@ -45,7 +45,7 @@ def main():
         cmd = [cc, '-std=c11', '-Wall', '-Wextra', '-Werror', '-DREMESA_GENERAL_SCENE', *flags,
                '-I'+str(a.output), '-I'+str(a.module), '-I'+str(w/'include'), str(test),
                str(a.module/'frozen_source_guard.c'), '-o', str(exe)]
-        for name, argv in [(label+'-build', cmd)]+[(label+'-'+str(i), runner+[str(exe), str(i)]) for i in range(110)]:
+        for name, argv in [(label+'-build', cmd)]+[(label+'-'+str(i), runner+[str(exe), str(i)]) for i in range(115)]:
             def limit():
                 resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
                 n = 6*1024**3 if runner else 768*1024**2
@@ -61,9 +61,9 @@ def main():
              a.module/'remesa_owned_fill_source.h', a.module/'remesa_gem_twod_job.h',
              a.module/'frozen_source_guard.c', a.module/'frozen_source_guard.h']
     result = dict(status='OWNED_CLEAR_SOURCE_ACCOUNTING_OFFLINE_PASS', GPU_operations=0,
-                  physical_qualification=False, production_activation=False,
-                  scope='Actual owned source, original claim/producer/release/bind and frozen guard. Modeled kernel primitives and retirement receipts. Native hooks and endpoint activation not implemented in this diff.',
-                  variants=len(variants), scenarios=110, commands=rows,
+                  physical_qualification=False, production_calls_wired=True, installed=False,
+                  scope='Actual owned source, original claim/producer/release/bind and frozen guard. Modeled kernel primitives and retirement receipts. Native/endpoint integration requires its separate joined tests and physical qualification.',
+                  variants=len(variants), scenarios=115, commands=rows,
                   sources={str(f.resolve()):hashlib.sha256(f.read_bytes()).hexdigest() for f in files})
     (a.output/'RESULT.json').write_text(json.dumps(result, indent=2)+'\n')
     print(result['status'])

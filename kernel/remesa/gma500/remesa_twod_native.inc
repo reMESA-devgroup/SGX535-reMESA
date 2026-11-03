@@ -3,6 +3,9 @@
  * GEM 2D service, not arbitrary raw-packet userspace. No ioctl registration. */
 #include "remesa_twod_native.h"
 #include "remesa_mmu_default_root.h"
+#ifdef REMESA_GENERAL_SCENE
+#include "remesa_owned_fill_source.h"
+#endif
 #ifdef REMESA_TWOD_VENDOR_STREAM
 #ifdef REMESA_TWOD_FILL_STREAM
 #define TWOD_NATIVE_VENDOR(n) ((n)==7u||(n)==9u)
@@ -96,6 +99,10 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  if(!b||!l||!cookie||!l->dev||!l->dev->dev_private||!l->pd||
     !l->count||l->count>2||!TWOD_NATIVE_DWORDS_VALID(l->plan.dwords)||
     (l->plan.request_base&0x0fffffffu))return -EINVAL;
+ /* Only the joined ordinary profile may carry this internal credential. */
+#if !defined(REMESA_GENERAL_SCENE) || defined(REMESA_TWOD_LAB_IOCTL)
+ if(l->source_owner)return -EOPNOTSUPP;
+#endif
  packet_words=TWOD_NATIVE_PACKET_WORDS(l);
  if(b->live||b->reservation.held)return -EBUSY;
  if(b->serial==~(u64)0)return -EOVERFLOW;
@@ -125,7 +132,14 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  if(PSB_RSGX32(PSB_CR_EVENT_STATUS2)){error=-EIO;goto done;}
  /* Base publication belongs to the producer interval too: do not hide a
   * fault/request triggered before the first FIFO word from legacy history. */
- remesa_route_source_producer(1);producer=true;
+#ifdef REMESA_GENERAL_SCENE
+ if(l->source_owner){
+  error=remesa_owned_fill_publish(l->source_owner,l,root,b->reservation.saved_base,b->serial+1);
+  if(error)goto done;
+ }else
+#endif
+ remesa_route_source_producer(1);
+ producer=true;
 #ifdef REMESA_TWOD_VENDOR_STREAM
  if(TWOD_NATIVE_VENDOR(packet_words)){
   TWOD_LAB_PHASE(11);b->expected_alpha=0x0000ff00u;
@@ -140,9 +154,19 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  TWOD_LAB_PHASE(5);
  error=twod_native_hw(b,dev_priv,l->plan.request_base,true);if(error)goto done;
  TWOD_LAB_PHASE(6);
+#ifdef REMESA_GENERAL_SCENE
+ if(l->source_owner){
+  /* Preserve pre-cookie events in the source route BEFORE ACK. Neither a
+   * base-publication event nor stale completion may become this issue. */
+  error=twod_native_capture(dev_priv,NULL);if(error)goto done;
+ }
+#endif
  b->cookie=++b->serial;
  error=remesa_twod_irq_issue_locked(&b->reservation,b->cookie);if(error)goto done;
  *cookie=b->cookie;
+#ifdef REMESA_GENERAL_SCENE
+ if(l->source_owner){error=remesa_owned_fill_issued(l,b->cookie);if(error)goto done;}
+#endif
 #ifdef REMESA_TWOD_LAB_IOCTL
  /* Separate delayed base-publication effects from the first FIFO word.
   * Keep reservation, backing, producer interval and IRQ cookie live while
@@ -184,7 +208,13 @@ static int twod_native_start(void *opaque,const struct remesa_twod_launch *l,u64
  if(error&&b->core==0x01130000u&&b->revision==0x00010201u)
   twod_native_fault_read(dev_priv,&snapshot);
 #endif
- if(producer)remesa_route_source_producer(0);
+ if(producer){
+#ifdef REMESA_GENERAL_SCENE
+  if(l->source_owner){int close=remesa_owned_fill_published(l,error);if(!error)error=close;}
+  else
+#endif
+  remesa_route_source_producer(0);
+ }
  sgx535_gma500_fixed_irq_unlock(irq_flags);
  spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
 #ifdef REMESA_TWOD_LAB_IOCTL
@@ -258,7 +288,14 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
  error=twod_native_capture(dev_priv,NULL);
  if(!error)error=twod_native_hw(b,dev_priv,l->plan.request_base,true);
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(!error&&TWOD_NATIVE_VENDOR(l->plan.dwords)){remesa_route_source_producer(1);producer=true;}
+ if(!error&&TWOD_NATIVE_VENDOR(l->plan.dwords)){
+#ifdef REMESA_GENERAL_SCENE
+  if(l->source_owner)error=remesa_owned_fill_restore(l,cookie);
+  else
+#endif
+  remesa_route_source_producer(1);
+  if(!error)producer=true;
+ }
 #endif
  if(!error){
   PSB_WSGX32(b->reservation.saved_base,PSB_CR_BIF_TWOD_REQ_BASE);
@@ -287,7 +324,16 @@ static int twod_native_retire(void *opaque,const struct remesa_twod_launch *l,u6
  }
  if(!error)error=remesa_twod_release_locked(dev_priv,&b->reservation);
 #ifdef REMESA_TWOD_VENDOR_STREAM
- if(producer)remesa_route_source_producer(0);
+ if(producer){
+#ifdef REMESA_GENERAL_SCENE
+  if(l->source_owner){
+   int close;
+   if(!error)proof.native_retired=true; /* native release above succeeded */
+   close=remesa_owned_fill_restored(l,&proof,error);if(!error)error=close;
+  }else
+#endif
+  remesa_route_source_producer(0);
+ }
 #endif
  sgx535_gma500_fixed_irq_unlock(irq_flags);spin_unlock_irqrestore(&dev_priv->lock_2d,flags);
  if(error){b->failed=true;return error;}

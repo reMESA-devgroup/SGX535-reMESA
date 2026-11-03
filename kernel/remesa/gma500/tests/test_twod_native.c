@@ -40,8 +40,20 @@ static void usleep_range(unsigned a,unsigned b)
 static void dma_rmb(void){barriers++;}
 static u32 get_unaligned_le32(const void *p)
 {const unsigned char *b=p;return (u32)b[0]|(u32)b[1]<<8|(u32)b[2]<<16|(u32)b[3]<<24;}
+#ifdef REMESA_OWNED_FILL_NATIVE_TEST
+static void owned_pending_forward(struct drm_device *,u32,u32);
+static bool owned_publication_live(void);
+#define NATIVE_PRODUCER_LIVE() (producer_depth==1||owned_publication_live())
+#else
+#define NATIVE_PRODUCER_LIVE() (producer_depth==1)
+#endif
 static void remesa_route_source_pending(struct drm_device *dev,u32 s1,u32 s2)
-{CHECK(dev&&irq_lock_held);(void)s1;(void)s2;route_calls++;}
+{
+ CHECK(dev&&irq_lock_held);(void)s1;(void)s2;route_calls++;
+#ifdef REMESA_OWNED_FILL_NATIVE_TEST
+ owned_pending_forward(dev,s1,s2);
+#endif
+}
 #include "fixed_capture_actual.inc"
 static void base_observe_sleep(void)
 {
@@ -76,7 +88,7 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
 {
  CHECK(irq_lock_held);
  if(reg==0x0e1c){
-  CHECK(p->lock_2d.held&&producer_depth==1&&(packet_words==9||packet_words==7));
+  CHECK(p->lock_2d.held&&NATIVE_PRODUCER_LIVE()&&(packet_words==9||packet_words==7));
   alpha_writes++;
   if(alpha_writes%2==1)CHECK(p->words%packet_words==0&&!active_native->cookie&&value==0xff00);
   else CHECK(active_native->complete&&active_native->visible&&value==initial_alpha);
@@ -91,6 +103,10 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
   CHECK(p->lock_2d.held);base_writes++;
   if((mode==8&&base_writes==1)||(mode==9&&base_writes==2))return;
   p->base=value;
+#ifdef REMESA_OWNED_FILL_NATIVE_TEST
+  if(base_writes==1&&mode==51)registers[PSB_CR_EVENT_STATUS/4]|=_PSB_CE_TWOD_COMPLETE;
+  if(base_writes==1&&mode==52)registers[PSB_CR_EVENT_STATUS/4]|=1;
+#endif
   if(mode==21&&base_writes==1){registers[PSB_CR_BIF_INT_STAT/4]=4;registers[PSB_CR_BIF_FAULT/4]=value;}
   return;
  }
@@ -99,7 +115,7 @@ static void native_write(struct drm_psb_private *p,u32 value,u32 reg)
   if(mode!=7)registers[PSB_CR_EVENT_STATUS/4]&=~value;
   return;
  }
- CHECK(p->lock_2d.held&&active_native->reservation.irq_issued&&active_native->cookie&&producer_depth==1);
+ CHECK(p->lock_2d.held&&active_native->reservation.irq_issued&&active_native->cookie&&NATIVE_PRODUCER_LIVE());
  model_write(p,value,reg);
  if(mode>=22&&mode<=31&&p->words==mode-21){
   registers[PSB_CR_BIF_INT_STAT/4]=0x4004;
@@ -274,6 +290,7 @@ static void native_case(unsigned width,unsigned height,unsigned fault)
  }
  CHECK(!irq_lock_held&&!p.lock_2d.held&&route_calls>0);
 }
+#ifndef REMESA_NATIVE_FIXTURE_ONLY
 int main(void)
 {
  record_retirement=getenv("REMESA_TEST_TWOD_RETIREMENT")!=NULL;
@@ -322,3 +339,4 @@ int main(void)
  printf("PASS %u parent native adapter checks plus %u joined MMIO fault models; no GPU execution\n",checks,faults);
  return 0;
 }
+#endif

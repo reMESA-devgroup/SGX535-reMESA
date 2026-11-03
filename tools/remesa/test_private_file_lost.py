@@ -23,7 +23,7 @@ def main():
     def limits():
         resource.setrlimit(resource.RLIMIT_CORE,(0,0))
         resource.setrlimit(resource.RLIMIT_AS,(768*1024**2,)*2)
-    for name,flags in [('native',['-O2']),('ubsan',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'])]:
+    for name,flags in [('native',['-O2']),('ubsan',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all']),('ordinary',['-O1','-DREMESA_GENERAL_SCENE','-fsanitize=undefined','-fno-sanitize-recover=all'])]:
         exe=output/name;command=['cc','-std=c11','-Wall','-Wextra','-Werror',*flags,
              '-I'+str(output),'-I'+str(a.module.resolve()),str(test),'-o',str(exe)]
         for label,argv in [(name+'-build',command),(name+'-run',[str(exe)])]:

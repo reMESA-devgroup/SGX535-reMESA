@@ -24,6 +24,30 @@ int remesa_gem_scene_job_execute_matrix(struct remesa_gem_scene_job *c,
  if(fault==CASE_COUNT){c->loan.execution_attempted=true;return -EOPNOTSUPP;}
  return remesa_gem_scene_job_execute(c,b,o,owner,ticks,samples);
 }
+/* The owner/idle gates are extracted from the actual retained source service.
+ * Only source/device execution is modeled in this controller fixture. */
+#define OBJECTS 32
+#include "matrix_source_gate_actual.inc"
+static unsigned fill_claims;
+int remesa_owned_fill_claim(struct drm_device *d,const void *owner,u64 destination)
+{
+ CHECK(endpoint_lock.held&&endpoint->lock.held&&endpoint->dev==d&&
+       endpoint->private_session==owner&&destination==44);
+ fill_claims++;return fault==CLAIM?-EIO:0;
+}
+int remesa_owned_fill_ready(struct drm_device *d,const void *owner)
+{
+ CHECK(d==endpoint->dev&&endpoint->private_session==owner);
+ if(fault==CLAIM)return -EIO;
+ return endpoint->private_source_held&&!endpoint->private_source_poisoned?0:-EACCES;
+}
+int remesa_owned_fill_complete(const void *owner,const struct remesa_twod_retirement *proof)
+{
+ CHECK(endpoint_lock.held&&endpoint->lock.held&&endpoint->private_session==owner&&proof->gem_retired);
+ return 0; /* Source/native/GEM join is exercised by its actual-code fixture. */
+}
+static void remesa_stream_source_poison(const void *owner)
+{CHECK(endpoint->private_session==owner&&endpoint->lock.held);endpoint->private_source_poisoned=true;}
 #include "../remesa_matrix_submit.inc"
 #ifndef REMESA_MATRIX_CONTROLLER_FIXTURE
 int main(int argc,char **argv)

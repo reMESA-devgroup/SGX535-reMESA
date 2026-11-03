@@ -71,7 +71,7 @@ int remesa_private_session_source_begin(struct remesa_gem_memory *s,const void *
 }
 int remesa_private_session_source_end(struct remesa_gem_memory *s,const void *who)
 {
- CHECK(!endpoint_lock.held&&s->private_session==who&&s->private_source_held&&!s->jobs[0].live&&!s->executor&&!current_guard->held);source_ends++;
+ CHECK(!endpoint_lock.held&&s->private_session==who&&s->private_source_held&&!s->jobs[0].live&&!s->executor&&(!current_guard||!current_guard->held));source_ends++;
  if(fault==SOURCE_END){s->private_source_poisoned=true;return -EIO;}
  s->private_source_held=false;return 0;
 }

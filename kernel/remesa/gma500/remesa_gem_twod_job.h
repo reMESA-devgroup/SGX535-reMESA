@@ -32,6 +32,9 @@ struct remesa_twod_launch {
  /* Optional output in stable, disjoint caller storage; no userspace pointer.
   * Ignored until successful native retirement; failure leaves it unchanged. */
  struct remesa_twod_retirement *retirement;
+ /* Stable kernel-only ordinary clear owner, derived from the held endpoint.
+  * NULL retains the existing independent 2D path. Not user-supplied authority. */
+ const void *source_owner;
 };
 struct remesa_twod_completion {
  struct remesa_memory_ticket ticket;

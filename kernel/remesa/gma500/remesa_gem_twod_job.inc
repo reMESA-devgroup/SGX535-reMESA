@@ -63,6 +63,15 @@ int remesa_gem_twod_issue(struct remesa_gem_memory *s,struct remesa_memory_ticke
  next.memory=s;next.ops=ops;next.context=context;next.live=true;
  next.launch.dev=s->dev;next.launch.pd=s->pd;next.launch.ticket=t;
  next.launch.count=j->count;
+#ifdef REMESA_GENERAL_SCENE
+ if(s->private_matrix_color){
+  if(!s->private_session||!s->private_source_held||s->private_source_poisoned||
+     s->private_device_lost||!s->file||s->private_matrix_constructing||
+     j->count!=1||next.launch.plan.dwords!=7||
+     next.launch.plan.destination_id!=s->private_matrix_color){error=-EACCES;goto done;}
+  next.launch.source_owner=s->private_session;
+ }
+#endif
  for(i=0;i<j->count;i++){
   struct backing *b=&s->bo[j->ids[i]&31];
   next.launch.views[i].binding=(struct remesa_memory_binding){j->ids[i],b->va.start,b->gem.size};
