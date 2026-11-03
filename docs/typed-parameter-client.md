@@ -82,3 +82,30 @@ rollback must be checked by the outer experiment controller. The collector
 borrows that controller's file descriptor and has no standalone device-open
 or boot-management authority. Neither model execution nor a pixel comparison
 alone establishes hardware acceleration, a GL version or FPS.
+
+## First physical changing-input result
+
+The 1280×800 experiment on 2026-11-03 did not pass the sealed frame oracle.
+Native operations 2 and 3 retired with SGX revision `0x10201`, the data update
+was acknowledged, and both Z24 readbacks matched. The first COLOR matched;
+the second retained 99 pixels from the first triangle's uncovered area. Its
+foreground was exactly the union of the old and translated triangles. All
+other READ images, expected PARAM bytes, CPU owners and guards checked intact.
+
+The original oracle and its failure remain unchanged. This is evidence for
+the matrix/data/retirement path, not a passed full-frame or OpenGL test. The
+existing prefix is a Z-clear; marking a host render pass DISCARD does not
+issue a COLOR clear or establish black contents. The captured loop did not
+call a normal `glClear`. The normal draw path must distinguish loading prior
+COLOR from an explicit application clear and preserve the corresponding depth
+semantics, rather than assume a fresh zero framebuffer per draw.
+
+The native session acknowledged CLOSE. The supervisor suppressed its manual
+memory cleanup after the pixel mismatch, and the outer controller returned
+the machine to verified stock with no reMESA source/controls or pending job.
+The 640×640 case was not launched after this failure. Evidence and the failed
+qualification audit are in
+`/home/gama/sgx535-offline/typed-parameter-physical-20261103/v1-1280`.
+The next functional target is ordinary `glDrawArrays`/`draw_vbo` with explicit
+load/clear semantics and existing lifetime/execution contracts, without
+promoting the closed LAB profiles to dynamic admission.
