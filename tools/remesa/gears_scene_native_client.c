@@ -292,6 +292,9 @@ int main(int argc,char **argv)
  OK(remesa_persistent_open(&device,&cfg));
 #ifdef REMESA_CAPTURED_SESSION_NATIVE
  (void)collect_native;OK(remesa_persistent_set_native_scene(&device,collect_captured_session));
+#ifdef REMESA_CAPTURED_PARAMETER_NATIVE
+ OK(remesa_persistent_set_native_scene_parameters(&device,remesa_linux_memory_general_scene_parameters));
+#endif
 #else
  OK(remesa_persistent_set_native_scene(&device,collect_native));
 #endif
@@ -332,11 +335,28 @@ int main(int argc,char **argv)
  struct remesa_general_session_request wire={0};
  if(!e&&!prepare_only){
   OK(remesa_linux_memory_general_record_enable(memory));
+#ifdef REMESA_CAPTURED_PARAMETER_NATIVE
+  e=remesa_linux_memory_general_scene_typed_open(memory,&packet,width==1280?3:4,2,1000,&wire);
+#else
   e=remesa_linux_memory_general_scene_open(memory,&packet,width==1280?3:4,2,1000,&wire);
+#endif
   output(out_dir,"OPEN-RESULT.bin",&e,sizeof e);output(out_dir,"OPEN-RESPONSE.bin",&wire,sizeof wire);
   if(!e){OK(remesa_linux_memory_general_request(memory,&wire));output(out_dir,"OPEN-REQUEST.bin",&wire,sizeof wire);}
   for(unsigned frame=1;!e&&frame<=2;frame++){
    screen->fence_reference(screen,&fence,NULL);
+#ifdef REMESA_CAPTURED_PARAMETER_NATIVE
+   if(frame==2){
+    fixture_path(input_path,"coefficients-update.bin");input=fopen(input_path,"rb");
+    CHECK(input&&fread(coefficients,1,sizeof coefficients,input)==sizeof coefficients&&fgetc(input)==EOF&&!fclose(input));
+    ctx->set_constant_buffer(ctx,PIPE_SHADER_VERTEX,0,false,&constants);e=remesa_context_error(ctx);
+    if(!e)e=remesa_context_update_captured_parameters(ctx,capture,1);
+    output(out_dir,"PARAMETER-RESULT.bin",&e,sizeof e);
+    struct remesa_general_parameter_request update;
+    if(!remesa_linux_memory_general_parameter_request(memory,&update))output(out_dir,"PARAMETER-REQUEST.bin",&update,sizeof update);
+    if(!remesa_linux_memory_general_parameter_response(memory,&update))output(out_dir,"PARAMETER-RESPONSE.bin",&update,sizeof update);
+    if(e)break;
+   }
+#endif
    e=remesa_context_submit_captured_scene(ctx,capture,&fence);
    if(!e){
     CHECK(fence&&screen->fence_finish(screen,ctx,fence,0));

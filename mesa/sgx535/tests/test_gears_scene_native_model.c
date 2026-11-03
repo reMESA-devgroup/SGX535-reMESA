@@ -14,6 +14,9 @@ static bool model_check_registered;
 static bool general_active,general_internal,general_closed,general_failed;
 static unsigned general_calls,general_completed,general_reads_before;
 static struct remesa_general_session_request general_opened;
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+static unsigned general_parameter_updates,general_parameter_id;
+#endif
 #endif
 #ifdef REMESA_GEARS_MODEL_OPENGL
 #define MODEL_SOURCE_OWNERS 2u
@@ -25,6 +28,9 @@ static void check_model_exit(void)
  unsigned live=0;for(unsigned k=0;k<count;k++)if(bo[k].bytes){live++;assert(bo[k].pin&&bo[k].va&&!bo[k].lease);}
 #ifdef REMESA_GEARS_MODEL_GENERAL
  if(general_calls){
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+  if(!general_failed)assert(general_parameter_updates==1);
+#endif
   if(general_failed){assert(general_active&&!general_closed&&live==22+MODEL_SOURCE_OWNERS&&!teardown_gears);}
   else assert(submissions==2&&general_completed==2&&general_closed&&!general_active&&live==4+MODEL_SOURCE_OWNERS);
   return;
@@ -41,6 +47,22 @@ int __wrap_ioctl(int fd,unsigned long command,...)
  if(!model_check_registered){assert(!atexit(check_model_exit));model_check_registered=true;}
  va_list ap;va_start(ap,command);void *arg=va_arg(ap,void *);va_end(ap);assert(fd==99);
 #ifdef REMESA_GEARS_MODEL_GENERAL
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+ if(command==DRM_IOCTL_REMESA_GENERAL_PARAMETER){
+  struct remesa_general_parameter_request *r=arg;
+  assert(general_active&&!general_failed&&!general_closed&&general_opened.version==2&&general_completed==1);
+  assert(remesa_general_parameter_request_valid(r)&&r->context==77&&r->session==7&&
+   r->draw==1&&r->offset==4&&r->words==36&&r->retired_operation==1&&r->sequence==1&&!general_parameter_updates);
+  const unsigned id=general_parameter_id;assert(id>=32&&id-32<count&&bo[id-32].pin&&!bo[id-32].lease);
+  assert(bo[id-32].size==4096&&r->offset+r->words*4<=160);
+  uint32_t self_address;memcpy(&self_address,bo[id-32].bytes,4);assert(self_address==bo[id-32].va);
+  for(unsigned i=0;i<36;i++)for(unsigned j=0;j<4;j++)bo[id-32].bytes[4+4*i+j]=(unsigned char)(r->data[i]>>(8*j));
+  general_parameter_updates++;r->state=1;r->accepted_sequence=1;
+  if(getenv("REMESA_GENERAL_MODEL_FAIL_PARAMETER")){general_failed=true;errno=EINTR;return -1;}
+  if(getenv("REMESA_GENERAL_MODEL_BAD_PARAMETER_ACK")){general_failed=true;r->accepted_sequence=2;}
+  return 0;
+ }
+#endif
  if(command==DRM_IOCTL_REMESA_GENERAL_SESSION){
   struct remesa_general_session_request *r=arg;assert(remesa_general_session_request_valid(r));general_calls++;
   unsigned fail_action=getenv("REMESA_GENERAL_MODEL_FAIL_ACTION")?(unsigned)atoi(getenv("REMESA_GENERAL_MODEL_FAIL_ACTION")):0;
@@ -48,6 +70,9 @@ int __wrap_ioctl(int fd,unsigned long command,...)
   bool fail=r->action==fail_action&&(!fail_sequence||r->sequence==fail_sequence);
   if(r->action==1){
    assert(!general_active&&!general_closed&&r->max_jobs==2);
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+   assert(r->version==2);
+#endif
 #ifdef REMESA_GEARS_MODEL_HOMOGENEOUS
    assert(r->profile==3||r->profile==4);
 #else
@@ -57,6 +82,9 @@ int __wrap_ioctl(int fd,unsigned long command,...)
    r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
   }else if(r->action==2){
    assert(general_active&&!general_closed&&r->session==7&&r->sequence==general_completed+1&&r->budget_ms==1000);
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+   assert(general_parameter_updates==(general_completed?1u:0u));
+#endif
    if(general_completed)assert(reads_retired>general_reads_before);
    general_reads_before=reads_retired;
    struct remesa_gears_scene_probe_request legacy={.version=2,.profile=general_opened.profile,.context=r->context,.budget_ms=r->budget_ms};
@@ -91,6 +119,16 @@ int __wrap_ioctl(int fd,unsigned long command,...)
 #endif
   const char *dir=getenv("REMESA_NATIVE_MODEL_OUTPUT");assert(dir);char path[4096];assert(snprintf(path,sizeof path,"%s/placement.bin",dir)>0);FILE *f=fopen(path,"rb");assert(f);
   assert(fread(&model_placement,1,sizeof model_placement,f)==sizeof model_placement&&model_placement.count==18&&fgetc(f)==EOF&&!fclose(f));
+#ifdef REMESA_GEARS_MODEL_PARAMETER
+  /* Resolve the PARAM owner's actual use entry in this recorded frontend
+   * graph. Binding order is not a role: the18th READ is not the PARAM BO. */
+  assert(snprintf(path,sizeof path,"%s/packet.bin",dir)>0);f=fopen(path,"rb");assert(f);
+  struct remesa_scene_packet p;assert(fread(&p,1,sizeof p,f)==sizeof p&&fgetc(f)==EOF&&!fclose(f));
+  assert(remesa_scene_packet_valid(&p));unsigned parameter_id=0;
+  for(unsigned i=0;i<p.use_count;i++)if(p.uses[i].byte_offset==160&&p.uses[i].program_bytes==8&&
+      p.uses[i].data_master==REMESA_USE_VERTEX){assert(!parameter_id);parameter_id=p.uses[i].id;}
+  assert(parameter_id&&(!general_parameter_id||general_parameter_id==parameter_id));general_parameter_id=parameter_id;
+#endif
   for(unsigned i=0;i<18;i++){
    const unsigned id=r->ids[i],k=id-32;assert(id==model_placement.bindings[i].id&&k<count&&bo[k].pin&&!bo[k].lease&&bo[k].va==model_placement.bindings[i].address&&bo[k].size==model_placement.bindings[i].bytes);
    if(model_placement.bindings[i].access==1){
