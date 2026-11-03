@@ -95,3 +95,26 @@ int remesa_gem_scene_states_check_locked(struct remesa_gem_private *loan,
  error=remesa_gem_scene_ta_check_locked(loan,views,count,actions,controls,use,ta);if(error)return error;
  return scene_states_build_checked(loan,views,count,controls,use,ta,out);
 }
+
+int remesa_gem_scene_state_images_check_locked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
+ const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,
+ struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *states)
+{
+ unsigned n,p;int error;
+ error=remesa_gem_scene_states_check_locked(loan,views,count,actions,controls,use,ta,states);
+ if(error)return error;
+ for(n=0;n<states->count;n++){
+  struct remesa_state_upload decoded;
+  for(p=0;p<count&&views[p].binding.id!=states->uploads[n].pds_id;p++);
+  if(p==count||!views[p].cpu)return -EACCES;
+  /* The preceding locked graph check proves this complete60-byte span and
+   * derives the consumed count from the actual upload, never TA capacity. */
+  const u8 *image=(const u8 *)views[p].cpu+states->uploads[n].pds_offset;
+  error=states->uploads[n].source_bytes==160?
+   remesa_parameter_upload_pds_image(image,60,&decoded):
+   remesa_state_upload_pds_image(image,60,states->uploads[n].source_bytes/4,&decoded);
+  if(error)return -error;
+ }
+ return 0;
+}

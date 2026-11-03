@@ -71,4 +71,27 @@ static inline int remesa_parameter_upload_auxiliary(const void *input,size_t ava
  if(!input||available<8||a>~(remesa_ta_ref_uptr)0-8)return EINVAL;
  return remesa_ta_ref_word(p)||remesa_ta_ref_word(p+4)!=0xf8040140u?EINVAL:0;
 }
+/* Complete committed images of the existing zero-initialized CPU producers.
+ * This adds no meaning to the previously unknown DATA cells: the selected
+ * constructor emits zero there, so a different value is not its image.
+ * Keep the original sparse checkers unchanged for their existing consumers.
+ * Only60 committed bytes are inspected, even when allocation capacity is64
+ * or larger. Output remains unchanged on any error. This is not execution
+ * admission or certification of the source ISP/PARAM payload. */
+static inline int remesa_state_upload_pds_image(const void *input,size_t available,
+ remesa_scene_u32 dwords,struct remesa_state_upload *out)
+{
+ const remesa_ta_ref_u8 *p=input;unsigned i;
+ if(!input||available<60||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-60)return EINVAL;
+ for(i=12;i<48;i++)if(p[i])return EINVAL;
+ return remesa_state_upload_pds(input,available,dwords,out);
+}
+static inline int remesa_parameter_upload_pds_image(const void *input,size_t available,
+ struct remesa_state_upload *out)
+{
+ const remesa_ta_ref_u8 *p=input;unsigned i;
+ if(!input||available<60||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-60)return EINVAL;
+ for(i=16;i<48;i++)if(p[i])return EINVAL;
+ return remesa_parameter_upload_pds(input,available,out);
+}
 #endif

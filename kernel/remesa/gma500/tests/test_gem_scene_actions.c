@@ -19,7 +19,7 @@
 #include "scene_service_model.inc"
 #include "scene_backend_model.inc"
 #include "scene_execute_model.inc"
-static bool parameter_upload_case,gears_fetch_case;
+static bool parameter_upload_case,gears_fetch_case,state_images_case;
 static void gears_fixture(u8 *image)
 {
  size_t n;const struct remesa_usse_cpu_gears_vertex_body body={1,9,37,REMESA_USSE_CPU_GEARS_TRIANGLES,0};
@@ -373,6 +373,34 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
   CHECK(states.uploads[2].source_id==ids[10]&&states.uploads[2].source_offset==1024&&
    states.uploads[2].source_bytes==160&&states.uploads[2].use_id==ids[10]&&states.uploads[2].use_offset==512);
   states_saved=states;
+  if(state_images_case){
+   u8 saved_images[4][60];u8 *images[4];CHECK(states.count==4);
+   CHECK(remesa_gem_scene_state_images_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL);
+   for(unsigned n=0;n<4;n++){
+    unsigned p;for(p=0;p<17&&views[p].binding.id!=states_saved.uploads[n].pds_id;p++);
+    CHECK(p<17&&views[p].cpu);images[n]=(u8 *)views[p].cpu+states_saved.uploads[n].pds_offset;
+    memcpy(saved_images[n],images[n],60);
+    unsigned start=states_saved.uploads[n].source_bytes==160?16:12;
+    memset(images[n]+start,0,48-start);
+   }
+   CHECK(!remesa_gem_scene_state_images_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states));
+   CHECK(vmap_calls==maps_before+12&&flushes==flush_before&&test_zeroed_pages==zero_before);
+   for(unsigned n=0;n<4;n++)for(unsigned byte=states_saved.uploads[n].source_bytes==160?16:12;byte<48;byte++){
+    images[n][byte]^=1;
+    CHECK(remesa_gem_scene_state_images_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL);
+    if(states_saved.uploads[n].source_bytes!=160||byte<40||byte>=44)
+     CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states));
+    images[n][byte]^=1;
+   }
+   /* A complete image is not a replacement for held graph validation. */
+   struct remesa_memory_view wrong[17];memcpy(wrong,views,sizeof wrong);wrong[10].cpu=NULL;
+   CHECK(remesa_gem_scene_state_images_check_locked(&loan,wrong,17,&plan,&controls,&use,&ta_refs,&states)<0);
+   CHECK(!remesa_gem_scene_state_images_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states));
+   for(unsigned n=0;n<4;n++)memcpy(images[n],saved_images[n],60);
+   CHECK(!remesa_gem_scene_states_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states));
+   CHECK(remesa_gem_scene_state_images_check_locked(&loan,views,17,&plan,&controls,&use,&ta_refs,&states)==-EINVAL);
+   goto unlock;
+  }
   memset(&vertices,0xa5,sizeof vertices);vertices_saved=vertices;
   if(!gears_fetch_case){
    CHECK(remesa_gem_scene_vertices_check_locked(&loan,views,17,&plan,&controls,&use,vertex_offset,&ta_refs,&states,&vertices)==-ENOENT&&
@@ -541,6 +569,11 @@ static void action_case(unsigned width,unsigned height,unsigned fault)
 }
 int main(int argc,char **argv)
 {
+ if(argc==2&&!strcmp(argv[1],"--state-images")){
+  parameter_upload_case=state_images_case=true;
+  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
+  puts("PASS complete ISP/PARAM PDS images on held native graph x4sizes, reserved-DATA mutations and invalid view refused, original sparse contract retained; modeled GPU0");return 0;
+ }
  if(argc==2&&!strcmp(argv[1],"--gears-fetch")){
   parameter_upload_case=gears_fetch_case=true;action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);
   puts("PASS actual gears CODE320/TA/PARAM/vertex/fragment/background/event closure, all2560 CODE bit mutations refused x4sizes; modeled GPU0");return 0;

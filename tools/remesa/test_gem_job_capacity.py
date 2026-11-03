@@ -111,6 +111,7 @@ def main():
      out=run(variant+'-execute-fault'+str(fault),runner+[str(exe),'--execute-fault',str(fault)],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
     out=run(variant+'-parameter-upload',runner+[str(exe),'--parameter-upload'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
     out=run(variant+'-gears-fetch',runner+[str(exe),'--gears-fetch'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
+    out=run(variant+'-state-images',runner+[str(exe),'--state-images'],6*1024**3 if runner else 768*1024**2);print(out.strip(),flush=True)
  if any(sha(Path(f))!=h for f,h in before.items()):raise RuntimeError('source changed during qualification')
  (o/'RESULT.json').write_text(json.dumps(dict(status='BOUND_SCENE_JOB_AND_GENERAL_SERVICE_MODEL_PASS' if a.scene_actions else 'COLD_DPM_ZERO_ORIGIN_MODEL_PASS' if a.dpm else 'RETAINED_JOB_AND_MMU_CAPACITY32_MODELS_PASS',GPU_operations=0,scope='Real transformed retained core/private loan/MMU auditor with modeled kernel primitives; no native executor/GPU qualification',sources=before,generated={str(f):sha(f) for f in [o/'remesa_gem_memory.c',o/'remesa_gem_memory.h',o/'test_gem_shim.h']},commands=rows),indent=2)+'\n')
 if __name__=='__main__':main()

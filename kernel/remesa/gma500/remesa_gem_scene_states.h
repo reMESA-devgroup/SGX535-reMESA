@@ -18,4 +18,14 @@ int remesa_gem_scene_states_check_locked(struct remesa_gem_private *,
  const struct remesa_memory_view *,unsigned,const struct remesa_gem_scene_actions *,
  const struct remesa_gem_scene_controls *,const struct remesa_gem_scene_use *,
  struct remesa_gem_scene_ta *scratch,struct remesa_gem_scene_states *);
+/* Additional ordinary-input prerequisite: revalidate the held upload graph,
+ * then authenticate the complete committed ISP/PARAM PDS constructor images.
+ * Existing sparse checker/LAB callers are unchanged. TA and STATE are scratch
+ * and can change on failure; only return0 certifies these PDS images. Does not
+ * certify source ISP semantics, other PDS objects, programs or native issue.
+ * Same locks/immutable job views as above; no additional allocation or MMIO. */
+int remesa_gem_scene_state_images_check_locked(struct remesa_gem_private *,
+ const struct remesa_memory_view *,unsigned,const struct remesa_gem_scene_actions *,
+ const struct remesa_gem_scene_controls *,const struct remesa_gem_scene_use *,
+ struct remesa_gem_scene_ta *scratch,struct remesa_gem_scene_states *scratch_states);
 #endif

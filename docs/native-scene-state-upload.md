@@ -1,5 +1,9 @@
 # Bound state-upload PDS and USE auxiliaries
 
+The original sparse checker below remains unchanged. The November 3 ordinary
+frontend follow-up adds a separate complete constructor-image prerequisite;
+it does not replace the LAB checker or enable a normal submission ioctl.
+
 The general native validator now follows the TA state references through their
 selected state-upload PDS and into the source DATA and count-specific USE
 auxiliary. This is one part of indirect closure validation, not a complete
@@ -58,3 +62,52 @@ background and event closure, fuller ISP/state semantics and unknown-field
 qualification, then ordered general native execution and physical validation.
 This helper alone must not be used to admit arbitrary unknown DATA or advertise
 full GPU/API support. The old canonical11 executor and LAB gates remain intact.
+
+## Complete constructor images for the ordinary draw route
+
+`remesa_state_upload_pds_image()` and `remesa_parameter_upload_pds_image()`
+reuse the existing field/CODE decoders and additionally require the untouched
+DATA cells to match the existing producer's zero initialization. This is an
+exact construction constraint, not a new interpretation of unknown fields.
+An object with different values can still pass the original sparse decoder;
+it does not pass this additional prerequisite.
+
+Both checks inspect only the committed 60 bytes. They neither read nor
+require zero in remaining allocation capacity, add CODE padding, hash buffers,
+transform vertices or execute the GPU. Decoded output is unchanged on failure.
+
+`remesa_gem_scene_state_images_check_locked()` first revalidates the existing
+held TA/state/source/USE graph, then checks every actual ISP/PARAM PDS upload
+with these complete-image helpers. It allocates no additional storage and
+uses the existing locks and views. Publication and retirement stay with the
+existing executor. Its TA/STATE arguments are scratch and can change on
+failure. Return zero covers these upload images only: source ISP semantics,
+other PDS images and normal runtime admission remain separate requirements.
+This function is not yet a live normal submitter.
+
+The OpenGL call benefiting from this prerequisite is ordinary `glDrawArrays`
+with the existing matrix/lighting vertex program. The frontend already builds
+that draw; independently admitting its complete uploads is necessary before
+connecting the normal Linux execution callback. No shader or encoder was
+reimplemented, and no LAB catalogue was broadened.
+
+The focused CPU test uses the actual unchanged state encoder:
+
+```sh
+cc -std=c11 -O2 -Wall -Wextra -Werror -Iinclude -Imesa/sgx535 \
+  mesa/sgx535/tests/test_state_upload_images.c \
+  mesa/sgx535/remesa_pds_structure.c -o /tmp/remesa-state-images
+/tmp/remesa-state-images
+```
+
+The joined retained-core model runner also executes `--state-images`, including
+held-graph and reserved-byte refusal cases at 1280x800, 640x640, 641x479 and
+1600x768. November 3 evidence is under
+`/home/gama/sgx535-offline/native-state-images-20261103/v1/`: 68 producer cases
+and 25,984 reserved-DATA/CODE bit mutations per native/UBSan/i486 variant,
+comparison with preserved ISP15/PARAM carriers, and the held-graph checks.
+These are offline results, with zero GPU operations and no performance claim.
+
+Rollback leaves the additional image prerequisite unused until the normal
+runtime has the remaining complete-input authority. The original sparse
+checker and consumers keep their contracts. No runtime gate is enabled.
