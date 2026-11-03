@@ -102,6 +102,61 @@ int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *c)
  return remesa_scene_service_bind(&c->service,&c->session,&c->service_plan)?-EINVAL:0;
 }
 
+static const u8 *scene_pds_image_view(const struct remesa_gem_scene_job *c,u32 id,u32 offset,u32 bytes)
+{
+ unsigned i;
+ for(i=0;i<c->count&&c->views[i].binding.id!=id;i++);
+ if(i==c->count||!c->views[i].cpu||c->loan.rules[i].access!=REMESA_MMU_GPU_READ||
+    c->loan.rules[i].cached!=1||offset>c->views[i].binding.bytes||
+    bytes>c->views[i].binding.bytes-offset)return NULL;
+ return (const u8 *)c->views[i].cpu+offset;
+}
+int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *c)
+{
+ struct retained_job *j;unsigned n,r;int error;const u8 *image;
+ if(!c||!c->memory||c->state!=REMESA_SCENE_JOB_PREPARED||!c->loan.live||
+    c->loan.memory!=c->memory||!c->count||c->count>REMESA_GEM_JOB_BINDINGS||
+    c->loan.execution_started||c->loan.host_published||c->service.started)return -EINVAL;
+ if(c->loan.ticket.generation!=c->snapshot.ticket.generation||
+    c->loan.ticket.operation!=c->snapshot.ticket.operation)return -EACCES;
+ j=ticket_job(c->memory,c->snapshot.ticket);
+ if(!j||j->state!=REMESA_JOB_PREPARED||j->commands!=c->snapshot.commands||
+    j->command_bytes!=c->snapshot.command_bytes)return -EACCES;
+ error=remesa_gem_scene_event_check_locked(&c->loan,c->views,c->count,&c->actions,&c->controls,&c->use,c->sections.vertices,
+  &c->ta,&c->states,&c->vertices,&c->fragments,&c->background,&c->event);if(error)return error;
+ error=scene_state_images_build_checked(c->views,c->count,&c->states);if(error)return error;
+ for(n=0;n<c->vertices.count;n++){
+  struct remesa_vertex_fetch decoded;
+  for(r=0;r<c->ta.reference_count;r++)if(c->ta.references[r].draw==n&&
+     c->ta.references[r].kind==(n?REMESA_TA_REF_DRAW_VERTEX:REMESA_TA_REF_PREFIX_VERTEX))break;
+  if(r==c->ta.reference_count)return -EPROTO;
+  image=scene_pds_image_view(c,c->ta.references[r].id,c->ta.references[r].byte_offset,64);
+  if(!image)return -EACCES;
+  error=remesa_vertex_fetch_pds_image(image,64,c->vertices.draws[n].stride_bytes/4,n?1:0,&decoded);
+  if(error)return -error;
+ }
+ for(n=0;n<c->fragments.count;n++){
+  struct remesa_fragment_task decoded;
+  image=scene_pds_image_view(c,c->fragments.draws[n].primary_id,c->fragments.draws[n].primary_offset,
+   c->fragments.draws[n].primary_bytes);if(!image)return -EACCES;
+  error=remesa_fragment_primary_image(image,c->fragments.draws[n].primary_bytes,n?1:0,&decoded);
+  if(error)return -error;
+ }
+ {
+  struct remesa_background_task decoded;
+  image=scene_pds_image_view(c,c->background.primary_id,c->background.primary_offset,64);
+  if(!image)return -EACCES;
+  error=remesa_background_primary_image(image,64,c->controls.command.width,c->controls.command.height,&decoded);
+  if(error)return -error;
+ }
+ {
+  struct remesa_event_fetch decoded;
+  image=scene_pds_image_view(c,c->event.event_id,c->event.event_offset,148);if(!image)return -EACCES;
+  error=remesa_event_fetch_image(image,148,&decoded);if(error)return -error;
+ }
+ return 0;
+}
+
 /* Default-PD authentication is deliberately before the MMU writer interval.
  * The original all-view checker remains unchanged. Writable targets must have
  * no borrowed CPU alias in this selected-view contract. */

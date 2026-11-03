@@ -18,6 +18,12 @@ int main(void)
   memset(image,0xa5,sizeof image);memset(mask,0x5a,sizeof mask);
   assert(!remesa_pds_structure_encode_psb_event_profile(&r,image,mask,400,&n)&&n==148&&!memcmp(image+64,oracle,84));
   assert(image[148]==0xa5&&mask[148]==0x5a);
+  assert(!remesa_event_fetch_image(image,sizeof image,&decoded));
+  for(unsigned i=0;i<148;i++)if(!mask[i])for(unsigned bit=0;bit<8;bit++){
+   image[i]^=1u<<bit;decoded=initial;
+   assert(remesa_event_fetch_image(image,sizeof image,&decoded)==EINVAL&&!memcmp(&decoded,&initial,sizeof decoded));
+   assert(!remesa_event_fetch_read(image,148,&decoded));image[i]^=1u<<bit;
+  }
   for(unsigned i=0;i<148;i++)if(!mask[i])image[i]=(unsigned char)(17*i);
   assert(!remesa_event_fetch_read(image,148,&decoded)&&decoded.source_address==r.source_allocation_address+offset&&
    decoded.end_lower19==fixups[e]&&decoded.transfer_lower19==fixups[t]);

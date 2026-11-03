@@ -48,4 +48,15 @@ static inline int remesa_background_primary(const void *input,size_t available,
  if((value.color_address&3)||!remesa_ta_ref_span(value.color_address,4))return ERANGE;
  *out=value;return 0;
 }
+/* Complete emitted BGRA8 primary; sparse unknown-field handling above is
+ * unchanged. Output is transactional through the existing decoder. */
+static inline int remesa_background_primary_image(const void *input,size_t available,
+ remesa_scene_u32 width,remesa_scene_u32 height,struct remesa_background_task *out)
+{
+ const remesa_ta_ref_u8 *p=input;unsigned i;
+ if(!input||available<64||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-64)return EINVAL;
+ for(i=4;i<8;i++)if(remesa_ta_ref_word(p+4*i))return EINVAL;
+ if(remesa_ta_ref_word(p+44))return EINVAL;
+ return remesa_background_primary(input,available,width,height,out);
+}
 #endif

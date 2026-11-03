@@ -582,7 +582,8 @@ int main(int argc,char **argv)
   parameter_upload_case=true;action_case(640,640,0);
   puts("PASS actual retained core/private loan + ordered PARAM TA/kernel source/PDS/EE checks, address/padding/CODE/RW/cache corruption refusal, cleanup; GPU0");return 0;
  }
- if(argc==3&&!strcmp(argv[1],"--replay")){scene_replay(argv[2]);return 0;}
+ if(argc==3&&!strcmp(argv[1],"--replay")){scene_replay(argv[2],false);return 0;}
+ if(argc==3&&!strcmp(argv[1],"--pds-images-replay")){scene_replay(argv[2],true);return 0;}
  if(argc==3){CHECK(!strcmp(argv[1],"--execute-fault"));execute_fault=(unsigned)strtoul(argv[2],NULL,10);CHECK(execute_fault>=1&&execute_fault<=10);action_case(640,640,14);CHECK(0);}
  CHECK(argc==1);
  action_case(1280,800,0);action_case(640,640,0);action_case(641,479,0);action_case(1600,768,0);

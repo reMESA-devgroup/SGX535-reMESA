@@ -59,4 +59,15 @@ static inline int remesa_fragment_secondary(const void *input,size_t available)
  if(!input||available<4||a>~(remesa_ta_ref_uptr)0-4)return EINVAL;
  return remesa_ta_ref_word(input)==0xaf000000u?0:EINVAL;
 }
+/* Complete zero-initialized constructor DATA plus the existing CODE checks.
+ * This certifies emitted bytes only, not shader semantics or execution. */
+static inline int remesa_fragment_primary_image(const void *input,size_t available,
+ remesa_scene_u32 input_color,struct remesa_fragment_task *out)
+{
+ const remesa_ta_ref_u8 *p=input;unsigned i,bytes=input_color?60:56;
+ if(!input||available<bytes||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-bytes)return EINVAL;
+ for(i=2;i<12;i++)if(i!=8&&!(input_color&&i==9))
+  if(remesa_ta_ref_word(p+4*i))return EINVAL;
+ return remesa_fragment_primary(input,available,input_color,out);
+}
 #endif

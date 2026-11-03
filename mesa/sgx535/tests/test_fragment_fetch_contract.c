@@ -24,6 +24,12 @@ int main(void)
   struct remesa_pds_structure shape;assert(!remesa_pds_structure_encode(&r,&shape));
   memset(image,0xa5,64);assert(!remesa_pds_structure_serialize(&shape,image,mask,64,&n)&&n==(color?60u:56u));
   put(image,shape.use_background|fixups[f]);memset(mask,255,4);
+  assert(!remesa_fragment_primary_image(image,sizeof image,color,&task));
+  for(unsigned i=0;i<n;i++)if(!mask[i])for(unsigned bit=0;bit<8;bit++){
+   image[i]^=1u<<bit;task=task_initial;
+   assert(remesa_fragment_primary_image(image,sizeof image,color,&task)==EINVAL&&!memcmp(&task,&task_initial,sizeof task));
+   assert(!remesa_fragment_primary(image,n,color,&task));image[i]^=1u<<bit;
+  }
   for(unsigned i=0;i<n;i++)if(!mask[i])image[i]=(unsigned char)(i*17);
   assert(!remesa_fragment_primary(image,n,color,&task)&&task.use_lower19==fixups[f]&&task.committed_bytes==n);
   assert(!remesa_fragment_primary(image,64,color,&task));memcpy(saved,image,64);

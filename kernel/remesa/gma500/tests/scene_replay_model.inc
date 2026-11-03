@@ -8,7 +8,62 @@ static void replay_read(const char *root,const char *name,void *out,size_t bytes
 }
 static u32 replay_id(const struct remesa_scene_fixture *f,const u32 *ids,u32 old)
 {for(unsigned i=0;i<f->count;i++)if(f->bindings[i].id==old)return ids[i];CHECK(0);return 0;}
-static void scene_replay(const char *root)
+static bool replay_pds_reserved(unsigned kind,unsigned byte)
+{
+ unsigned w=byte/4;
+ switch(kind){
+ case 0:return byte>=12&&byte<48;
+ case 1:return byte>=16&&byte<48;
+ case 2:return w>=2&&w<12&&w!=4&&w!=8;
+ case 3:return w>=2&&w<12&&w!=4&&w!=5&&w!=8&&w!=9;
+ case 4:return w>=2&&w<12&&w!=8;
+ case 5:return w>=2&&w<12&&w!=8&&w!=9;
+ case 6:return (w>=4&&w<8)||w==11;
+ case 7:return w==6||w==7||w==15;
+ default:CHECK(0);return false;
+ }
+}
+static void replay_pds_images(struct remesa_gem_scene_job *c)
+{
+ struct {u8 *bytes;unsigned length,kind;} spans[REMESA_GEM_SCENE_STATE_MAX+2*REMESA_GEM_SCENE_VERTEX_MAX+2];
+ unsigned count=0,n,r,mutations=0,maps=vmap_calls,clears=test_zeroed_pages,flush=flushes;
+ CHECK(!remesa_gem_scene_job_pds_images_check_locked(c));
+#define ADD_PDS(id,offset,length_,kind_) do { \
+  CHECK(count<sizeof spans/sizeof spans[0]); \
+  spans[count].bytes=(u8 *)scene_pds_image_view(c,id,offset,length_);CHECK(spans[count].bytes); \
+  spans[count].length=length_;spans[count++].kind=kind_; \
+ } while(0)
+ for(n=0;n<c->states.count;n++)ADD_PDS(c->states.uploads[n].pds_id,c->states.uploads[n].pds_offset,60,
+  c->states.uploads[n].source_bytes==160?1u:0u);
+ for(n=0;n<c->vertices.count;n++){
+  for(r=0;r<c->ta.reference_count;r++)if(c->ta.references[r].draw==n&&
+     c->ta.references[r].kind==(n?REMESA_TA_REF_DRAW_VERTEX:REMESA_TA_REF_PREFIX_VERTEX))break;
+  CHECK(r<c->ta.reference_count);ADD_PDS(c->ta.references[r].id,c->ta.references[r].byte_offset,64,n?3u:2u);
+ }
+ for(n=0;n<c->fragments.count;n++)ADD_PDS(c->fragments.draws[n].primary_id,c->fragments.draws[n].primary_offset,
+  c->fragments.draws[n].primary_bytes,n?5u:4u);
+ ADD_PDS(c->background.primary_id,c->background.primary_offset,64,6u);
+ ADD_PDS(c->event.event_id,c->event.event_offset,148,7u);
+#undef ADD_PDS
+ for(n=0;n<count;n++)for(unsigned byte=0;byte<spans[n].length;byte++)if(replay_pds_reserved(spans[n].kind,byte)){
+  spans[n].bytes[byte]^=1;
+  CHECK(remesa_gem_scene_job_pds_images_check_locked(c)==-EINVAL);
+  if(spans[n].kind!=1||byte<40||byte>=44)
+   CHECK(!remesa_gem_scene_event_check_locked(&c->loan,c->views,c->count,&c->actions,&c->controls,&c->use,c->sections.vertices,
+    &c->ta,&c->states,&c->vertices,&c->fragments,&c->background,&c->event));
+  spans[n].bytes[byte]^=1;mutations++;
+ }
+ CHECK(!remesa_gem_scene_job_pds_images_check_locked(c));
+ c->snapshot.ticket.operation++;CHECK(remesa_gem_scene_job_pds_images_check_locked(c)==-EACCES);c->snapshot.ticket.operation--;
+ c->loan.host_published=true;CHECK(remesa_gem_scene_job_pds_images_check_locked(c)==-EINVAL);c->loan.host_published=false;
+ void *saved=c->views[0].cpu;c->views[0].cpu=NULL;
+ CHECK(remesa_gem_scene_job_pds_images_check_locked(c)<0);c->views[0].cpu=saved;
+ CHECK(!remesa_gem_scene_job_pds_images_check_locked(c));
+ CHECK(!c->service.session&&!c->service.started&&!c->loan.execution_started&&!c->loan.host_published);
+ CHECK(vmap_calls==maps&&test_zeroed_pages==clears&&flushes==flush);
+ printf("PASS complete PDS images: %u actual producer objects, %u reserved-byte mutations, stale/published/view refusal, no map/clear/flush/issue; GPU0\n",count,mutations);
+}
+static void scene_replay(const char *root,bool check_pds)
 {
  struct remesa_scene_fixture image;struct remesa_scene_packet packet;
  replay_read(root,"placement.bin",&image,sizeof image);replay_read(root,"packet.bin",&packet,sizeof packet);
@@ -56,6 +111,7 @@ static void scene_replay(const char *root)
  struct remesa_gem_scene_job *c=calloc(1,sizeof(*c));CHECK(c);
  int error=remesa_gem_scene_packet_prepare(s,&packet,&guard,c);
  printf("Mesa producer replay %ux%u: prepare=%d\n",packet.actions.width,packet.actions.height,error);fflush(stdout);CHECK(!error);
+ if(check_pds){mutex_lock(&s->lock);replay_pds_images(c);mutex_unlock(&s->lock);}
  execute_context=c;execute_phase=execute_stages=execute_samples=execute_flushes=0;
  struct sgx535_gma500_fixed_backend backend={0};struct remesa_stream_observation observation={0};
  test_pfn_hook=execute_default_pfn;test_flush_hook=execute_flush;

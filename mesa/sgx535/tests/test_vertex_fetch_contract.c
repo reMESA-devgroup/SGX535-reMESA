@@ -13,6 +13,12 @@ int main(void)
   int e=compiled?remesa_pds_structure_encode_compiled_vertex_image(&r,image,mask,sizeof image,&n):
    remesa_pds_structure_encode_vertex_image(&r,image,mask,sizeof image,&n);
   assert(!e&&n==64&&image[64]==0xa5);
+  assert(!remesa_vertex_fetch_pds_image(image,sizeof image,stride,compiled,&out));
+  for(unsigned i=0;i<64;i++)if(!mask[i])for(unsigned bit=0;bit<8;bit++){
+   image[i]^=1u<<bit;out=initial;
+   assert(remesa_vertex_fetch_pds_image(image,sizeof image,stride,compiled,&out)==EINVAL&&!memcmp(&out,&initial,sizeof out));
+   assert(!remesa_vertex_fetch_pds(image,64,stride,compiled,&out));image[i]^=1u<<bit;
+  }
   for(unsigned i=0;i<64;i++)if(!mask[i])image[i]=(unsigned char)(i*17);
   assert(!remesa_vertex_fetch_pds(image,64,stride,compiled,&out)&&out.source_address==0x20004100&&
    out.stride_bytes==stride*4&&out.use_lower19==fixups[f]&&out.compiled==compiled);

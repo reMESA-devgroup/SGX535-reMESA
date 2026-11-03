@@ -26,6 +26,18 @@ static inline int remesa_vertex_fetch_pds(const void *input,size_t available,
  if((value.source_address&3)||!remesa_ta_ref_span(value.source_address,value.stride_bytes))return ERANGE;
  value.use_lower19=task&0x7ffffu;*out=value;return 0;
 }
+/* Complete emitted image of the existing copy/compiled constructor, not a
+ * new interpretation of its masked cells. Extra capacity is not consumed.
+ * Keep the original sparse decoder and its callers unchanged. */
+static inline int remesa_vertex_fetch_pds_image(const void *input,size_t available,
+ remesa_scene_u32 stride_dwords,remesa_scene_u32 compiled,struct remesa_vertex_fetch *out)
+{
+ const remesa_ta_ref_u8 *p=input;unsigned i;
+ if(!input||available<64||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-64)return EINVAL;
+ for(i=2;i<12;i++)if(i!=4&&i!=8&&!(compiled&&(i==5||i==9)))
+  if(remesa_ta_ref_word(p+4*i))return EINVAL;
+ return remesa_vertex_fetch_pds(input,available,stride_dwords,compiled,out);
+}
 /* Inspect only the active little-endian u16 triangle-list window. Vertex count
  * describes committed tightly packed records, never rounded BO capacity.
  * No vertex arithmetic/software rendering. Output is disjoint/transactional. */

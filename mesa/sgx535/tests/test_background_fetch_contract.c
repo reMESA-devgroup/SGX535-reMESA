@@ -25,6 +25,12 @@ int main(void)
   const struct remesa_pds_background_request primary={0x44000000,fixups[f],4,width,height};
   memset(image,0xa5,sizeof image);memset(mask,0,sizeof mask);
   assert(!remesa_pds_structure_encode_background(&primary,image,mask,sizeof image,&n)&&n==64&&image[64]==0xa5);
+  assert(!remesa_background_primary_image(image,sizeof image,width,height,&task));
+  for(unsigned i=0;i<64;i++)if(!mask[i])for(unsigned bit=0;bit<8;bit++){
+   image[i]^=1u<<bit;task=initial_task;
+   assert(remesa_background_primary_image(image,sizeof image,width,height,&task)==EINVAL&&!memcmp(&task,&initial_task,sizeof task));
+   assert(!remesa_background_primary(image,64,width,height,&task));image[i]^=1u<<bit;
+  }
   for(unsigned i=0;i<64;i++)if(!mask[i])image[i]=(unsigned char)(17*i);
   assert(!remesa_background_primary(image,64,width,height,&task)&&task.color_address==0x44000000&&task.use_lower19==fixups[f]);
   assert(!remesa_background_primary(image,96,width,height,&task));memcpy(saved,image,sizeof image);

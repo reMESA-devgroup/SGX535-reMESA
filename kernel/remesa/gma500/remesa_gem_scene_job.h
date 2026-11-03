@@ -39,6 +39,14 @@ int remesa_gem_scene_job_prepare(struct remesa_gem_memory *,
  * Binds the actual prepared plans; does not start a service or certify source
  * ownership/retirement. Caller authenticates the immutable input construction. */
 int remesa_gem_scene_job_bind_service_locked(struct remesa_gem_scene_job *);
+/* Separate complete emitted PDS-image prerequisite for ordinary admission.
+ * Same endpoint/MMU locks, bound private root and immutable held views as the
+ * closure checker; revalidates that closure once and uses its scratch plans.
+ * No allocation, hashes, publication, MMIO, service binding or execution.
+ * Does NOT authenticate source ISP/vertex/PARAM value domains, DPM origin or
+ * source ownership; not a full input/execution certificate or runtime gate.
+ * Existing LAB callers of bind_service are unchanged. */
+int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *);
 /* Cancel only unissued/unbound preparation. Failure retains the context and
  * holds; never infer retirement/root restoration or release source state. */
 int remesa_gem_scene_job_cancel(struct remesa_gem_scene_job *);

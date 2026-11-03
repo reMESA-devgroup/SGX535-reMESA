@@ -25,6 +25,15 @@ static inline int remesa_event_fetch_read(const void *input,size_t available,str
  if((value.source_address&3)||!remesa_ta_ref_span(value.source_address,16))return ERANGE;
  *out=value;return 0;
 }
+/* Complete emitted fixed event image, with untouched DATA6/7/15 required to
+ * match the existing producer's zeros. No new ISA/fetch/execution claim. */
+static inline int remesa_event_fetch_image(const void *input,size_t available,struct remesa_event_fetch *out)
+{
+ const remesa_ta_ref_u8 *p=input;
+ if(!input||available<148||(remesa_ta_ref_uptr)input>~(remesa_ta_ref_uptr)0-148)return EINVAL;
+ if(remesa_ta_ref_word(p+24)||remesa_ta_ref_word(p+28)||remesa_ta_ref_word(p+60))return EINVAL;
+ return remesa_event_fetch_read(input,available,out);
+}
 /* Original BGRA8 event target DATA16. Pitch, not logical width, is the low
  * extent dimension. Caller already checked full COLOR backing/ownership. */
 static inline int remesa_event_target_check(const void *input,size_t available,

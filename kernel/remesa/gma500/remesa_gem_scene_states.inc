@@ -96,14 +96,13 @@ int remesa_gem_scene_states_check_locked(struct remesa_gem_private *loan,
  return scene_states_build_checked(loan,views,count,controls,use,ta,out);
 }
 
-int remesa_gem_scene_state_images_check_locked(struct remesa_gem_private *loan,
- const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
- const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,
- struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *states)
+/* Internal consumer of already checked, immutable held plans. The complete
+ * scene PDS prerequisite uses this after the event closure, avoiding another
+ * traversal of the same action/control/TA/source graph. */
+static int scene_state_images_build_checked(const struct remesa_memory_view *views,
+ unsigned count,const struct remesa_gem_scene_states *states)
 {
  unsigned n,p;int error;
- error=remesa_gem_scene_states_check_locked(loan,views,count,actions,controls,use,ta,states);
- if(error)return error;
  for(n=0;n<states->count;n++){
   struct remesa_state_upload decoded;
   for(p=0;p<count&&views[p].binding.id!=states->uploads[n].pds_id;p++);
@@ -117,4 +116,12 @@ int remesa_gem_scene_state_images_check_locked(struct remesa_gem_private *loan,
   if(error)return -error;
  }
  return 0;
+}
+int remesa_gem_scene_state_images_check_locked(struct remesa_gem_private *loan,
+ const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_actions *actions,
+ const struct remesa_gem_scene_controls *controls,const struct remesa_gem_scene_use *use,
+ struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *states)
+{
+ int error=remesa_gem_scene_states_check_locked(loan,views,count,actions,controls,use,ta,states);
+ return error?error:scene_state_images_build_checked(views,count,states);
 }
