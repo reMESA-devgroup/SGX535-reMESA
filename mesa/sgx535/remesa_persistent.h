@@ -12,6 +12,7 @@
 #include "remesa/scene_use_limits.h"
 #include "remesa/ta_references.h"
 #include "remesa/scene_packet.h"
+#include "remesa/parameter_window.h"
 #define REMESA_PERSISTENT_BUFFERS 32
 /* Internal provider seam, NOT ioctl ABI. All calls/receipts require external
  * serialization and an authenticated provider. GEM ownership transfers even
@@ -893,6 +894,17 @@ struct remesa_persistent_scene_ta {
 };
 int remesa_persistent_scene_ta_snapshot(const struct remesa_device *,
  struct remesa_scene_capture,struct remesa_persistent_scene_ta *);
+/* Data windows of the actual PARAM owners referenced by this capture's TA.
+ * Works after public owner deletion. Pure metadata, not a write lease, native
+ * admission or permission to alter an in-flight capture. Same external lock
+ * and unchanged/disjoint-output contract as the other scene snapshots. */
+struct remesa_persistent_scene_parameters {
+ uint64_t owner,serial;uint32_t draw_count,window_count;
+ struct {uint32_t draw;struct remesa_parameter_window window;}
+  windows[REMESA_TA_REFERENCE_MAX_DRAWS];
+};
+int remesa_persistent_scene_parameters_snapshot(const struct remesa_device *,
+ struct remesa_scene_capture,struct remesa_persistent_scene_parameters *);
 /* Exact committed geometry windows for prefix + each draw in the frozen TA.
  * Metadata only: no provider I/O, index scan, shader validation or admission.
  * Frontend index validation does not replace the native actual-input check. */

@@ -34,6 +34,25 @@ int main(int argc,char **argv)
  struct remesa_persistent_scene_use use;struct remesa_persistent_scene_ta ta;struct remesa_persistent_scene_vertices vertices;
  CHECK(!remesa_persistent_scene_use_snapshot(&d,capture,&use)&&use.entry_count==11);
  CHECK(!remesa_persistent_scene_ta_snapshot(&d,capture,&ta));CHECK(!remesa_persistent_scene_vertices_snapshot(&d,capture,&vertices));
+ struct remesa_persistent_scene_parameters params;
+ unsigned maps=f.cpu_maps,reads=f.reads,writes=f.writes,creates=f.creates;
+ CHECK(!remesa_persistent_scene_parameters_snapshot(&d,capture,&params));
+ CHECK(params.owner==capture.owner&&params.serial==capture.serial&&params.draw_count==1&&params.window_count==1);
+ const struct remesa_parameter_window *window=&params.windows[0].window;
+ CHECK(params.windows[0].draw==1&&remesa_parameter_window_valid(window)&&window->coefficient_dwords==36&&
+  window->effective_source_dwords==37&&window->transfer_dwords==40&&window->allocation_bytes==4096&&
+  window->source_offset==0&&window->use_offset==160&&window->pds_offset==192&&window->ta_offset==256);
+ CHECK(get(&f,window->id)->bytes&&shader_pds_le32(get(&f,window->id)->bytes)==window->gpu_va);
+ CHECK(!memcmp(get(&f,window->id)->bytes+4,coefficients,sizeof coefficients));
+ for(unsigned off=0;off<320;off++)CHECK(remesa_parameter_window_patch_valid(window,window->id,off,4)==
+  (off>=4&&off<=144&&!(off&3)));
+ struct remesa_persistent_scene_parameters untouched,saved_params;memset(&untouched,0xa5,sizeof untouched);saved_params=untouched;
+ struct remesa_scene_capture stale=capture;stale.serial++;
+ CHECK(remesa_persistent_scene_parameters_snapshot(&d,stale,&untouched)==ESTALE&&!memcmp(&untouched,&saved_params,sizeof untouched));
+ CHECK(remesa_persistent_scene_parameters_snapshot(&d,capture,(void *)((unsigned char *)&untouched+1))==EINVAL);
+ CHECK(remesa_persistent_scene_parameters_snapshot(&d,capture,color)==EINVAL);
+ CHECK(remesa_persistent_scene_parameters_snapshot(&d,capture,d.priv)==EINVAL);
+ CHECK(f.cpu_maps==maps&&f.reads==reads&&f.writes==writes&&f.creates==creates);
  unsigned states=0;
  for(unsigned i=0;i<ta.reference_count;i++)if(ta.references[i].kind==REMESA_TA_REF_DRAW_STATE){
   const unsigned char *pds=get(&f,ta.references[i].handle)->bytes+ta.references[i].byte_offset;
@@ -42,7 +61,12 @@ int main(int argc,char **argv)
  CHECK(states==1);
  for(unsigned i=0;i<18;i++)if(footprint.allocations[i].access==3){struct backing *b=get(&f,footprint.allocations[i].handle);for(size_t j=0;j<b->length;j++)CHECK(b->bytes[j]==0xa5);}
  scene_capture_export(&f,&footprint,&packet);
- d.ops->destroy_bo(d.priv,parameters);CHECK(!remesa_persistent_scene_capture_release(&d,capture));
+ d.ops->destroy_bo(d.priv,parameters);
+ CHECK(!remesa_persistent_scene_parameters_snapshot(&d,capture,&untouched)&&untouched.owner==params.owner&&
+  untouched.serial==params.serial&&untouched.draw_count==1&&untouched.window_count==1&&
+  untouched.windows[0].draw==1&&!memcmp(&untouched.windows[0].window,window,sizeof(*window)));
+ CHECK(!remesa_persistent_scene_capture_release(&d,capture));
+ CHECK(remesa_persistent_scene_parameters_snapshot(&d,capture,&untouched)==ESTALE);
  d.ops->destroy_bo(d.priv,color);d.ops->destroy_bo(d.priv,depth);
  CHECK(f.creates==f.destroys&&f.pins==f.unpins);CHECK(!remesa_persistent_close(&d));
 #if defined(REMESA_WITH_NIR) && defined(REMESA_TEST_REAL_NIR_BUILDER)

@@ -1009,6 +1009,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
         components['remesa_gears_scene_probe_uapi.h'] = (root / 'include/remesa/gears_scene_probe_uapi.h').read_text().replace('"scene_probe_uapi.h"','"remesa_scene_probe_uapi.h"').encode()
         components['remesa_gears_scene_probe_envelope.h'] = (root / 'include/remesa/gears_scene_probe_envelope.h').read_text().replace('"gears_scene_probe_uapi.h"','"remesa_gears_scene_probe_uapi.h"').encode()
         components['remesa_scene_packet.h'] = (root / 'include/remesa/scene_packet.h').read_bytes()
+        components['remesa_parameter_window.h'] = (root / 'include/remesa/parameter_window.h').read_bytes()
         components['remesa_private_probe_uapi.h'] = (root / 'include/remesa/private_probe_uapi.h').read_bytes()
         components['remesa_private_session_lab_uapi.h'] = (root / 'include/remesa/private_session_lab_uapi.h').read_bytes()
     for name in ['remesa_twod.c', 'remesa_twod.h']:

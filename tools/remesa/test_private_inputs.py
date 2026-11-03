@@ -19,6 +19,7 @@ def main():
  # guards. This fixture does not instantiate the unrelated scene executor.
  expanded,header=stage.job_capacity_sources(raw.decode(),(native/'remesa_gem_memory.h').read_text())
  (o/'remesa_gem_memory.h').write_text(header)
+ (o/'remesa_parameter_window.h').write_bytes((w/'include/remesa/parameter_window.h').read_bytes())
  actual=stage.private_file_lost_sources(stage.dpm_origin_source(expanded))
  actual=stage.replace_once(actual,'#include "remesa_private_session_scene.inc"\n','')
  (o/'private_memory_actual.c').write_text(actual+'\n#include "remesa_gem_dpm.inc"\n')
@@ -40,6 +41,7 @@ def main():
  files=[Path(__file__).resolve(),Path(stage.__file__).resolve(),test,a.shim,native/'remesa_gem_memory.c',native/'remesa_pds_write_guard.h',o/'private_memory_actual.c',o/'remesa_gem_memory.h',w/'kernel/remesa/gma500/remesa_gem_job_limits.h',w/'kernel/remesa/gma500/remesa_private_dpm_cache.inc']
  files += [w/'kernel/remesa/gma500'/n for n in ['remesa_private_inputs.inc','remesa_private_session.inc','remesa_private_session_source.inc','remesa_private_session_dpm.inc','remesa_gem_dpm.inc','remesa_private_session.h']]
  files.append(w/'kernel/remesa/gma500/remesa_private_scene_inputs.inc')
+ files.append(w/'include/remesa/parameter_window.h')
  if a.dpm_session or a.scene_inputs or a.scene_input_patch:files.append(w/'kernel/remesa/gma500/tests/test_private_inputs.c')
  result=dict(status='ACTUAL_SEALED_SCENE_INPUT_PATCH_PASS' if a.scene_input_patch else 'ACTUAL_GENERAL_SCENE_READ_OWNERSHIP_PASS' if a.scene_inputs else 'ACTUAL_GENERAL_DPM_SESSION_WRITE_EXCLUSION_PASS' if a.dpm_session else 'ACTUAL_PRIVATE_INPUT_SEALS_AND_MEMORY_TRANSFERS_PASS',GPU_operations=0,scope='actual memory request/job/lease/seal/transfer/release and original PDS guard; GEM/MMU/PM/source/initial authentication modeled; scene executor excluded; not warm reuse, hardware or shader qualification',sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in files},commands=rows)
  (o/'RESULT.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps({'status':result['status'],'variants':len(variants)}))

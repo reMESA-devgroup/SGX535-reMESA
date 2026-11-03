@@ -33,6 +33,34 @@ policy or failed temporary mapping changes no content. The current READ loan
 permissions already forbid GPU writes to the input, so this operation needs
 no GPU-to-CPU transfer of device-written data.
 
+## Parameter windows from the captured graph
+
+`remesa_persistent_scene_parameters_snapshot` now resolves each emitted TA
+parameter reference to its actual held PARAM owner. It reports the source,
+coefficient, transfer, USE, PDS and TA extents through
+`remesa_parameter_window`. It also works after the public parameter reference
+has been deleted. It performs no provider read, allocation or cache operation
+and grants no write lease. The currently admitted TA graph retains its existing
+36-word coefficient restriction.
+
+The shared window validator separates coefficient bytes from the self-address
+prefix, transfer padding, reserved gaps and executable/command ranges. A patch
+may replace a DWORD subset of the coefficient range, including one word.
+This structural validation is not a PARAM/DMA encoder or program validator;
+initial admission must still establish the actual object kind and image.
+
+`remesa_private_session_patch_scene_parameters` copies a trusted policy and
+checks its context, ID, GPU address and allocation size against the live sealed
+backing while the transaction holds both locks. The generation in a host
+window identifies the frontend owner; native generation checking continues
+to use the sealed kernel ID. Its optional bounded-float rule matches the old
+restricted parameter profiles. That numeric bound is not a proposed universal
+OpenGL uniform restriction.
+
+There is still no ioctl or general-session caller for this update adapter.
+In particular, accepting window metadata structurally does not make an
+untrusted userspace description proof that a CODE object is a PARAM owner.
+
 ## Verification and integration still required
 
 Evidence is under
@@ -48,6 +76,16 @@ forbidden prefix and partial writes, bounds/alignment, nonfinite values,
 jobs/aliases/leases/quarantine, mapping failure, unchanged bytes outside the
 window, retained mappings and exactly one affected page's cache publication.
 Existing READ-seal, DPM-seal and eleven-role input tests remain separate.
+
+The next layer is tested under
+`/home/gama/sgx535-offline/parameter-data-policy-20261103/v1`.
+Shared bounds/bit-pattern tests cover 1–127 coefficient words in native,
+UBSan and i486. The actual typed kernel adapter also tests mismatched live
+identity and single-word patches. A coherent build of current driver objects
+with the qualified generic Mesa libraries exercises captured windows at
+1280×800, 640×640, 641×479 and 1600×768, plus the existing captured frontend,
+COLOR transfer, context and legacy tests. All are CPU models, not new GPU
+qualification.
 
 Before making this callable by the frontend, admission must bind the real
 parameter DATA window from the existing encoder metadata; the test policy is

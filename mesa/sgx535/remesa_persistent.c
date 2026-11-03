@@ -3640,6 +3640,40 @@ int remesa_persistent_scene_ta_snapshot(const struct remesa_device *device,
  if(counts.references!=value.reference_count||counts.draws!=c->footprint.draw_count)return ESTALE;
  value.draw_count=counts.draws;*out=value;return 0;
 }
+int remesa_persistent_scene_parameters_snapshot(const struct remesa_device *device,
+ struct remesa_scene_capture token,struct remesa_persistent_scene_parameters *out)
+{
+ if((uintptr_t)out%_Alignof(struct remesa_persistent_scene_parameters))return EINVAL;
+ int e=depth_output_check(device,out,sizeof(*out));if(e)return e;
+ struct persistent *d=device->priv;struct scene_capture *c=NULL;
+ e=scene_capture_lookup(d,token,&c);if(e)return e;
+ struct remesa_persistent_scene_ta ta;
+ e=remesa_persistent_scene_ta_snapshot(device,token,&ta);if(e)return e;
+ struct remesa_persistent_scene_parameters value={.owner=token.owner,.serial=token.serial,.draw_count=ta.draw_count};
+ for(unsigned r=0;r<ta.reference_count;r++)if(ta.references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS){
+  if(value.window_count==REMESA_TA_REFERENCE_MAX_DRAWS)return E2BIG;
+  struct memory *b=NULL;
+  for(unsigned i=0;i<c->count;i++)if(c->held[i]->handle==ta.references[r].handle){b=c->held[i];break;}
+  if(!b||!b->isp_update||!b->readable||b->token.generation!=ta.references[r].generation||
+     b->state_kind!=REMESA_PERSISTENT_STATE_VERTEX_PARAMETERS)return ESTALE;
+  if(b->state_bytes>UINT32_MAX||(b->state_bytes&3))return ERANGE;
+  struct remesa_parameter_window w={.owner=token.owner,.generation=b->token.generation,
+   .gpu_va=b->va,.id=b->handle,.allocation_bytes=(uint32_t)b->allocated,
+   .coefficient_dwords=b->state_parameter_dwords,.effective_source_dwords=1u+b->state_parameter_dwords,
+   .transfer_dwords=(uint32_t)(b->state_bytes/4),.use_offset=(uint32_t)b->state_use_offset,.use_bytes=8,
+   .pds_offset=(uint32_t)b->state_pds_offset,.pds_bytes=60,.ta_offset=(uint32_t)b->state_ta_offset,.ta_bytes=8};
+  if(b->allocated>UINT32_MAX||b->state_use_offset>UINT32_MAX||b->state_pds_offset>UINT32_MAX||
+     b->state_ta_offset>UINT32_MAX||!remesa_parameter_window_valid(&w))return ERANGE;
+  unsigned i;
+  for(i=0;i<c->footprint.allocation_count;i++)if(c->footprint.allocations[i].handle==b->handle)break;
+  if(i==c->footprint.allocation_count||c->footprint.allocations[i].access!=REMESA_ACCESS_READ||
+     c->footprint.allocations[i].generation!=w.generation||c->footprint.allocations[i].gpu_va!=w.gpu_va)
+   return EACCES;
+  unsigned n=value.window_count++;
+  value.windows[n].draw=ta.references[r].draw;value.windows[n].window=w;
+ }
+ *out=value;return 0;
+}
 int remesa_persistent_scene_vertices_snapshot(const struct remesa_device *device,
  struct remesa_scene_capture token,struct remesa_persistent_scene_vertices *out)
 {

@@ -4,6 +4,7 @@
  * bytes and derives the READ mask from the actual prepared private loan. */
 #define REMESA_PRIVATE_SCENE_INPUT_SEALS 1
 #include "remesa_private_session.h"
+#include "remesa_parameter_window.h"
 static int scene_input_objects_locked(struct remesa_gem_memory *s)
 {
  unsigned i,k;u32 mask=s->private_scene_input_mask;
@@ -64,6 +65,33 @@ int remesa_private_session_seal_scene_inputs(struct remesa_gem_memory *s,
  s->private_scene_input_mask=mask;s->private_scene_binding_count=j->count;error=0;
  unlock:mutex_unlock(&s->lock);
  done:mutex_unlock(&endpoint_lock);return error;
+}
+
+struct scene_parameter_patch_context {
+ struct remesa_gem_memory *memory;
+ const struct remesa_parameter_patch_policy *policy;
+};
+static int scene_parameter_patch_validate(const void *opaque,u32 id,u64 offset,
+ const void *data,unsigned bytes)
+{
+ const struct scene_parameter_patch_context *c=opaque;
+ const struct remesa_parameter_window *w=&c->policy->window;
+ const struct backing *b=&c->memory->bo[id&31];
+ /* Called only under both locks, after live READ ID/generation validation. */
+ if(w->owner!=c->memory->context||w->gpu_va!=b->va.start||
+    w->allocation_bytes!=b->gem.size||!remesa_parameter_window_patch_valid(w,id,offset,bytes))return -EACCES;
+ return remesa_parameter_patch_bounded_valid(c->policy,id,offset,data,bytes)?0:-ERANGE;
+}
+int remesa_private_session_patch_scene_parameters(struct remesa_gem_memory *s,
+ const void *owner,u64 retired_operation,const struct remesa_parameter_patch_policy *policy,
+ u32 id,u64 offset,const void *data,unsigned bytes)
+{
+ struct remesa_parameter_patch_policy saved;
+ struct scene_parameter_patch_context c={s,&saved};
+ if(!policy)return -EINVAL;
+ saved=*policy;if(!remesa_parameter_window_valid(&saved.window))return -EINVAL;
+ return remesa_private_session_patch_scene_input(s,owner,retired_operation,
+  id,offset,data,bytes,&c,scene_parameter_patch_validate);
 }
 int remesa_private_session_scene_inputs_locked(struct remesa_gem_memory *s,
  struct remesa_memory_ticket t,u32 mask)

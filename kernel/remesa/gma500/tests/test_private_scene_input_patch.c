@@ -134,6 +134,32 @@ int main(void)
  /* Stable cached mappings require no additional vmap/vunmap. */
  b->cached_job_view=b->gem.bytes;maps=vmap_calls;unsigned unmaps=vunmap_calls;
  CHECK(!patch(policy.id,4,replacement,144)&&vmap_calls==maps&&vunmap_calls==unmaps);
+ /* Actual typed adapter: producer metadata is an injected admission policy;
+  * live context/ID/address/size are independently checked under real locks. */
+ struct remesa_parameter_patch_policy typed={.window={.owner=77,.generation=19,.gpu_va=b->va.start,
+  .id=policy.id,.allocation_bytes=4096,.coefficient_dwords=36,.effective_source_dwords=37,
+  .transfer_dwords=40,.use_offset=160,.use_bytes=8,.pds_offset=192,.pds_bytes=60,
+  .ta_offset=256,.ta_bytes=8},.maximum_abs_bits=0x44800000u};
+ CHECK(remesa_parameter_window_valid(&typed.window));
+ struct remesa_parameter_patch_policy saved=typed;
+ for(unsigned fault=0;fault<6;fault++){
+  switch(fault){
+   case 0:typed.window.owner++;break;case 1:typed.window.gpu_va+=4096;break;
+   case 2:typed.window.allocation_bytes=8192;break;case 3:typed.window.id^=32;break;
+   case 4:typed.maximum_abs_bits=0x7f800000;break;case 5:typed.window.generation=0;break;
+  }
+  unsigned old_flush=flushes;
+  CHECK(remesa_private_session_patch_scene_parameters(memory,&token,42,&typed,policy.id,4,replacement,144)!=0);
+  CHECK(flushes==old_flush&&!memcmp(b->gem.bytes,expected,sizeof(expected)));typed=saved;
+ }
+ CHECK(remesa_private_session_patch_scene_parameters(memory,&token,42,&typed,policy.id,0,replacement,4)==-EACCES);
+ CHECK(remesa_private_session_patch_scene_parameters(memory,&token,42,&typed,policy.id,148,replacement,4)==-EACCES);
+ CHECK(!remesa_private_session_patch_scene_parameters(memory,&token,42,&typed,policy.id,4,replacement,144));
+ CHECK(!memcmp(b->gem.bytes,expected,sizeof(expected)));
+ /* A single coefficient can change without uploading prefix/padding/CODE. */
+ CHECK(!remesa_private_session_patch_scene_parameters(memory,&token,42,&typed,policy.id,144,replacement,4));
+ memcpy(expected+144,replacement,4);
+ CHECK(!memcmp(b->gem.bytes,expected,sizeof(expected))&&b->input_seal==2);
  b->cached_job_view=NULL;test_flush_hook=NULL;
  memory->private_source_held=false;
  CHECK(!remesa_private_session_release(memory,&token));
