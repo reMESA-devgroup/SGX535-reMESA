@@ -247,6 +247,9 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  coefficients[0]=coefficients[1]=coefficients[2]=coefficients[3]=1;
  coefficients[16]=coefficients[21]=coefficients[26]=1;coefficients[31]=2;
  coefficients[28]=.25f;coefficients[34]=1;
+ /* Optional qualification input: avoid sample-on-edge ties at both sizes.
+  * Changes only supplied GL matrix data, never the encoder or driver gate. */
+ if(getenv("REMESA_TEST_NORMAL_Y_SHIFT"))coefficients[29]=1.0f/256.0f;
  const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
  memcpy(vertices,dynamic,sizeof vertices);
 #else

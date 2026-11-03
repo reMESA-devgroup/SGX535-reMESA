@@ -67,6 +67,8 @@ static enum remesa_dispatch collect_matrix(void *priv,const struct remesa_gpu_sc
  struct remesa_linux_memory *m=priv;
  timings[1]=ns();check_placement(m,submit->packet);guards(m);
  dump_backing(m,submit->packet,false);timings[2]=ns();
+ const uint64_t host_ticket[2]={submit->context,submit->operation};
+ output(out_dir,"MATRIX-HOST-OP.bin",host_ticket,sizeof host_ticket);
  enum remesa_dispatch result=remesa_linux_memory_matrix_dispatch(m,submit,receipt);
  timings[3]=ns();
  struct remesa_matrix_submit_request response;

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Validate the seven registered, default-zero controls of the i486 boot profile.
+"""Validate registered, default-zero controls of the i486 boot profile.
 Reads ELF metadata only; never loads a module or opens a device. Runtime N
 checks remain mandatory: a static initializer cannot attest post-init state.
 """
@@ -16,7 +16,7 @@ CONTROLS = ('remesa_memory_enabled', 'remesa_retained_lab_enabled',
             'remesa_scene_probe_enabled')
 
 
-def inspect(data):
+def inspect(data, with_matrix_submit=False):
     if len(data) < 52 or data[:6] != b'\x7fELF\x01\x01':
         raise ValueError('requires little-endian ELF32')
     if struct.unpack_from('<HH', data, 16) != (1, 3):
@@ -74,7 +74,8 @@ def inspect(data):
         raise ValueError('module metadata has no file contents')
     metadata = modinfo.split(b'\0')
     results, missing = {}, []
-    for name in CONTROLS:
+    controls = CONTROLS + (('remesa_matrix_submit_enabled',) if with_matrix_submit else ())
+    for name in controls:
         desc = named.get('__param_' + name)
         if desc is None:
             missing.append(name)
@@ -119,9 +120,11 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--module', type=Path, required=True)
     p.add_argument('--output', type=Path)
+    p.add_argument('--with-matrix-submit', action='store_true',
+                   help='Require the independent ordinary-matrix control in addition to the previous seven')
     a = p.parse_args()
     try:
-        result = inspect(a.module.read_bytes())
+        result = inspect(a.module.read_bytes(), a.with_matrix_submit)
     except (ValueError, IndexError, struct.error, UnicodeError) as e:
         result = {'status': 'FIRSTLOAD_MODULE_METADATA_INVALID', 'error': str(e), 'GPU_operations': 0}
     if a.output:
