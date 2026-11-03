@@ -56,10 +56,24 @@ are under `/home/gama/sgx535-offline/typed-parameter-native-client-20261103/v1`.
 The actual client links the current coherent driver objects without an ioctl
 wrapper; only its separate model executable interposes calls.
 
-These results do not qualify changing matrices on the physical GPU. Before
-execution, the supervised collector and archive verifier must check both data
-acknowledgement and separate frame expectations, while retaining the existing
-identity, native operation/retirement, guard, ownership and recovery checks.
+`typed_parameter_session_native.py` now supervises this client, with a plan-only
+default. It checks the pinned client, witness, actual source inputs, control
+words and reference plan before opening the device. The separate
+`verify_typed_parameter_session.py` checks the exact data acknowledgement and
+separate frame expectations, including the complete expected PARAM image and
+all other READ/CPU-owner/guard bytes. Native operations, host operations and
+data epochs are checked independently. Cleanup follows only a fully checked
+archive and idle ownership; uncertainty suppresses guessed cleanup.
+
+The verifier tests use synthetic archives explicitly marked as such. They
+cannot establish hardware provenance. The tests cover both sizes, every byte
+of the data request/response/result, protected image bytes and the old/new
+verifiers rejecting each other's protocol. Supervisor tests cover child,
+timeout, acknowledgement, identity, ownership and cleanup failures. Evidence
+is under `/home/gama/sgx535-offline/typed-parameter-supervisor-20261103/v1`.
+
+These results do not qualify changing matrices on the physical GPU. Physical
+execution still requires the existing outer boot/source/recovery checks.
 The old version 1 verifier deliberately rejects version 2 and changed READ
 images. Do not weaken it or count this path as approval of those tests.
 
