@@ -2029,6 +2029,43 @@ int remesa_context_submit_captured_scene(struct pipe_context *p,
  return context_issue_capture(p,capture,true,false,f,out);
 }
 
+int remesa_context_update_captured_parameters(struct pipe_context *p,
+ struct remesa_scene_capture capture,uint32_t draw_index)
+{
+ if(!p||p->draw_vbo!=draw||!draw_index)return EINVAL;
+ struct context *ctx=c(p);struct screen *sc=s(p->screen);
+ if(sc->closing)return ESHUTDOWN;
+ if(ctx->failed_submission)return EOWNERDEAD;
+ if(!sc->linked_attachment_storage||!ctx->target||!ctx->depth_target)return ENOTSUP;
+ struct resource *color=r(ctx->target),*depth=r(ctx->depth_target);
+ if(color->maps||depth->maps||color->native_clear_owner||depth->native_clear_owner)return EBUSY;
+ int e=remesa_persistent_scene_capture_validate_attachments(&sc->device,capture,color->bo,depth->bo,
+  ctx->target->width0,ctx->target->height0);
+ if(e)return captured_scene_error(ctx,e);
+ e=resource_sync_writer(p->screen,color,0);if(e)return captured_scene_error(ctx,e);
+ e=resource_sync_writer(p->screen,depth,0);if(e)return captured_scene_error(ctx,e);
+ struct remesa_persistent_scene_parameters parameters;
+ e=remesa_persistent_scene_parameters_snapshot(&sc->device,capture,&parameters);
+ if(e)return captured_scene_error(ctx,e);
+ const struct remesa_parameter_window *window=NULL;
+ for(unsigned i=0;i<parameters.window_count;i++)if(parameters.windows[i].draw==draw_index){
+  if(window)return EPROTO;
+  window=&parameters.windows[i].window;
+ }
+ if(!window)return EINVAL;
+ const struct remesa_pds_parameter_source_request request={window->gpu_va,window->allocation_bytes,
+  window->source_offset,window->coefficient_dwords,window->transfer_dwords};
+ uint8_t source[512];size_t written=0;
+ e=remesa_context_vertex_parameter_source(p,&request,source,sizeof source,&written);if(e)return e;
+ if(written!=window->transfer_dwords*4u)return EPROTO;
+ uint32_t coefficients[127];
+ for(unsigned i=0;i<window->coefficient_dwords;i++)coefficients[i]=(uint32_t)source[4+4*i]|
+  (uint32_t)source[5+4*i]<<8|(uint32_t)source[6+4*i]<<16|(uint32_t)source[7+4*i]<<24;
+ e=remesa_persistent_scene_parameters_update(&sc->device,capture,draw_index,coefficients,
+  window->coefficient_dwords);
+ return e?captured_scene_error(ctx,e):0;
+}
+
 static int context_submit_scene(struct pipe_context *p,
  const struct pipe_draw_info *info,const struct pipe_draw_start_count_bias *draw_info,
  const struct remesa_linked_scene_request *options,bool gears,bool homogeneous,
@@ -2911,6 +2948,8 @@ void remesa_drawable_buffers_release(struct remesa_drawable_buffers *out)
 #include "remesa_persistent.h" /* Complete by-value capture token for the stub. */
 int remesa_context_submit_captured_scene(struct pipe_context *p,struct remesa_scene_capture c,struct pipe_fence_handle **o)
 {(void)p;(void)c;(void)o;return ENOTSUP;}
+int remesa_context_update_captured_parameters(struct pipe_context *p,struct remesa_scene_capture c,uint32_t draw)
+{(void)p;(void)c;(void)draw;return ENOTSUP;}
 int remesa_context_prepare_vertex_parameters(struct pipe_context *p,uint32_t bank,void **out)
 {(void)p;(void)bank;(void)out;return ENOTSUP;}
 int remesa_context_window_viewport_parameters_snapshot(struct pipe_context *p,struct remesa_vertex_parameter_values *out)

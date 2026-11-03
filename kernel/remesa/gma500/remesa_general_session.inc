@@ -1,13 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Included after closed scene catalogues/helpers. Same scene_probe_lock. */
 #include "remesa_general_session_uapi.h"
+#include "remesa_general_parameter_uapi.h"
 #include "remesa_parameter_window.h"
 struct remesa_general_lab_session {
  struct remesa_scene_probe p;
  struct scene_probe_selection selected;
- u64 serial,completed;unsigned maximum,profile;
+ u64 serial,completed,last_operation,updates;unsigned maximum,profile,version;
  bool poisoned;
- struct remesa_parameter_patch_policy parameter_policy;
+ struct remesa_parameter_patch_policy parameter_policy[16];
+ unsigned parameter_policy_count;
  bool parameter_policy_bound;
 };
 static struct remesa_general_lab_session *general_session;
@@ -38,7 +40,7 @@ static int general_open(struct drm_device *dev,struct drm_file *file,struct reme
  error=remesa_private_session_acquire(dev,file,r->context,p,&p->memory);
  if(error){kfree(s);return error;}
  p->backing_owned=true;general_session=s;scene_probe_consumed=true;
- s->serial=1;s->maximum=r->max_jobs;s->profile=r->profile;
+ s->serial=1;s->maximum=r->max_jobs;s->profile=r->profile;s->version=r->version;
  /* Reuse the exact existing one-shot catalogues, including their complete
   * image/placement authentication. No new program bytes or mutable inputs. */
  profile=r->profile<=4?&gears_homogeneous_probe_profiles[r->profile-3]:
@@ -102,7 +104,13 @@ static int general_submit(struct remesa_general_lab_session *s,struct drm_device
  r->operation=p->job.snapshot.ticket.operation;r->stages=1;
  /* Qualification-only exact input authentication under real job holds. No
   * per-frame COLOR/Z hash/readback, and no production FAST change. */
- mutex_lock(&endpoint_lock);error=scene_probe_images(p,&s->selected);mutex_unlock(&endpoint_lock);
+ /* LAB v1 retains its original per-SUBMIT qualification. Typed v2 retains
+  * OPEN's complete authentication under READ seals; only the separate typed
+  * transaction may later alter admitted coefficient bytes. All native scene
+  * validators, isolation and execution checks still run on every job. */
+ if(s->version==1){
+  mutex_lock(&endpoint_lock);error=scene_probe_images(p,&s->selected);mutex_unlock(&endpoint_lock);
+ }else error=0;
  if(error)goto failed;
  r->stages|=2;
  error=remesa_private_session_scene_execute(p->memory,p,&p->job,&p->backend,&p->observation,msecs_to_jiffies(r->budget_ms),100000);
@@ -114,8 +122,13 @@ static int general_submit(struct remesa_general_lab_session *s,struct drm_device
  /* Retain only after the existing full executor validated PARAM/TA and the
   * first job retired. No views survive the subsequent loan/job release. */
  if(!s->parameter_policy_bound){
-  error=remesa_private_session_bind_scene_parameters(p->memory,p,&p->job,1,0x44800000U,&s->parameter_policy);
-  if(error)goto failed;
+  unsigned draw,count=p->packet.window_count-1;
+  if(!count||count>16){error=-EPROTO;goto failed;}
+  for(draw=1;draw<=count;draw++){
+   error=remesa_private_session_bind_scene_parameters(p->memory,p,&p->job,draw,0x44800000U,&s->parameter_policy[draw-1]);
+   if(error)goto failed;
+  }
+  s->parameter_policy_count=count;
   s->parameter_policy_bound=true;
  }
  mutex_lock(&endpoint_lock);
@@ -132,7 +145,7 @@ static int general_submit(struct remesa_general_lab_session *s,struct drm_device
   scene_probe_save_trace(p,&trace,18);
  }
  memset(&p->job,0,sizeof(p->job));memset(&p->backend,0,sizeof(p->backend));memset(&p->observation,0,sizeof(p->observation));
- s->completed++;r->stages|=8;r->state=1;return 0;
+ s->completed++;s->last_operation=r->operation;r->stages|=8;r->state=1;return 0;
  failed:general_poison(s);r->error=error;r->state=2;return 0;
 }
 int remesa_general_session_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
@@ -146,6 +159,7 @@ int remesa_general_session_ioctl(struct drm_device *dev,void *data,struct drm_fi
  mutex_lock(&scene_probe_lock);
  if(r->action==1){error=general_open(dev,file,r);goto done;}
  s=general_session;if(!s||s->serial!=r->session){error=-ENOENT;goto done;}
+ if(r->version!=s->version){error=-EPROTO;goto done;}
  m=s->p.memory;mutex_lock(&endpoint_lock);
  error=endpoint!=m||m->dev!=dev||m->file!=file||m->context!=r->context||m->private_device_lost?-EACCES:0;
  mutex_unlock(&endpoint_lock);if(error)goto done;
@@ -156,5 +170,40 @@ int remesa_general_session_ioctl(struct drm_device *dev,void *data,struct drm_fi
  if(!error){s->p.source_claimed=false;error=remesa_private_session_release(m,&s->p);}
  if(error){general_poison(s);r->error=error;r->state=2;error=0;goto done;}
  general_session=NULL;kfree(s);r->state=3;r->stages=32;error=0;
+ done:mutex_unlock(&scene_probe_lock);return error;
+}
+/* Same source/session lock, no MMIO, submit, retirement injection or ordinary
+ * writable lease. All error responses below are transactional refusals. */
+int remesa_general_parameter_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
+{
+ struct remesa_general_parameter_request *r=data;struct remesa_general_lab_session *s;
+ struct remesa_gem_memory *m;int error;
+ BUILD_BUG_ON(sizeof(*r)!=592);BUILD_BUG_ON(offsetof(struct remesa_general_parameter_request,data)!=56);
+ BUILD_BUG_ON(offsetof(struct remesa_general_parameter_request,accepted_sequence)!=568);
+ if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
+ if(!remesa_general_parameter_request_valid(r))return -EINVAL;
+ if(!memory_enabled||!scene_probe_enabled)return -EOPNOTSUPP;
+ mutex_lock(&scene_probe_lock);s=general_session;
+ if(!s||s->serial!=r->session){error=-ENOENT;goto done;}
+ m=s->p.memory;mutex_lock(&endpoint_lock);
+ error=endpoint!=m||m->dev!=dev||m->file!=file||m->context!=r->context||m->private_device_lost?-EACCES:0;
+ mutex_unlock(&endpoint_lock);if(error)goto done;
+ if(s->poisoned){r->error=-EIO;r->state=2;error=0;goto done;}
+ r->state=1;
+ if(s->version!=2){r->error=-EOPNOTSUPP;error=0;goto done;}
+ if(!s->parameter_policy_bound||!s->completed){r->error=-ENODATA;error=0;goto done;}
+ if(r->retired_operation!=s->last_operation||s->updates==~0ULL||r->sequence!=s->updates+1){
+  r->error=-ESTALE;error=0;goto done;
+ }
+ if(r->draw>s->parameter_policy_count){r->error=-EINVAL;error=0;goto done;}
+ error=remesa_private_session_patch_scene_parameters(m,&s->p,r->retired_operation,
+  &s->parameter_policy[r->draw-1],s->parameter_policy[r->draw-1].window.id,r->offset,r->data,r->words*4);
+ if(error){
+  r->error=error;
+  if(error!=-EINVAL&&error!=-EACCES&&error!=-ERANGE&&error!=-ESTALE&&error!=-EBUSY&&
+     error!=-ENODATA&&error!=-ENOMEM){general_poison(s);r->state=2;}
+  error=0;goto done;
+ }
+ s->updates++;r->accepted_sequence=s->updates;
  done:mutex_unlock(&scene_probe_lock);return error;
 }

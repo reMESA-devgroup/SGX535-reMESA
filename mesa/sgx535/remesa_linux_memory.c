@@ -17,9 +17,12 @@ struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_se
  struct remesa_gears_scene_probe_request gears_response;
  struct remesa_scene_packet general_packet;
  uint64_t general_host_operation;
- uint32_t general_budget;
+ uint64_t general_update_sequence;
+ uint32_t general_budget,general_version;
  bool general_adapter_active,general_record,general_recorded;
- struct remesa_general_session_request general_request,general_response;};
+ struct remesa_general_session_request general_request,general_response;
+ bool general_parameter_recorded;
+ struct remesa_general_parameter_request general_parameter_request,general_parameter_response;};
 static struct held *find(struct remesa_linux_memory *d,uint32_t id)
 {for(unsigned i=0;i<32;i++)if(d->objects[i].id==id && id)return &d->objects[i];return NULL;}
 static int call(struct remesa_linux_memory *d,struct remesa_memory_request *r)

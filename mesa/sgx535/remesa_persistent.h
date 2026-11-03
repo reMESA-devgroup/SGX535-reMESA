@@ -44,6 +44,21 @@ struct remesa_gpu_scene_receipt {
 };
 typedef enum remesa_dispatch (*remesa_gpu_scene_fn)(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
+/* Synchronous data update, not a GPU submission or retirement receipt.
+ * The window is frontend identity/bounds, never native admission authority.
+ * Success acknowledges exactly sequence; ordinary errors guarantee no write,
+ * EOWNERDEAD means uncertain ownership. No retry, reentry or deferred work. */
+struct remesa_gpu_scene_parameters {
+ uint64_t context,serial,published_operation,sequence;
+ struct remesa_parameter_window window;
+ uint32_t draw,words;
+ const uint32_t *bits;
+};
+struct remesa_gpu_scene_parameter_receipt {
+ uint64_t context,serial,published_operation,sequence;
+};
+typedef int (*remesa_gpu_scene_parameters_fn)(void *,
+ const struct remesa_gpu_scene_parameters *,struct remesa_gpu_scene_parameter_receipt *);
 struct remesa_persistent_ops {
  int (*create)(void *,size_t,uint32_t *);
  int (*pin)(void *,uint32_t);
@@ -927,6 +942,18 @@ int remesa_persistent_scene_capture_release(struct remesa_device *,
 /* Install only on a fresh endpoint, before any allocation/job/capture/shader.
  * Does not enable ordinary draw or alter resource-only/qualification flags. */
 int remesa_persistent_set_native_scene(struct remesa_device *,remesa_gpu_scene_fn);
+/* Optional data-only companion, installed on the same fresh device before
+ * any allocation. Does not enable writable maps or change graphics caps. */
+int remesa_persistent_set_native_scene_parameters(struct remesa_device *,remesa_gpu_scene_parameters_fn);
+/* Replace the complete coefficient block of one draw in a retained capture.
+ * Requires an acknowledged published job, no CPU leases or unfinished jobs,
+ * and exclusive capture ownership of the PARAM object. Reuses actual backing;
+ * does not allocate, map, evaluate vertices, hash, submit or invent a fence.
+ * Published fences may remain owned. Success advances a separate data epoch;
+ * only a later submit produces new GPU results. Uncertainty poisons/retains
+ * the endpoint. External serialization includes native session close. */
+int remesa_persistent_scene_parameters_update(struct remesa_device *,
+ struct remesa_scene_capture,uint32_t draw,const uint32_t *bits,uint32_t words);
 /* Pure host configuration check, no IO/allocation or execution authority.
  * Requires this provider's exact device; poisoned owners remain refused.
  * Configured callback is not independent physical/kernel qualification. */

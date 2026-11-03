@@ -179,6 +179,14 @@ int remesa_context_submit_linked_scene(struct pipe_context *,
  * Uncertainty poisons the same context/targets as ordinary scene submission. */
 int remesa_context_submit_captured_scene(struct pipe_context *,
  struct remesa_scene_capture,struct pipe_fence_handle **);
+/* Replace one retained draw's complete coefficients using the currently
+ * bound VS constant source and the existing PARAM encoder. Shader, geometry,
+ * viewport and targets of the capture remain frozen. No CPU transform, new
+ * PARAM BO, scene construction, GPU submission or fence is performed here.
+ * Requires exact bound attachments and retired owners. An uncertain native
+ * data acknowledgement poisons context and attachments as for submission. */
+int remesa_context_update_captured_parameters(struct pipe_context *,
+ struct remesa_scene_capture,uint32_t draw);
 /* Canonical gears counterpart: same shared COLOR/Z/context fence and failure
  * contract, using the explicit bound gears preparation. Native authentication
  * remains mandatory; does not enable normal draw/caps or a kernel gate. */

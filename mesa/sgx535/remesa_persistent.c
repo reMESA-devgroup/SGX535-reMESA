@@ -125,7 +125,7 @@ struct scene_capture {
  struct remesa_persistent_scene_footprint footprint;
  struct memory *held[REMESA_PERSISTENT_BUFFERS];
  struct memory *parents[4]; /* background,event,region,DPM; held above */
- unsigned count;uint64_t serial,published_operation;bool live,submitted;
+ unsigned count;uint64_t serial,published_operation,parameter_sequence;bool live,submitted;
  struct memory *read_color;
 };
 struct persistent {
@@ -144,6 +144,7 @@ struct persistent {
  remesa_gpu_copy_fn native_copy;
  remesa_gpu_fill_fn native_fill;
  remesa_gpu_scene_fn native_scene;
+ remesa_gpu_scene_parameters_fn native_scene_parameters;
  int (*release_provider)(void *);void *release_priv;int release_error;
 };
 static struct shader_upload **shader_link(struct persistent *d,const void *token)
@@ -3795,6 +3796,16 @@ int remesa_persistent_native_scene_ready(const struct remesa_device *device)
  if(d->failed)return EOWNERDEAD;
  return d->native_scene?0:EOPNOTSUPP;
 }
+int remesa_persistent_set_native_scene_parameters(struct remesa_device *device,
+ remesa_gpu_scene_parameters_fn fn)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!fn)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ if(d->native_scene_parameters||d->registry.next_generation!=1||d->provider.next_operation!=1||
+    d->scene_serial||d->shader_generation||d->allocated||d->shaders)return EBUSY;
+ d->native_scene_parameters=fn;return 0;
+}
 static int scene_submit_fault(struct persistent *d,struct submission *j)
 {
  (void)remesa_provider_fault(&d->provider,j->fence,d->cfg.context,j->operation);
@@ -3859,6 +3870,49 @@ static int scene_color_fault(struct persistent *d)
  for(unsigned i=0;i<REMESA_PERSISTENT_BUFFERS;i++)
   if(d->buffers[i].live)quarantine(d,&d->buffers[i]);
  d->failed=true;return EOWNERDEAD;
+}
+int remesa_persistent_scene_parameters_update(struct remesa_device *device,
+ struct remesa_scene_capture token,uint32_t draw,const uint32_t *bits,uint32_t words)
+{
+ if(!device||device->ops!=&device_ops||!device->priv||!bits||
+    (uintptr_t)bits%_Alignof(uint32_t)||!words||words>127||!draw)return EINVAL;
+ struct persistent *d=device->priv;
+ if(d->failed)return EOWNERDEAD;
+ int e=depth_output_check(device,(void *)bits,(size_t)words*4);if(e)return e;
+ if(!d->native_scene_parameters)return EOPNOTSUPP;
+ struct scene_capture *c=NULL;e=scene_capture_lookup(d,token,&c);if(e)return e;
+ if(c->submitted||c->read_color||d->dispatching)return EBUSY;
+ if(!c->published_operation)return EAGAIN;
+ if(c->parameter_sequence==UINT64_MAX)return EOVERFLOW;
+ for(unsigned i=0;i<REMESA_PROVIDER_MAX_JOBS;i++)
+  if(d->jobs[i].live&&!d->jobs[i].released)return EBUSY;
+ struct remesa_persistent_scene_parameters parameters;
+ e=remesa_persistent_scene_parameters_snapshot(device,token,&parameters);if(e)return e;
+ const struct remesa_parameter_window *window=NULL;
+ for(unsigned i=0;i<parameters.window_count;i++)if(parameters.windows[i].draw==draw){
+  if(window)return EPROTO;
+  window=&parameters.windows[i].window;
+ }
+ if(!window||words!=window->coefficient_dwords)return EINVAL;
+ struct memory *b=NULL;
+ for(unsigned i=0;i<c->count;i++)if(c->held[i]->handle==window->id)b=c->held[i];
+ if(!b||b->token.generation!=window->generation)return ESTALE;
+ /* Another capture must not silently observe a change to its frozen inputs. */
+ if(b->scene_holds!=1)return EBUSY;
+ uint32_t copied[127];memcpy(copied,bits,(size_t)words*4);
+ struct remesa_gpu_scene_parameters update={.context=token.owner,.serial=token.serial,
+  .published_operation=c->published_operation,.sequence=c->parameter_sequence+1,
+  .window=*window,.draw=draw,.words=words,.bits=copied};
+ struct remesa_gpu_scene_parameter_receipt receipt={0};
+ e=d->native_scene_parameters(d->cfg.priv,&update,&receipt);
+ if(e){
+  if(e==EOWNERDEAD||e<0)return scene_color_fault(d);
+  return e;
+ }
+ if(receipt.context!=update.context||receipt.serial!=update.serial||
+    receipt.published_operation!=update.published_operation||receipt.sequence!=update.sequence)
+  return scene_color_fault(d);
+ c->parameter_sequence=receipt.sequence;return 0;
 }
 static int scene_attachment_role(const struct scene_capture *c,const struct memory *b,uint32_t role)
 {

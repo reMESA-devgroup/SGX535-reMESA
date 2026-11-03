@@ -848,12 +848,14 @@ def patched_sources(native, lab=False, vendor=False, copy=False, fill=False, pri
             '#include "remesa_scene_probe.h"\n#include "remesa_scene_probe_uapi.h"\n'
             '#include "remesa_gears_scene_probe_uapi.h"\n'
             '#include "remesa_general_session_uapi.h"\n'
+            '#include "remesa_general_parameter_uapi.h"\n'
             'static const struct drm_ioctl_desc psb_ioctls[] = {\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_PROBE, remesa_scene_probe_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_SCENE_TRACE, remesa_scene_trace_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_GEARS_SCENE_PROBE, remesa_gears_scene_probe_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_GEARS_SCENE_TRACE, remesa_gears_scene_trace_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_GENERAL_SESSION, remesa_general_session_ioctl, DRM_ROOT_ONLY),\n'
+            '\tDRM_IOCTL_DEF_DRV(REMESA_GENERAL_PARAMETER, remesa_general_parameter_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_SESSION_LAB, remesa_private_session_lab_ioctl, DRM_ROOT_ONLY),\n'
             '\tDRM_IOCTL_DEF_DRV(REMESA_PRIVATE_PROBE, remesa_private_probe_ioctl, DRM_ROOT_ONLY),\n')
         result['psb_drv.c'] += '\n#include "remesa_easter_egg.h"\n'
@@ -1007,6 +1009,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
             components[name] = (additions / name).read_bytes()
         components['remesa_scene_probe_uapi.h'] = (root / 'include/remesa/scene_probe_uapi.h').read_bytes()
         components['remesa_general_session_uapi.h'] = (root / 'include/remesa/general_session_uapi.h').read_bytes()
+        components['remesa_general_parameter_uapi.h'] = (root / 'include/remesa/general_parameter_uapi.h').read_bytes()
         components['remesa_gears_scene_probe_uapi.h'] = (root / 'include/remesa/gears_scene_probe_uapi.h').read_text().replace('"scene_probe_uapi.h"','"remesa_scene_probe_uapi.h"').encode()
         components['remesa_gears_scene_probe_envelope.h'] = (root / 'include/remesa/gears_scene_probe_envelope.h').read_text().replace('"gears_scene_probe_uapi.h"','"remesa_gears_scene_probe_uapi.h"').encode()
         components['remesa_scene_packet.h'] = (root / 'include/remesa/scene_packet.h').read_bytes()

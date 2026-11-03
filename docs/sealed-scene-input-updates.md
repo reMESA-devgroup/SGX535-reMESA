@@ -1,14 +1,16 @@
 # Updating sealed scene data after retirement
 
 The captured frontend/general-session cold/warm path is physically qualified
-with frozen inputs at 1280×800 and 640×640. Changing a matrix between its jobs
-is still refused in three places: capture holds, Linux `private_active` upload
-exclusion, and kernel READ seals. Reusing an idle pipe fence does not authorize
-writing through those exclusions.
+with frozen inputs at 1280×800 and 640×640. The typed update candidate below
+connects a retained capture to a bounded coefficient transaction. Changed
+inputs through this new path still need physical qualification. Reusing an
+idle pipe fence does not authorize ordinary writes through capture holds,
+Linux `private_active` exclusion or kernel READ seals.
 
 `remesa_private_session_patch_scene_input` supplies the kernel memory
-transaction needed for a future typed update. It is an internal helper with
-no ioctl or current general-session caller. Ordinary memory WRITE, write
+transaction used by the typed update. It remains an internal helper; the
+new ioctl selects a kernel-derived draw policy instead of exposing this
+generic helper or accepting a userspace policy. Ordinary memory WRITE, write
 LEASE and SYNC remain denied; every READ seal stays active throughout.
 
 The caller must retain the outer DRM/source entry and supply a stable policy
@@ -57,7 +59,6 @@ to use the sealed kernel ID. Its optional bounded-float rule matches the old
 restricted parameter profiles. That numeric bound is not a proposed universal
 OpenGL uniform restriction.
 
-There is still no ioctl or general-session caller for this update adapter.
 In particular, accepting window metadata structurally does not make an
 untrusted userspace description proof that a CODE object is a PARAM owner.
 
@@ -71,9 +72,42 @@ The embedded TA8 span describes the owned CPU producer layout, not another
 measured GPU fetch. Native-bound window generation is the kernel BO generation;
 it must not be compared with a frontend resource registry generation.
 
-This binds a policy; it does not add an update ioctl or permit changed bytes
-through the existing LAB full-image check. Binding failure after retirement
+Binding does not permit changed bytes through the existing LAB v1 full-image
+check. Binding failure after retirement
 poisons and retains the session, with no release/retry that guesses safety.
+
+## Explicit typed session and data acknowledgement
+
+The original 176-byte general-session ABI and v1 behavior are preserved.
+Explicit version 2 authenticates complete initial images at OPEN, retains
+READ seals and allows only the separately bound coefficient transaction.
+Immutable program/topology validation, source ownership, address/memory bounds,
+cache coherence and full native retirement checks remain per job. Typed v2
+is neither approval of the v1 LAB tests nor arbitrary-program GL admission.
+
+`REMESA_GENERAL_PARAMETER` is a pointer-free 592-byte root-only operation.
+It carries draw, coefficient offset/count/bits, context/session, the last
+retired native operation and a monotonic data sequence. It accepts no BO ID,
+GPU address, policy, CODE or completion claim. The controller selects its own
+draw policy and serializes with SUBMIT/CLOSE. A successful response confirms
+only a CPU data update; a subsequent SUBMIT must retire before new pixels exist.
+
+The Linux adapter matches the retained capture and last published host
+operation, translates to the native retirement epoch and checks exact data
+acknowledgement. Native BO generations and frontend registry generations are
+distinct. Interrupted, malformed or stale responses poison the endpoint;
+there is no automatic retry or guessed epoch recovery. Atomic refusals such as
+ENOMEM do not advance the data sequence. Raw request/response recording is
+opt-in LAB collection, disabled in the normal transport.
+
+The frontend companion resolves bound constants with the existing PARAM
+source encoder and replaces the complete coefficient block of a captured
+draw. It retains the original shader, geometry, topology, targets and owners.
+It requires a previously published job, idle owners, no CPU leases, and one
+capture holding that PARAM owner. Already published fences may remain owned.
+Data updates create no fence or GPU operation and do not reconstruct a scene,
+allocate GEM, map PARAM, hash buffers or read back pixels. Uncertain data
+acknowledgement poisons the context and targets and retains the full graph.
 
 ## Verification and integration still required
 
@@ -109,10 +143,15 @@ four existing profiles, first-job binding, reuse across three jobs, and
 post-retirement binding failure without release/retry. These models do not
 qualify the new kernel candidate on hardware.
 
-Before making updates callable by the frontend, Linux transport and frontend
-capture state must participate in the same acknowledged update, including
-uncertainty handling. Kernel-derived binding must remain the authority rather
-than an imported userspace description. The general LAB catalogue still authenticates its complete original
+The transport candidate and its offline controller/adapter evidence are under
+`/home/gama/sgx535-offline/typed-parameter-transport-20261103/v1`.
+The first typed-controller attempt is preserved: its dependency model still
+expected v1 per-SUBMIT hashes in v2. The corrected model explicitly checks
+the different hash counts per version, preserving v1 behavior. These controller
+tests model execution dependencies and are not physical GPU evidence.
+
+Kernel-derived binding remains the authority rather than an imported userspace
+description. The general LAB v1 catalogue still authenticates its complete original
 inputs and must not be bypassed to accept changed bytes. A changing-input
 physical experiment needs its own presealed expectations before execution.
 The existing PDS/USSE/TA encoders and qualified program bytes need no rewrite.

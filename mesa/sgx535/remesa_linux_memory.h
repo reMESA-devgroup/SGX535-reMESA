@@ -10,11 +10,23 @@
 #include "remesa/scene_probe_uapi.h"
 #include "remesa/gears_scene_probe_uapi.h"
 #include "remesa/general_session_uapi.h"
+#include "remesa/general_parameter_uapi.h"
 struct remesa_linux_memory;
 /* Bounded LAB general/native session, distinct from retained11-ID ABI.
  * No retry on an uncertain ioctl; all local objects then remain poisoned. */
 int remesa_linux_memory_general_open(struct remesa_linux_memory *,const uint32_t[18],
  uint32_t profile,uint32_t maximum,struct remesa_general_session_request *);
+/* Explicit typed candidate; same bounded source/ownership, no LAB v1 claim. */
+int remesa_linux_memory_general_typed_open(struct remesa_linux_memory *,const uint32_t[18],
+ uint32_t profile,uint32_t maximum,struct remesa_general_session_request *);
+/* Synchronous CPU data update only after a native retired SUBMIT. Kernel
+ * selects the admitted PARAM owner; no user ID/VA/policy. Ack sequence is not
+ * a GPU operation. Conclusive atomic refusals do not advance the sequence;
+ * any uncertain ioctl/envelope poisons all objects, without retry/cleanup. */
+int remesa_linux_memory_general_parameters(struct remesa_linux_memory *,uint32_t draw,
+ uint32_t offset,const uint32_t *bits,uint32_t words,struct remesa_general_parameter_request *);
+int remesa_linux_memory_general_parameter_request(const struct remesa_linux_memory *,struct remesa_general_parameter_request *);
+int remesa_linux_memory_general_parameter_response(const struct remesa_linux_memory *,struct remesa_general_parameter_request *);
 int remesa_linux_memory_general_submit(struct remesa_linux_memory *,uint32_t budget_ms,
  struct remesa_general_session_request *);
 int remesa_linux_memory_general_close(struct remesa_linux_memory *,struct remesa_general_session_request *);
@@ -39,6 +51,15 @@ int remesa_linux_memory_general_request(const struct remesa_linux_memory *,struc
 int remesa_linux_memory_general_scene_open(struct remesa_linux_memory *,
  const struct remesa_scene_packet *,uint32_t profile,uint32_t maximum,uint32_t budget_ms,
  struct remesa_general_session_request *);
+int remesa_linux_memory_general_scene_typed_open(struct remesa_linux_memory *,
+ const struct remesa_scene_packet *,uint32_t profile,uint32_t maximum,uint32_t budget_ms,
+ struct remesa_general_session_request *);
+/* Data-only companion for a retained capture opened explicitly in typed mode.
+ * Checks the cached capture/host operation and actual backing, then uses the
+ * kernel's own draw policy. Frontend generation is not a native BO generation.
+ * No GPU job or fence is created; success acknowledges only the data epoch. */
+int remesa_linux_memory_general_scene_parameters(void *,
+ const struct remesa_gpu_scene_parameters *,struct remesa_gpu_scene_parameter_receipt *);
 enum remesa_dispatch remesa_linux_memory_general_scene_dispatch(void *,
  const struct remesa_gpu_scene_submit *,struct remesa_gpu_scene_receipt *);
 /* Borrow fd/context already bound by the future kernel per-file integration.

@@ -7,8 +7,12 @@
  * and CODE344/native5/6 catalogues. Same default-off memory/scene controls and consumed source
  * lineage; never reinterpret the old11-ID session or one-shot ABI. OPEN/CLOSE
  * are not GPU receipts. Immutable profile inputs are authenticated per SUBMIT
- * in this LAB endpoint, outside production FAST. No caller CODE/VA/packet. */
+ * in LAB v1, outside production FAST. Explicit typed v2 authenticates at OPEN
+ * and retains immutable READ seals, permitting only kernel-bound PARAM data
+ * updates. Native validators still run per job. V2 is not LAB v1 approval or
+ * arbitrary-program production admission. No caller CODE/VA/packet. */
 #define REMESA_GENERAL_SESSION_VERSION 1u
+#define REMESA_GENERAL_SESSION_TYPED_VERSION 2u
 #define REMESA_GENERAL_SESSION_OPEN 1u
 #define REMESA_GENERAL_SESSION_SUBMIT 2u
 #define REMESA_GENERAL_SESSION_CLOSE 3u
@@ -29,7 +33,7 @@ struct remesa_general_session_request {
 static inline int remesa_general_session_request_valid(const struct remesa_general_session_request *r)
 {
  unsigned i,j;
- if(!r||r->version!=1||!r->context||r->action<1||r->action>3||r->flags||
+ if(!r||(r->version!=1&&r->version!=2)||!r->context||r->action<1||r->action>3||r->flags||
     r->operation||r->cookie||r->core||r->revision||r->pds_base||r->phase||r->ledger||
     r->error||r->state||r->stages||r->reserved[0]||r->reserved[1])return 0;
  if(r->action==1){
