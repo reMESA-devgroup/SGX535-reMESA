@@ -13,6 +13,7 @@ def main():
  sources=patched_sources(n,private=True)
  (o/'module/remesa_stream_source.c').write_text(sources['remesa_stream_source.c'])
  (o/'module/remesa_stream_source.h').write_bytes((n/'remesa_stream_source.h').read_bytes())
+ (o/'module/remesa_twod.h').write_bytes((w/'mesa/sgx535/remesa_twod.h').read_bytes())
  for name in ['frozen_capsule.h','frozen_source_guard.h','frozen_fixed_service.h']:(o/'module'/name).write_bytes((n/name).read_bytes())
  shim=(n.parent/'tests/source_test_shim.h').read_text()
  shim=replace_once(shim,'struct sgx535_gma500_owner {','''#define REMESA_GEM_SCENE_JOB_H
@@ -52,11 +53,11 @@ struct sgx535_gma500_owner {''')
  legacy_scenarios=['twoframes',*scenarios[:11]]
  for profile,case_names in [('general',scenarios),('legacy',legacy_scenarios)]:
   for variant,flags in [('native',['-O2']),('ubsan',['-O1','-fsanitize=undefined','-fno-sanitize-recover=all'])]:
-   variant=profile+'-'+variant;exe=o/variant;command=['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable',*flags,'-I'+str(n),'-I'+str(w/'kernel/remesa/gma500'),str(o/('tests/test_source.c' if profile=='general' else 'tests/test_legacy.c')),str(n/'frozen_capsule.c'),str(n/'frozen_source_guard.c'),'-o',str(exe)]
+   variant=profile+'-'+variant;exe=o/variant;command=['cc','-std=c11','-Wall','-Wextra','-Werror','-Wno-unused-function','-Wno-unused-variable',*flags,'-I'+str(o/'module'),'-I'+str(n),'-I'+str(w/'kernel/remesa/gma500'),'-I'+str(w/'include'),str(o/('tests/test_source.c' if profile=='general' else 'tests/test_legacy.c')),str(n/'frozen_capsule.c'),str(n/'frozen_source_guard.c'),'-o',str(exe)]
    for label,argv in [(variant+'-build',command)]+[(variant+'-'+s,[str(exe),s]) for s in case_names]:
     q=subprocess.run(argv,capture_output=True,text=True,timeout=60);(o/(label+'.log')).write_text(q.stdout+q.stderr);rows.append({'label':label,'argv':argv,'exit':q.returncode})
     if q.returncode or q.stderr:raise RuntimeError(label+': '+q.stderr[-1600:])
- paths=[Path(__file__).resolve(),w/'tools/remesa/stage_twod_reservation.py',w/'tools/remesa/stage_scene_backend.py',w/'kernel/remesa/gma500/remesa_scene_backend.h',w/'kernel/remesa/gma500/remesa_scene_source.inc',w/'kernel/remesa/gma500/remesa_private_source_mmio.inc',n/'frozen_capsule.c',n/'frozen_source_guard.c']
+ paths=[Path(__file__).resolve(),w/'tools/remesa/stage_twod_reservation.py',w/'tools/remesa/stage_scene_backend.py',w/'kernel/remesa/gma500/remesa_scene_backend.h',w/'kernel/remesa/gma500/remesa_scene_source.inc',w/'kernel/remesa/gma500/remesa_owned_fill_source.inc',w/'kernel/remesa/gma500/remesa_owned_fill_source.h',w/'kernel/remesa/gma500/remesa_private_source_mmio.inc',n/'frozen_capsule.c',n/'frozen_source_guard.c']
  report={'status':'GENERAL_SOURCE_IDENTITIES_AND_NOHASH_CLOSURE_MODEL_PASS','GPU_operations':0,'scenarios_per_variant':len(scenarios),'variants':2,'legacy_scenarios_per_variant':len(legacy_scenarios),'scope':'Actual generated source routes and original capsule/source guard; reduced job shell/device/locks, not physical attribution','sources':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in paths},'generated':{str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in sorted(o.glob('*/*')) if f.is_file()},'commands':rows}
  (o/'RESULT.json').write_text(json.dumps(report,indent=2)+'\n');print(report['status'])
 if __name__=='__main__':main()

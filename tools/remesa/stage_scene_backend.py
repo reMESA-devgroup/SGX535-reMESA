@@ -46,4 +46,23 @@ def source_code(source):
   if(o->backend->general_scene){lost();spin_unlock_irqrestore(&source_lock,f);return -EINVAL;}
 #endif
   sgx535_capsule_color(&o->evidence,o->backend->owner,''')
+    # Concrete ordinary clear predecessor; old first-owner claim/producer
+    # implementations remain unchanged. No endpoint invokes its claim yet.
+    source=once(source,'static bool valid(struct sgx535_gma500_fixed_backend *b)',
+        'static void lost(void);\n#include "remesa_owned_fill_source.inc"\nstatic bool valid(struct sgx535_gma500_fixed_backend *b)')
+    source=once(source,'!lifetime.reasons && !lifetime.producers_active;',
+        '!source_lineage()->reasons && !source_lineage()->producers_active && source_available();')
+    source=once(source,'if(!lease || lease!=who || operation || poisoned)e=-EBUSY;',
+        'if(!lease || lease!=who || operation || poisoned || !source_available())e=-EBUSY;')
+    source=once(source,' else lease=NULL;',' else {lease=NULL;source_released();}')
+    start=source.index('int remesa_stream_source_bind(')
+    end=source.index('int remesa_stream_source_finish(',start)
+    bind=once(source[start:end],'!sgx535_source_boot_valid(&lifetime) || lifetime.producers_active',
+        '!sgx535_source_boot_valid(source_lineage()) || lifetime.producers_active || !source_available()')
+    bind=once(bind,'o->boundary=lifetime;','o->boundary=*source_lineage();')
+    source=source[:start]+bind+source[end:]
+    source=once(source,' if(dev!=device)lost();\n if(!operation || operation->boundary.state!=SGX535_SOURCE_BOUNDARY)',
+        ' if(dev!=device)lost();\n owned_fill_pending(dev,a,d);\n if(!operation || operation->boundary.state!=SGX535_SOURCE_BOUNDARY)')
+    source=once(source,'!sgx535_source_boot_valid(&lifetime) || lifetime.producers_active)e=-EIO;',
+        '!sgx535_source_boot_valid(source_lineage()) || lifetime.producers_active || !source_available())e=-EIO;')
     return source+'\n#include "remesa_scene_source.inc"\n'

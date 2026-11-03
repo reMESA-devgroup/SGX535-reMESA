@@ -27,13 +27,24 @@ def extract(source, name):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--baseline-module", type=Path, required=True)
+    p.add_argument("--legacy-fixed-module", type=Path, help="Unmodified fixed_write baseline for the historical race comparison")
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()
     root = Path(__file__).resolve().parents[2]
     output = a.output.resolve();output.mkdir(parents=True, exist_ok=False)
     source = (a.baseline_module / "remesa_stream_source.c").read_text()
-    fixed = (a.baseline_module / "gma500_fixed_backend.c").read_text()
-    (output / "source_authority_actual.inc").write_text("\n".join(extract(source, n) for n in
+    fixed_path = (a.legacy_fixed_module or a.baseline_module) / "gma500_fixed_backend.c"
+    fixed = fixed_path.read_text()
+    # This older MMIO linearization model has no owned clear predecessor.
+    # Use the actual inactive-lineage helpers; the active ledger has its own
+    # actual-code/receipt-corruption tests in test_owned_fill_source.py.
+    helpers = ""
+    owned = a.baseline_module / "remesa_owned_fill_source.inc"
+    if owned.exists():
+        inactive = owned.read_text().split("#else\n", 1)[1]
+        helpers = "\n".join(extract(inactive, n) for n in
+                            ("source_lineage", "source_available"))+"\n"
+    (output / "source_authority_actual.inc").write_text(helpers+"\n".join(extract(source, n) for n in
         ("valid", "lost", "remesa_route_source_write", "remesa_stream_source_poison")))
     (output / "old_write_actual.inc").write_text(extract(fixed, "fixed_write"))
     test = root / "kernel/remesa/gma500/tests/test_private_source_mmio.c"
@@ -54,8 +65,9 @@ def main():
             rows.append(dict(label=label, argv=argv, exit=result.returncode))
             if result.returncode or result.stderr:raise RuntimeError(label+": "+result.stderr)
     paths = [test, root / "kernel/remesa/gma500/remesa_scene_backend.h", root / "kernel/remesa/gma500/remesa_scene_service.h", root / "kernel/remesa/gma500/remesa_private_source_mmio.inc",
-             a.baseline_module / "remesa_stream_source.c", a.baseline_module / "gma500_fixed_backend.c",
+             a.baseline_module / "remesa_stream_source.c", fixed_path,
              a.baseline_module / "frozen_source_guard.c"]
+    if owned.exists():paths.append(owned)
     report = dict(status="PRIVATE_SOURCE_CPU_WRITE_LINEARIZATION_PASS", GPU_operations=0,
                   scope="Actual extracted authority/poison/old write and new fragment, real pthread locking; owner and MMIO modeled",
                   sources={str(f):hashlib.sha256(f.read_bytes()).hexdigest() for f in paths},commands=rows)

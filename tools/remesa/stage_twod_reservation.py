@@ -1018,6 +1018,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_general_session.inc',
                      'remesa_matrix_submit.h', 'remesa_matrix_submit.inc',
                      'remesa_matrix_fill.inc', 'remesa_matrix_construct.inc',
+                     'remesa_owned_fill_source.h', 'remesa_owned_fill_source.inc',
                      'remesa_private_dpm_cache.inc',
                      'remesa_private_inputs.inc',
                      'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',
