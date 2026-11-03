@@ -31,7 +31,7 @@ struct resource {unsigned token;};
 struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;struct mutex lock;
  const void *private_session;
- struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded;
+ struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded,private_matrix_constructing;
  struct resource exclude;unsigned device_refs,module_refs,power_refs;
 };
 struct trusted_stream {
@@ -180,5 +180,9 @@ int main(void)
  assert(!active&&!owner&&!owner_device&&!endpoint&&!stream.claimed&&stream.file==&file);
  remesa_private_stream_file_lost(&dev,&file);
  assert(!stream.file&&!stream.quarantined&&!source_poison_calls&&!native_quarantines&&native_closes==1);
- puts("PASS actual file-lost fragments retain handles/views/refs/cookies, clear file identities, quarantine without backend/cleanup callbacks, deny late close even empty endpoint; mutex/backing modeled, GPU0");
+ fixture(false);memory.private_session=&memory;memory.private_matrix_constructing=true;
+ remesa_private_memory_file_lost(&dev,&file);
+ assert(!memory.private_matrix_constructing&&memory.private_session==&memory&&memory.private_device_lost);
+ assert(remesa_gem_memory_close(&memory)==-ENODEV&&!cleanup_calls);
+ puts("PASS actual file-lost fragments retain handles/views/refs/cookies, revoke CPU construction, clear file identities, quarantine without backend/cleanup callbacks, deny late close even empty endpoint; mutex/backing modeled, GPU0");
 }

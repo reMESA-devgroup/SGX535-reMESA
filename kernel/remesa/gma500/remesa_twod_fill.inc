@@ -3,6 +3,9 @@
  * session slot excludes copy/fill overlap and survives uncertain FD death. */
 #include "remesa_twod_fill.h"
 #include "remesa_twod_fill_uapi.h"
+#ifdef REMESA_GENERAL_SCENE
+#include "remesa_matrix_submit.h"
+#endif
 static bool twod_fill_enabled;
 module_param_named(remesa_twod_fill_enabled,twod_fill_enabled,bool,0600);
 static int twod_fill_command(struct remesa_gem_memory *s,
@@ -32,13 +35,23 @@ int remesa_twod_fill_ioctl(struct drm_device *dev,void *data,struct drm_file *fi
  struct remesa_gem_twod_command command={0};struct remesa_memory_binding uses[2];
  struct remesa_twod_copy_session *session;struct remesa_gem_memory *s;
  enum remesa_job_state state;unsigned count=0;int error;
+#ifdef REMESA_GENERAL_SCENE
+ const void *matrix_owner=NULL;
+#endif
  if(!dev||!r||!file||!capable(CAP_SYS_ADMIN))return -EPERM;
  if(!memory_enabled||!twod_fill_enabled)return -EOPNOTSUPP;
  if(r->version!=REMESA_TWOD_FILL_VERSION||r->flags||r->reserved[0]||r->reserved[1]||r->response_reserved||
     !r->context||!r->budget_ms||r->budget_ms>10000||r->operation||r->cookie||
     r->stages||r->retained||r->core||r->revision||r->error)return -EINVAL;
+#ifdef REMESA_GENERAL_SCENE
+ error=remesa_matrix_fill_begin(dev,file,r,&matrix_owner);
+ if(error)return error;
+#endif
  mutex_lock(&endpoint_lock);s=endpoint;
  if(!s||s->dev!=dev||s->file!=file||s->context!=r->context){error=-EACCES;goto done;}
+#ifdef REMESA_GENERAL_SCENE
+ if(s->private_session&&!matrix_owner){error=-EBUSY;goto done;}
+#endif
  if(twod_copy_retained){error=-EBUSY;goto done;}
  error=twod_fill_command(s,r,&command,uses,&count);if(error)goto done;
  session=kzalloc(sizeof(*session),GFP_KERNEL);if(!session){error=-ENOMEM;goto done;}
@@ -62,9 +75,18 @@ int remesa_twod_fill_ioctl(struct drm_device *dev,void *data,struct drm_file *fi
  error=remesa_gem_twod_retire(&session->job);
  if(error)goto outcome;
  r->stages|=REMESA_TWOD_FILL_RETIRED;
+#ifdef REMESA_GENERAL_SCENE
+ if(matrix_owner){
+  error=remesa_matrix_fill_finish(s,matrix_owner,r,&session->job.retirement);
+  if(error)goto outcome;
+ }
+#endif
  twod_copy_retained=NULL;kfree(session);
  outcome:
  if(error){
+#ifdef REMESA_GENERAL_SCENE
+  remesa_matrix_fill_failed_locked(s,matrix_owner);
+#endif
   /* Only a known unissued PREPARED job may be cancelled. Faulted/attached
    * or possibly issued jobs and their context remain quarantined. */
   if(!session->job.live&&!remesa_gem_job_state(s,session->ticket,&state)&&
@@ -73,6 +95,20 @@ int remesa_twod_fill_ioctl(struct drm_device *dev,void *data,struct drm_file *fi
   }
  }
  r->error=error;r->retained=twod_copy_retained!=NULL;
+#ifdef REMESA_GENERAL_SCENE
+ if(error&&matrix_owner)r->retained=1;
+#endif
  error=0; /* Explicit structured result, never an ioctl-success GPU oracle. */
- done:mutex_unlock(&endpoint_lock);return error;
+ done:
+#ifdef REMESA_GENERAL_SCENE
+ if(error&&matrix_owner)remesa_matrix_fill_failed_locked(s,matrix_owner);
+#endif
+ mutex_unlock(&endpoint_lock);
+#ifdef REMESA_GENERAL_SCENE
+ if(matrix_owner&&(error||r->error)&&!twod_copy_retained){
+  if(remesa_matrix_fill_cancel_unissued(matrix_owner))return -EOWNERDEAD;
+  r->retained=0;
+ }
+#endif
+ return error;
 }

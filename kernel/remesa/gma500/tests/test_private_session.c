@@ -16,7 +16,8 @@ typedef uint32_t u32;
 #define REMESA_RETAINED_IOCTL_TEST
 enum {REMESA_JOB_PREPARED=1,REMESA_JOB_QUARANTINED=9,
  REMESA_MEM_LEASE=10,REMESA_MEM_READ,REMESA_MEM_WRITE,REMESA_MEM_UNLEASE,
- REMESA_MEM_SYNC,REMESA_MEM_CREATE,REMESA_MEM_UNMAP};
+ REMESA_MEM_SYNC,REMESA_MEM_CREATE,REMESA_MEM_UNMAP,REMESA_MEM_PIN,
+ REMESA_MEM_MAP,REMESA_MEM_UNPIN,REMESA_MEM_DESTROY};
 struct drm_device {unsigned id;};struct drm_file {unsigned id;};
 struct mutex {unsigned rank;bool held;};
 static unsigned rank,checks,cleanup;
@@ -41,13 +42,15 @@ struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct mutex lock;
  const void *private_session;bool stream_bound,private_device_lost,excluded;
  bool private_source_held,private_source_poisoned;
+ bool private_matrix_constructing,ta_cache_domains;u32 private_matrix_color;
  unsigned private_input_ids[5];int (*pds_write_guard)(u64,const void *,unsigned);
+ unsigned private_scene_input_ids[32],private_scene_input_mask,private_scene_binding_count;
  unsigned private_work_ids[6];bool private_work_owned;
  unsigned private_dpm_ids[2];
  u64 private_dpm_retired_operation;bool private_dpm_ready;
  void *executor;struct backing bo[OBJECTS];struct retained_job jobs[8];struct resource exclude;
 };
-struct remesa_memory_request {unsigned action;};
+struct remesa_memory_request {unsigned action,id,flags;};
 static struct mutex endpoint_lock={1,false};
 static struct remesa_gem_memory *endpoint;
 static struct {bool initialized,attempted;} retained_entry;
@@ -61,7 +64,16 @@ static void sgx535_gma500_exclusive_release(struct drm_device *d){(void)d;cleanu
 static void gma_power_end(struct drm_device *d){(void)d;cleanup++;}
 static void drm_dev_put(struct drm_device *d){(void)d;cleanup++;}
 static void module_put(void *m){(void)m;cleanup++;}
+/* This reduced session fixture has no scene seals. Do not manufacture an
+ * authentication result for one; retained-core tests exercise actual seals. */
+static int scene_input_objects_locked(struct remesa_gem_memory *m)
+{
+ if(m->private_scene_binding_count||m->private_scene_input_mask)return -EOPNOTSUPP;
+ for(unsigned i=0;i<32;i++)if(m->private_scene_input_ids[i])return -EOPNOTSUPP;
+ return 0;
+}
 #include "memory_close_actual.inc"
+#include "remesa_matrix_construct.inc"
 #include "session_gate_actual.inc"
 #include "remesa_private_session.inc"
 #include "remesa_private_memory_file_lost.inc"
@@ -111,7 +123,7 @@ int main(void)
  CHECK(remesa_private_session_release(&s,&otherowner)==-EACCES);
  for(unsigned frame=0;frame<3;frame++){
   /* Job/lease metadata is modeled; actual admission body must reject it. */
-  struct remesa_memory_request r={REMESA_MEM_CREATE};
+  struct remesa_memory_request r={.action=REMESA_MEM_CREATE};
   CHECK(session_gate(&s,&r)==-EBUSY);r.action=REMESA_MEM_UNMAP;
   CHECK(session_gate(&s,&r)==-EBUSY);
   for(unsigned action=REMESA_MEM_LEASE;action<=REMESA_MEM_SYNC;action++){

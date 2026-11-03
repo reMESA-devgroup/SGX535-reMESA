@@ -5,6 +5,18 @@
 #undef main
 static void *general_session;
 static unsigned matrix_executes;
+#include "../remesa_gem_twod_job.h"
+/* Typed fill command construction has its own real retained-core tests. */
+#include "remesa_twod_fill_uapi.h"
+static int twod_fill_command(struct remesa_gem_memory *s,const struct remesa_twod_fill_request *r,
+ struct remesa_gem_twod_command *command,struct remesa_memory_binding uses[2],unsigned *count)
+{
+ (void)command;CHECK(endpoint_lock.held&&s==endpoint);
+ struct backing *b=&s->bo[r->destination.id&31];
+ if(!b->live||b->generation!=r->destination.id>>5)return -ENOENT;
+ if(s->executor||s->stream_bound||s->ta_cache_domains)return -EBUSY;
+ uses[0]=(struct remesa_memory_binding){r->destination.id,b->va.start,b->gem.size};*count=1;return 0;
+}
 int remesa_gem_scene_job_execute_matrix(struct remesa_gem_scene_job *c,
  struct sgx535_gma500_fixed_backend *b,struct remesa_stream_observation *o,const void *owner,unsigned ticks,unsigned samples)
 {
@@ -13,6 +25,7 @@ int remesa_gem_scene_job_execute_matrix(struct remesa_gem_scene_job *c,
  return remesa_gem_scene_job_execute(c,b,o,owner,ticks,samples);
 }
 #include "../remesa_matrix_submit.inc"
+#ifndef REMESA_MATRIX_CONTROLLER_FIXTURE
 int main(int argc,char **argv)
 {
  CHECK(argc==2);fault=(unsigned)strtoul(argv[1],NULL,10);
@@ -75,3 +88,4 @@ int main(int argc,char **argv)
  printf("PASS normal matrix controller case%u retained=%u executes=%u hashes0 LABdisabled GPU0\n",fault,r.retained,matrix_executes);
  return 0;
 }
+#endif

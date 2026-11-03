@@ -9,6 +9,7 @@ static void remesa_private_memory_lost(struct drm_device *dev,struct drm_file *f
  if(s&&s->dev==dev&&(all||s->file==file)){
   mutex_lock(&s->lock);
   s->private_device_lost=true;s->file=NULL;
+  s->private_matrix_constructing=false;
   for(i=0;i<8;i++)if(s->jobs[i].live){
    s->jobs[i].quarantined=true;s->jobs[i].state=REMESA_JOB_QUARANTINED;
   }

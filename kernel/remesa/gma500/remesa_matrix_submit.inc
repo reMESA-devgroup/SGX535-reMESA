@@ -5,6 +5,7 @@
 #include "remesa_matrix_submit_uapi.h"
 static bool matrix_submit_enabled;
 module_param_named(remesa_matrix_submit_enabled,matrix_submit_enabled,bool,0600);
+#include "remesa_matrix_fill.inc"
 int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file *file)
 {
  struct remesa_matrix_submit_request *r=data;struct remesa_scene_probe *p=NULL;
@@ -14,11 +15,24 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
  if(!memory_enabled||!matrix_submit_enabled)return -EOPNOTSUPP;
  if(!remesa_matrix_submit_request_valid(r))return -EINVAL;
  mutex_lock(&scene_probe_lock);
- if(scene_probe_retained||scene_probe_consumed||general_session){error=-EBUSY;goto done;}
- p=kzalloc(sizeof(*p),GFP_KERNEL);if(!p){error=-ENOMEM;goto done;}
- error=remesa_private_session_acquire(dev,file,r->context,p,&p->memory);
- if(error){kfree(p);p=NULL;goto done;}
- p->backing_owned=true;scene_probe_retained=p;s=p->memory;p->packet=r->packet;
+ if(scene_probe_consumed||general_session||
+    (scene_probe_retained&&(!matrix_fill_owner||scene_probe_retained!=&matrix_fill_owner->base))){error=-EBUSY;goto done;}
+ if(matrix_fill_owner){
+  struct remesa_matrix_fill_owner *m=matrix_fill_owner;p=&m->base;s=p->memory;
+  mutex_lock(&endpoint_lock);
+  if(endpoint!=s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost||
+     s->private_session!=p){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
+  if(m->active||m->failed||!m->retirement.gem_retired||m->color!=r->packet.controls.color_id||
+     m->width!=r->packet.controls.width||m->height!=r->packet.controls.height){error=-EBUSY;mutex_unlock(&endpoint_lock);goto done;}
+  mutex_lock(&s->lock);s->private_matrix_constructing=false;mutex_unlock(&s->lock);
+  mutex_unlock(&endpoint_lock);
+ }else{
+  p=kzalloc(sizeof(*p),GFP_KERNEL);if(!p){error=-ENOMEM;goto done;}
+  error=remesa_private_session_acquire(dev,file,r->context,p,&p->memory);
+  if(error){kfree(p);p=NULL;goto done;}
+  p->backing_owned=true;scene_probe_retained=p;s=p->memory;
+ }
+ p->packet=r->packet;
  mutex_lock(&endpoint_lock);
  if(endpoint!=s||s->private_device_lost||s->file!=file||s->private_session!=p){error=-ENODEV;goto cancel_locked;}
  dev_priv=dev->dev_private;
@@ -76,7 +90,7 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
   if(!cleanup){cleanup=remesa_private_session_release(s,p);if(!cleanup)p->backing_owned=false;}
   if(cleanup&&!error)error=cleanup;
  }
- if(!cleanup){scene_probe_retained=NULL;r->stages|=8;}
+ if(!cleanup){scene_probe_retained=NULL;matrix_fill_owner=NULL;r->stages|=8;}
  else if(!error)error=cleanup;
  r->error=error;r->retained=scene_probe_retained!=NULL;
  if(!cleanup){kfree(p);p=NULL;}

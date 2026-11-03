@@ -556,6 +556,7 @@ def private_file_lost_sources(memory):
         ' int (*pds_write_guard)(u64,const void *,unsigned);\n'
         ' const void *private_session; /* backing lease, not source authority */\n'
         ' bool private_source_held, private_source_poisoned;\n'
+        ' bool private_matrix_constructing;u32 private_matrix_color;\n'
         ' u32 private_input_ids[5];\n'
         ' u32 private_scene_input_ids[32],private_scene_input_mask;\n'
         ' unsigned private_scene_binding_count;\n'
@@ -573,7 +574,7 @@ def private_file_lost_sources(memory):
         '{return (s->ta_cache_domains && s->ta_pools_sealed && is_managed_ta_pool(b)) || private_dpm_domain(s,b);}')
     memory = replace_once(memory,
         'static int act(struct remesa_gem_memory *s,struct remesa_memory_request *r)\n',
-        '#include "remesa_private_dpm_cache.inc"\n'
+        '#include "remesa_private_dpm_cache.inc"\n#include "remesa_matrix_construct.inc"\n'
         'static int act(struct remesa_gem_memory *s,struct remesa_memory_request *r)\n')
     memory = replace_once(memory,
         ' unsigned i;if(!s) return -EINVAL;mutex_lock(&s->lock);\n',
@@ -582,6 +583,18 @@ def private_file_lost_sources(memory):
         ' if(s->private_session){mutex_unlock(&s->lock);return -EBUSY;}\n')
     memory = replace_once(memory, ' if(s->stream_bound) {\n',
         ' if(s->stream_bound || s->private_session) {\n')
+    memory = replace_once(memory,
+        '  for(slot=0;slot<8;slot++)if(s->jobs[slot].live)return -EBUSY;\n'
+        '  if(r->action!=REMESA_MEM_LEASE && r->action!=REMESA_MEM_READ &&\n'
+        '     r->action!=REMESA_MEM_WRITE && r->action!=REMESA_MEM_UNLEASE &&\n'
+        '     r->action!=REMESA_MEM_SYNC)return -EBUSY;\n',
+        '  if(matrix_color_protected_write(s,r))return -EPERM;\n'
+        '  if(!matrix_cpu_construct(s,r)){\n'
+        '   for(slot=0;slot<8;slot++)if(s->jobs[slot].live)return -EBUSY;\n'
+        '   if(r->action!=REMESA_MEM_LEASE && r->action!=REMESA_MEM_READ &&\n'
+        '      r->action!=REMESA_MEM_WRITE && r->action!=REMESA_MEM_UNLEASE &&\n'
+        '      r->action!=REMESA_MEM_SYNC)return -EBUSY;\n'
+        '  }\n')
     memory = replace_once(memory, ' if(s->stream_bound || s->executor){e=-EBUSY;goto unlock;}\n',
         ' if(s->stream_bound || s->private_session || s->executor){e=-EBUSY;goto unlock;}\n')
     memory = replace_once(memory, ' if(endpoint->stream_bound){e=-EBUSY;goto done;}\n',
@@ -1004,6 +1017,7 @@ def stage(native, output, lab=False, vendor=False, copy=False, fill=False, priva
                      'remesa_private_scene_parameter_bind.inc',
                      'remesa_general_session.inc',
                      'remesa_matrix_submit.h', 'remesa_matrix_submit.inc',
+                     'remesa_matrix_fill.inc', 'remesa_matrix_construct.inc',
                      'remesa_private_dpm_cache.inc',
                      'remesa_private_inputs.inc',
                      'remesa_private_session_lab.h', 'remesa_private_session_lab_request.h',

@@ -54,6 +54,9 @@ int remesa_twod_copy_ioctl(struct drm_device *dev,void *data,struct drm_file *fi
     r->stages||r->retained||r->core||r->revision||r->error)return -EINVAL;
  mutex_lock(&endpoint_lock);s=endpoint;
  if(!s||s->dev!=dev||s->file!=file||s->context!=r->context){error=-EACCES;goto done;}
+#ifdef REMESA_GENERAL_SCENE
+ if(s->private_session){error=-EBUSY;goto done;}
+#endif
  if(twod_copy_retained){error=-EBUSY;goto done;}
  error=twod_copy_command(s,r,&command,uses,&count);if(error)goto done;
  session=kzalloc(sizeof(*session),GFP_KERNEL);if(!session){error=-ENOMEM;goto done;}
