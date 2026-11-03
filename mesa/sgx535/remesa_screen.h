@@ -123,6 +123,14 @@ int remesa_context_linked_vertex_inputs_snapshot(struct pipe_context *,
  * Resource-only graphics/draw/capability gates stay unchanged; this is not the
  * CPU-depth LAB mode. Rejects nonpersistent or incompatible allocation owners. */
 int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *);
+/* Ordinary draw_vbo frontend for the independently registered native scene
+ * submitter, not a LAB profile selector. Before children; requires typed GEM
+ * storage and the existing native COLOR fill hook. Current subset requires a
+ * full explicit COLOR/Z clear before each draw, complete recognized P/N NIR,
+ * conservative in-clip affine/W2 inputs and supported fixed state. Rejections
+ * stay explicit. No Linux endpoint, physical qualification or GL version is
+ * inferred from enabling this frontend. */
+int remesa_screen_enable_native_draws(struct pipe_screen *);
 struct remesa_isp_opaque_triangle_request;
 /* Snapshot the bound opaque blend/depth state for typed GEM COLOR/Z. Uses the
  * existing full-RGBA/disabled-or-LESS-write state contract. No default state is

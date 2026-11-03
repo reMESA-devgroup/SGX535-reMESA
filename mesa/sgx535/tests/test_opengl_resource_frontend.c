@@ -23,6 +23,16 @@ static void *observed_raster;
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
 static uint64_t api_va[64];
 static unsigned api_fault;
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+static unsigned normal_fill_calls;
+static int normal_fill(void *priv,const struct remesa_gpu_fill *fill)
+{
+ struct fixture *f=priv;CHECK(fill->color==0&&fill->destination_x==0&&fill->destination_y==0);
+ CHECK(fill->width==fill->destination.width&&fill->height==fill->destination.height);
+ CHECK(get(f,fill->destination.id)->length>=(size_t)fill->destination.stride*fill->height);
+ normal_fill_calls++;return 0; /* Models the receipt only, never writes pixels. */
+}
+#endif
 static int api_record_mapping(void *priv,uint32_t id,uint64_t va,size_t bytes)
 {
  int error=ops.gpu_map(priv,id,va,bytes);
@@ -165,11 +175,16 @@ static void inspect_fixed_inputs(struct pipe_context *ctx,struct remesa_device *
 static struct pipe_context *create_enabled(struct pipe_screen *screen,void *priv,unsigned flags)
 {
  struct pipe_context *ctx=original_create(screen,priv,flags);CHECK(ctx);
- CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==(automatic_context?EALREADY:0));enabled_contexts++;original_vs=ctx->create_vs_state;ctx->create_vs_state=observe_vertex;
+#ifndef REMESA_TEST_OPENGL_NORMAL_DRAW
+ CHECK(remesa_context_enable_homogeneous_draw_lab(ctx)==(automatic_context?EALREADY:0));
+#endif
+ enabled_contexts++;original_vs=ctx->create_vs_state;ctx->create_vs_state=observe_vertex;
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
  if(frontend_case>=3){
+#ifndef REMESA_TEST_OPENGL_NORMAL_DRAW
   CHECK(!remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED));
   CHECK(remesa_context_enable_homogeneous_api_lab(ctx,REMESA_HOMOGENEOUS_API_W2_CLAMPED)==EALREADY);
+#endif
  }
 #endif
  original_raster=ctx->create_rasterizer_state;ctx->create_rasterizer_state=observe_raster;
@@ -222,14 +237,32 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  REMESA_GL_PROC(void,glClear,(GLbitfield));REMESA_GL_PROC(void,glClearColor,(GLfloat,GLfloat,GLfloat,GLfloat));
  REMESA_GL_PROC(void,glClearDepth,(GLdouble));
 #undef REMESA_GL_PROC
- const char *witness=getenv("REMESA_BOUND_GEARS_WITNESS_DIR");CHECK(witness);
+ const char *witness=getenv("REMESA_BOUND_GEARS_WITNESS_DIR");
+#ifndef REMESA_TEST_OPENGL_NORMAL_DRAW
+ CHECK(witness);
+#endif
  GLfloat coefficients[36],vertices[3][8];char path[4096];
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+ (void)witness;(void)path;memset(coefficients,0,sizeof coefficients);
+ coefficients[0]=coefficients[1]=coefficients[2]=coefficients[3]=1;
+ coefficients[16]=coefficients[21]=coefficients[26]=1;coefficients[31]=2;
+ coefficients[28]=.25f;coefficients[34]=1;
+ const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
+ memcpy(vertices,dynamic,sizeof vertices);
+#else
  CHECK(snprintf(path,sizeof path,"%s/coefficients-source.bin",witness)>0);
  FILE *file=fopen(path,"rb");CHECK(file&&fread(coefficients,1,sizeof coefficients,file)==sizeof coefficients&&fgetc(file)==EOF&&!fclose(file));
  CHECK(snprintf(path,sizeof path,"%s/vertices-source.bin",witness)>0);
  file=fopen(path,"rb");CHECK(file&&fread(vertices,1,sizeof vertices,file)==sizeof vertices&&fgetc(file)==EOF&&!fclose(file));
+#endif
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
- if(api_fault==1)vertices[0][0]+=.25f;
+ if(api_fault==1){
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+  vertices[0][0]=2;
+#else
+  vertices[0][0]+=.25f;
+#endif
+ }
  if(api_fault==2)coefficients[16]*=2;
 #endif
  const GLfloat one[4]={1,1,1,1},zero[4]={0,0,0,0};
@@ -253,6 +286,11 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  glEnableClientState(GL_VERTEX_ARRAY);glEnableClientState(GL_NORMAL_ARRAY);
  glClearColor(0,0,0,0);glClearDepth(1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
  CHECK(!remesa_context_error(st->pipe)&&!remesa_context_cpu_clear_count(st->pipe));
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+ CHECK(normal_fill_calls==1&&remesa_context_native_fill_count(st->pipe)==1);
+ glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+ CHECK(!remesa_context_error(st->pipe)&&normal_fill_calls==2&&remesa_context_native_fill_count(st->pipe)==2);
+#endif
  CHECK(remesa_resource_wait_writer(st->pipe,color,0)==EBUSY);
  printf("FIXED_CLEAR_MASK case=%u observed=%x expected=%x depth_wait=%d\n",frontend_case,observed_clear_mask,PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH,remesa_resource_wait_writer(st->pipe,depth,0));
  fflush(stdout);CHECK(remesa_resource_wait_writer(st->pipe,depth,0)==EBUSY);
@@ -265,6 +303,7 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  (void)remesa_context_shader_compile_status(st->pipe,PIPE_SHADER_FRAGMENT,&fs);
  printf("FIXED_GL version=%u GL_error=%u VS_attempts=%llu VS_error=%d FS_attempts=%llu FS_error=%d pipe=%d submissions=%u\n",
   st->ctx->Version,glGetError(),(unsigned long long)vs.attempts,vs.error,(unsigned long long)fs.attempts,fs.error,remesa_context_error(st->pipe),dispatch_calls);
+ fflush(stdout);
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
  (void)device;(void)fixture;
  if(api_fault){
@@ -293,7 +332,13 @@ int main(void)
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
  const char *fault=getenv("REMESA_TEST_API_FAULT");api_fault=fault?(unsigned)strtoul(fault,NULL,10):0;CHECK(api_fault<=5);
 #endif
- for(unsigned enable=0;enable<5;enable++) {
+ for(unsigned enable=
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+  3
+#else
+  0
+#endif
+ ;enable<5;enable++) {
   frontend_case=enable;vertex_attempt=0;
   glsl_type_singleton_init_or_ref();
   struct fixture f={.allow_gpu_map=true,.allow_sync=true};target_ops=ops;target_ops.create=builder_create;
@@ -309,7 +354,13 @@ int main(void)
   cfg.placement[REMESA_VA_SURFACE]=(struct remesa_persistent_va_range){0x40001000,0x45000000,4096};
   CHECK(!remesa_persistent_open(&device,&cfg));
 #ifdef REMESA_TEST_OPENGL_W2_API_DRAW
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+  normal_fill_calls=0;
+  CHECK(!remesa_persistent_set_native_draw_scene(&device,api_native));
+  CHECK(!remesa_persistent_set_native_fill(&device,normal_fill));
+#else
   CHECK(!remesa_persistent_set_native_scene(&device,api_native));
+#endif
 #else
   CHECK(!remesa_persistent_set_native_scene(&device,context_native));
 #endif
@@ -318,7 +369,13 @@ int main(void)
   CHECK(!screen->caps.graphics&&!screen->caps.accelerated);
   automatic_context=enable>=2;
   if(automatic_context){
+#ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
+   CHECK(!remesa_screen_enable_native_fill(screen,remesa_persistent_fill_region));
+   CHECK(!remesa_screen_enable_native_draws(screen));
+   CHECK(remesa_screen_enable_homogeneous_frontend_lab(screen)==ENOTSUP);
+#else
    CHECK(!remesa_screen_enable_homogeneous_frontend_lab(screen));
+#endif
    CHECK(screen->caps.graphics&&!screen->caps.accelerated);
    CHECK(screen->shader_caps[PIPE_SHADER_VERTEX].max_inputs==2);
   }

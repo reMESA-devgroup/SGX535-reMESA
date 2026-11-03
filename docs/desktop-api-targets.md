@@ -65,12 +65,51 @@ READ inputs and guards, complete cleanup and verified stock recovery. See
 The retained eleven-role path remains valid for its original scope; it is no
 longer the only general integration available.
 
-Changing uniforms between those submissions is still an integration task.
-The sealed DATA transaction and captured PARAM windows have offline/module
-qualification. The latest kernel candidate binds policy from the first
-acknowledged job's decoded native PARAM/TA plans before releasing its loan.
-That candidate has not been physically qualified, and frontend/Linux update
-transport is not yet connected. See [sealed input updates](sealed-scene-input-updates.md).
+The frontend/Linux DATA update transport is connected. On November 3, the
+1280x800 changing-matrix test submitted and retired both jobs and acknowledged
+the exact PARAM update. Both Z24 results matched, but the second COLOR result
+failed its original oracle: 99 pixels from the previous triangle remained.
+The existing prefix clears Z, and host DISCARD does not clear COLOR. This is
+a failed full-frame qualification, not a successful changing-frame result.
+The 640x640 case was not executed after that failure, and stock boot was
+restored. Preserve the failure and the original oracle at
+`/home/gama/sgx535-offline/typed-parameter-physical-20261103/v1-1280/FINAL_FAILED_1280_RESULT.json`.
+See [sealed input updates](sealed-scene-input-updates.md) for the DATA contract.
+
+## Ordinary draw frontend: implemented, not physically qualified
+
+The next frontend slice connects actual Mesa `glClear` and
+`glDrawArrays(GL_TRIANGLES, ...)` to `draw_vbo` and the existing typed scene
+builders. It uses a separately registered native submitter; enabling a LAB
+callback alone cannot enable this route. Full black COLOR clear uses the
+existing native fill hook, while pending Z clear is consumed by the existing
+draw prefix. No CPU-rendered pixels or framebuffer oracle runs in the draw
+callback. Unsupported programs, states and input domains remain explicit
+refusals, and the screen still reports unqualified acceleration.
+
+This first slice admits only the recognized POSITION/NORMAL lighting program,
+full viewport, opaque state, LESS with depth writes, and bounded diagonal
+matrix inputs with W=2. Each draw requires a fresh full COLOR/Z clear. It does
+not yet support a desktop frame with multiple arbitrary draws, textures or
+general shaders. The normal Linux runtime callback is still missing: the
+closed general-session LAB catalogue must not be reused as dynamic admission.
+The existing kernel scene executor and its validators are reuse targets;
+complete input authority and source lifetime still need to be connected to
+the normal submitter before a physical API draw is safe.
+
+Offline evidence is recorded under
+`/home/gama/sgx535-offline/normal-draw-frontend-20261103/v1/`.
+Actual Mesa API/state-tracker tests pass in 1280x800 and 640x640 with modeled
+native fill/draw receipts, including unsupported-state refusals. These tests
+execute zero GPU operations and establish no FPS gain or physical pixel
+correctness. The initial NORMAL.w refusal and temporary diagnostic build are
+preserved there: the existing float3 fetch pads W=1, and the selected shader
+consumes XYZ only. The normal input check accepts canonical W=0 or W=1 without
+changing the fetch, shader or LAB admission.
+
+Rollback for this slice is to leave normal registration/screen enable unused;
+the default resource-only endpoint and existing LAB path retain their gates.
+Do not install or advertise this opt-in frontend as a qualified GL driver.
 
 These are integration milestones, not a percentage of complete OpenGL 2.1.
 The following API coverage still needs its own implementation audit and

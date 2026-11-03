@@ -144,6 +144,7 @@ struct persistent {
  remesa_gpu_copy_fn native_copy;
  remesa_gpu_fill_fn native_fill;
  remesa_gpu_scene_fn native_scene;
+ bool native_draw_scene;
  remesa_gpu_scene_parameters_fn native_scene_parameters;
  int (*release_provider)(void *);void *release_priv;int release_error;
 };
@@ -3795,6 +3796,16 @@ int remesa_persistent_native_scene_ready(const struct remesa_device *device)
  const struct persistent *d=device->priv;
  if(d->failed)return EOWNERDEAD;
  return d->native_scene?0:EOPNOTSUPP;
+}
+int remesa_persistent_set_native_draw_scene(struct remesa_device *device,remesa_gpu_scene_fn fn)
+{
+ int e=remesa_persistent_set_native_scene(device,fn);if(e)return e;
+ ((struct persistent *)device->priv)->native_draw_scene=true;return 0;
+}
+int remesa_persistent_native_draw_ready(const struct remesa_device *device)
+{
+ int e=remesa_persistent_native_scene_ready(device);if(e)return e;
+ return ((const struct persistent *)device->priv)->native_draw_scene?0:EOPNOTSUPP;
 }
 int remesa_persistent_set_native_scene_parameters(struct remesa_device *device,
  remesa_gpu_scene_parameters_fn fn)

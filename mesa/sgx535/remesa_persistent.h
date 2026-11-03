@@ -942,6 +942,12 @@ int remesa_persistent_scene_capture_release(struct remesa_device *,
 /* Install only on a fresh endpoint, before any allocation/job/capture/shader.
  * Does not enable ordinary draw or alter resource-only/qualification flags. */
 int remesa_persistent_set_native_scene(struct remesa_device *,remesa_gpu_scene_fn);
+/* Separate registration for ordinary draw_vbo integration. The callback must
+ * admit the live typed graph independently of LAB catalogues. Registration
+ * does not qualify hardware, enable screen caps or relax source/memory checks.
+ * LAB registration alone never makes this route ready. Fresh endpoint only. */
+int remesa_persistent_set_native_draw_scene(struct remesa_device *,remesa_gpu_scene_fn);
+int remesa_persistent_native_draw_ready(const struct remesa_device *);
 /* Optional data-only companion, installed on the same fresh device before
  * any allocation. Does not enable writable maps or change graphics caps. */
 int remesa_persistent_set_native_scene_parameters(struct remesa_device *,remesa_gpu_scene_parameters_fn);
