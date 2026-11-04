@@ -118,7 +118,7 @@ static const u8 *scene_pds_image_view(const struct remesa_gem_scene_job *c,u32 i
 }
 int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *c)
 {
- struct retained_job *j;unsigned n,r;int error;const u8 *image;
+ struct retained_job *j;unsigned n,r;int error;const u8 *image;unsigned first=c&&c->controls.command.schema==3?1:0;
  if(!c||!c->memory||c->state!=REMESA_SCENE_JOB_PREPARED||!c->loan.live||
     c->loan.memory!=c->memory||!c->count||c->count>REMESA_GEM_JOB_BINDINGS||
     c->loan.execution_started||c->loan.host_published||c->service.started)return -EINVAL;
@@ -144,7 +144,7 @@ int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *c)
   struct remesa_fragment_task decoded;
   image=scene_pds_image_view(c,c->fragments.draws[n].primary_id,c->fragments.draws[n].primary_offset,
    c->fragments.draws[n].primary_bytes);if(!image)return -EACCES;
-  error=remesa_fragment_primary_image(image,c->fragments.draws[n].primary_bytes,n?1:0,&decoded);
+  error=remesa_fragment_primary_image(image,c->fragments.draws[n].primary_bytes,n+first?1:0,&decoded);
   if(error)return -error;
  }
  {
@@ -164,12 +164,13 @@ int remesa_gem_scene_job_pds_images_check_locked(struct remesa_gem_scene_job *c)
 
 int remesa_gem_scene_job_matrix_values_check_locked(struct remesa_gem_scene_job *c)
 {
- unsigned r,n,parameter,seen=0;const u8 *coefficients,*vertices;int error;
+ unsigned r,n,parameter,seen=0;unsigned draw_slot;bool preserve;const u8 *coefficients,*vertices;int error;
  error=remesa_gem_scene_job_pds_images_check_locked(c);if(error)return error;
- if(c->ta.draw_count!=1||c->ta.reference_count!=9||c->states.count!=5||
-    c->ta.references[0].kind!=REMESA_TA_REF_INITIAL_STATE||c->vertices.count!=2||c->fragments.count!=2||
-    c->vertices.draws[1].use_bytes!=344||c->vertices.draws[1].stride_bytes!=48||
-    c->controls.command.schema!=2||c->controls.command.depth_finalize!=1||
+ preserve=c->controls.command.schema==3;draw_slot=1;
+ if(c->ta.draw_count!=1||c->ta.reference_count!=(preserve?8:9)||c->states.count!=(preserve?4:5)||
+    c->ta.references[0].kind!=REMESA_TA_REF_INITIAL_STATE||c->vertices.count!=2||c->fragments.count!=(preserve?1:2)||
+    c->vertices.draws[draw_slot].use_bytes!=344||c->vertices.draws[draw_slot].stride_bytes!=48||
+    (!preserve&&c->controls.command.schema!=2)||c->controls.command.depth_finalize!=1||
     c->controls.command.depth_cpp!=4||c->controls.command.clear_depth_bits!=0x3f800000U)return -EOPNOTSUPP;
  parameter=c->states.count;
  for(r=0;r<c->ta.reference_count;r++)if(c->ta.references[r].draw==1&&
@@ -183,11 +184,20 @@ int remesa_gem_scene_job_matrix_values_check_locked(struct remesa_gem_scene_job 
  if(parameter==c->states.count||c->states.uploads[parameter].source_bytes!=160)return -EOPNOTSUPP;
  coefficients=scene_pds_image_view(c,c->states.uploads[parameter].source_id,
   c->states.uploads[parameter].source_offset,160);
- vertices=scene_pds_image_view(c,c->vertices.draws[1].vertex_id,c->vertices.draws[1].vertex_offset,
-  c->vertices.draws[1].vertex_bytes);
+ vertices=scene_pds_image_view(c,c->vertices.draws[draw_slot].vertex_id,c->vertices.draws[draw_slot].vertex_offset,
+  c->vertices.draws[draw_slot].vertex_bytes);
  if(!coefficients||!vertices)return -EACCES;
- error=remesa_matrix_draw_values(vertices,c->vertices.draws[1].vertex_bytes,
-  c->vertices.draws[1].vertex_bytes/48,48,coefficients+4,144);
+ if(preserve){
+  const u8 *prefix=scene_pds_image_view(c,c->vertices.draws[0].vertex_id,c->vertices.draws[0].vertex_offset,
+   c->vertices.draws[0].vertex_bytes);
+  const u8 *indices=scene_pds_image_view(c,c->vertices.draws[0].index_id,c->vertices.draws[0].index_offset,
+   c->vertices.draws[0].index_bytes);
+  error=remesa_matrix_prefix_geometry_values(prefix,c->vertices.draws[0].vertex_bytes,
+   indices,c->vertices.draws[0].index_bytes,c->controls.command.width,c->controls.command.height);
+  if(error)return -error;
+ }
+ error=remesa_matrix_draw_values(vertices,c->vertices.draws[draw_slot].vertex_bytes,
+  c->vertices.draws[draw_slot].vertex_bytes/48,48,coefficients+4,144);
  if(error)return -error;
  for(r=0;r<c->ta.reference_count;r++){
   unsigned kind=c->ta.references[r].kind,bit;
@@ -213,7 +223,7 @@ int remesa_gem_scene_job_matrix_values_check_locked(struct remesa_gem_scene_job 
   }
   if(error)return -error;
  }
- return seen==3?0:-EPROTO;
+ return seen==(preserve?2:3)?0:-EPROTO;
 }
 
 /* Default-PD authentication is deliberately before the MMU writer interval.

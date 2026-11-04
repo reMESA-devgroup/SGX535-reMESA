@@ -31,10 +31,19 @@ int main(void)
  s.file=NULL;CHECK(!matrix_cpu_construct(&s,&r));s.file=&file;
  s.private_matrix_color=0;CHECK(!matrix_cpu_construct(&s,&r));s.private_matrix_color=32;
  s.private_session=NULL;CHECK(!matrix_cpu_construct(&s,&r));s.private_session=&owner;
+ s.private_matrix_depth=34;
+ for(unsigned i=0;i<sizeof actions/sizeof actions[0];i++){
+  r=(struct remesa_memory_request){.action=actions[i],.id=34};
+  bool read=actions[i]==REMESA_MEM_LEASE||actions[i]==REMESA_MEM_READ||actions[i]==REMESA_MEM_UNLEASE||actions[i]==REMESA_MEM_SYNC;
+  CHECK(matrix_cpu_construct(&s,&r)==read&&matrix_color_protected_write(&s,&r)==!read);
+ }
+ r=(struct remesa_memory_request){.action=REMESA_MEM_LEASE,.id=34,.flags=1};
+ CHECK(!matrix_cpu_construct(&s,&r)&&matrix_color_protected_write(&s,&r));
+ r=(struct remesa_memory_request){.action=REMESA_MEM_CREATE};CHECK(matrix_cpu_construct(&s,&r));
  r.action=999;CHECK(!matrix_cpu_construct(&s,&r)&&session_gate(&s,&r)==-EBUSY);
  CHECK(remesa_gem_memory_close(&s)==-EBUSY&&!cleanup);
  CHECK(!remesa_private_session_release(&s,&owner));
- CHECK(!s.private_matrix_constructing&&!s.private_matrix_color&&!s.private_session);
+ CHECK(!s.private_matrix_constructing&&!s.private_matrix_color&&!s.private_matrix_depth&&!s.private_session);
  puts("PASS normal CPU construction admission, protected COLOR, active/frozen/foreign-state refusals; no source/GPU authority");
  return 0;
 }

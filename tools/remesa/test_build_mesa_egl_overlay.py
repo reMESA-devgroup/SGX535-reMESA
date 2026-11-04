@@ -5,6 +5,7 @@ import argparse
 import importlib.util
 import json
 from pathlib import Path
+import re
 import struct
 import sys
 import tempfile
@@ -57,6 +58,24 @@ class InputValidation(unittest.TestCase):
             self.assertEqual((driver / name).read_bytes(),
                              (DIRECTORY.parents[1] / "mesa/sgx535" / name).read_bytes())
         self.assertIn("'remesa_present.c'", (driver / "meson.build").read_text())
+        # Follow project-owned quoted includes, including transitive headers.
+        # A build must not accidentally find omitted files in the worktree.
+        repo = DIRECTORY.parents[1]
+        for staged in driver.rglob('*'):
+            if staged.suffix not in ('.c', '.h', '.inc'):
+                continue
+            relative = staged.relative_to(driver)
+            origin = (repo / relative if relative.parts[0] == 'include' else
+                      repo / 'mesa/sgx535' / relative)
+            for name in re.findall(r'^\s*#\s*include\s+"([^"]+)"', staged.read_text(), re.M):
+                original = next((p for p in (origin.parent/name,
+                    repo/'mesa/sgx535'/name, repo/'include'/name) if p.is_file()), None)
+                if original is None:
+                    continue  # Mesa and system headers have separate build inputs.
+                copied = next((p for p in (staged.parent/name, driver/name,
+                    driver/'include'/name) if p.is_file()), None)
+                self.assertIsNotNone(copied, f'{relative}: missing project include {name}')
+                self.assertEqual(copied.read_bytes(), original.read_bytes())
         manifest["files"][build.UNITS[0]] = "0" * 64
         path.write_text(json.dumps(manifest))
         with self.assertRaises(ValueError):

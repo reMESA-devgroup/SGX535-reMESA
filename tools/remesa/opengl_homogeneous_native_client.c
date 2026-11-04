@@ -83,7 +83,11 @@ static enum remesa_dispatch collect_matrix(void *priv,const struct remesa_gpu_sc
 #endif
 int main(int argc,char **argv)
 {
-#if defined(REMESA_OPENGL_CONTINUOUS_NATIVE)
+#if defined(REMESA_OPENGL_PRESERVE_NATIVE)
+ if(argc!=7||strcmp(argv[5],"--execute")||strcmp(argv[6],"3")){
+  fprintf(stderr,"usage: opengl_matrix_preserve_client borrowed-fd 1280x800|640x640 existing-output-dir sealed-three-step-fixture-root --execute 3\n");return 2;
+ }
+#elif defined(REMESA_OPENGL_CONTINUOUS_NATIVE)
  if(argc!=7||strcmp(argv[5],"--execute")||(strcmp(argv[6],"2")&&strcmp(argv[6],"10")&&strcmp(argv[6],"100"))){
   fprintf(stderr,"usage: opengl_matrix_continuous_client borrowed-fd 1280x800|640x640 existing-output-dir pinned-fixture-dir --execute 2|10|100\n");return 2;
  }
@@ -99,6 +103,10 @@ int main(int argc,char **argv)
  char *end;errno=0;long fd=strtol(argv[1],&end,10);if(errno||!*argv[1]||*end||fd<0||fd>INT_MAX)return 2;
  unsigned width,height;if(!strcmp(argv[2],"1280x800")){width=1280;height=800;}else if(!strcmp(argv[2],"640x640")){width=height=640;}else return 2;
  borrowed_fd=(int)fd;out_dir=argv[3];fixture_dir=argv[4];prepare_only=!strcmp(argv[5],"--prepare-only");timings[0]=ns();
+ #ifdef REMESA_OPENGL_PRESERVE_NATIVE
+ const char *fixture_root=fixture_dir;char initial_fixture[4096];
+ CHECK(snprintf(initial_fixture,sizeof initial_fixture,"%s/step-1",fixture_root)>0);fixture_dir=initial_fixture;
+#endif
  session_jobs=!strcmp(argv[5],"--session-2")?2:0;
  CHECK(!st_api_get_current());
  struct remesa_linux_memory *memory=NULL;OK(remesa_linux_memory_begin(fd,&memory));
@@ -125,6 +133,9 @@ int main(int argc,char **argv)
 #ifdef REMESA_OPENGL_NORMAL_NATIVE
  OK(remesa_screen_enable_native_fill(screen,remesa_persistent_fill_region));
  OK(remesa_screen_enable_native_draws(screen));
+#ifdef REMESA_OPENGL_PRESERVE_NATIVE
+ OK(remesa_screen_enable_native_preserve_candidate(screen));
+#endif
 #else
  OK(remesa_screen_enable_homogeneous_frontend_lab(screen));
 #endif
@@ -174,10 +185,21 @@ int main(int argc,char **argv)
  for(continuous_frame=1;continuous_frame<=frame_count;continuous_frame++){
   char frame_dir[4096];CHECK(snprintf(frame_dir,sizeof frame_dir,"%s/frame-%06u",parent_dir,continuous_frame)>0);
   CHECK(!mkdir(frame_dir,0700));out_dir=frame_dir;
+#ifdef REMESA_OPENGL_PRESERVE_NATIVE
+  char step_fixture[4096];CHECK(snprintf(step_fixture,sizeof step_fixture,"%s/step-%u",fixture_root,continuous_frame)>0);
+  fixture_dir=step_fixture;input_file("coefficients-source.bin",coefficients,sizeof coefficients);
+  glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#endif
   memset(timings,0,sizeof timings);timings[0]=ns();
   report=(struct api_report){.version=1,.context_created=1,.computed_version=st->ctx->Version,.glsl_version=st->ctx->Const.GLSLVersion};
 #endif
+#ifdef REMESA_OPENGL_PRESERVE_NATIVE
+ if(continuous_frame<3){ /* Baseline B, then clear+A; B3 has NO new clear. */
+#endif
  glClearColor(0,0,0,0);glClearDepth(1);glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
+#ifdef REMESA_OPENGL_PRESERVE_NATIVE
+ }
+#endif
  CHECK(glGetError()==GL_NO_ERROR&&!remesa_context_error(st->pipe));
  report.draw_called=1;glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  report.gl_error=glGetError();report.pipe_error=remesa_context_error(st->pipe);report.cpu_clears=remesa_context_cpu_clear_count(st->pipe);
@@ -205,6 +227,9 @@ int main(int argc,char **argv)
 #ifdef REMESA_OPENGL_CONTINUOUS_NATIVE
  }
  out_dir=parent_dir;
+#ifdef REMESA_OPENGL_PRESERVE_NATIVE
+ fixture_dir=fixture_root;
+#endif
  struct remesa_matrix_submit_request close_request={.version=1,.flags=REMESA_MATRIX_CLOSE_SESSION,.context=remesa_linux_memory_context(memory)},close_response;
  output(out_dir,"CLOSE-REQUEST.bin",&close_request,sizeof close_request);
  int close_result=remesa_linux_memory_matrix_close(memory);

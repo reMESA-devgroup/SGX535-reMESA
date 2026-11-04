@@ -81,20 +81,14 @@ static inline int remesa_matrix_draw_state_values(const void *input,size_t bytes
 /* Existing single-triangle Z-clear constructor's consumed state/geometry.
  * The fragment reference triple is checked by the held closure. Ignore all
  * unconsumed fourth-vertex/index capacity. No new geometry or CODE is emitted. */
-static inline int remesa_matrix_prefix_values(const void *state,size_t state_bytes,
- const void *vertices,size_t vertex_bytes,const void *indices,size_t index_bytes,
- remesa_scene_u32 width,remesa_scene_u32 height)
+static inline int remesa_matrix_prefix_geometry_values(const void *vertices,size_t vertex_bytes,
+ const void *indices,size_t index_bytes,remesa_scene_u32 width,remesa_scene_u32 height)
 {
- const remesa_ta_ref_u8 *p=state,*v=vertices,*ix=indices;unsigned i;
+ const remesa_ta_ref_u8 *v=vertices,*ix=indices;unsigned i;
  remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;remesa_scene_u32 x,y;
- if(!p||!v||!ix||state_bytes!=44||vertex_bytes!=48||index_bytes!=6||
-    (remesa_ta_ref_uptr)p>limit-44||(remesa_ta_ref_uptr)v>limit-48||
-    (remesa_ta_ref_uptr)ix>limit-6)return EINVAL;
+ if(!v||!ix||vertex_bytes!=48||index_bytes!=6||
+    (remesa_ta_ref_uptr)v>limit-48||(remesa_ta_ref_uptr)ix>limit-6)return EINVAL;
  if(!width||width>2048||!height||height>2048)return EOPNOTSUPP;
- if(remesa_ta_ref_word(p)!=0x54c5U||remesa_ta_ref_word(p+4)!=0x01e00100U||
-    remesa_ta_ref_word(p+8)!=0x0e000000U||remesa_ta_ref_word(p+24)||remesa_ta_ref_word(p+28)||
-    remesa_ta_ref_word(p+32)!=0x04001000U||remesa_ta_ref_word(p+36)!=0x10000U||
-    remesa_ta_ref_word(p+40))return EOPNOTSUPP;
  x=remesa_matrix_half_dimension(width)+0x01000000U;
  y=remesa_matrix_half_dimension(height)+0x01000000U;
  for(i=0;i<3;i++){
@@ -103,5 +97,21 @@ static inline int remesa_matrix_prefix_values(const void *state,size_t state_byt
      ix[2*i]!=i||ix[2*i+1])return EOPNOTSUPP;
  }
  return 0;
+}
+static inline int remesa_matrix_prefix_values(const void *state,size_t state_bytes,
+ const void *vertices,size_t vertex_bytes,const void *indices,size_t index_bytes,
+ remesa_scene_u32 width,remesa_scene_u32 height)
+{
+ const remesa_ta_ref_u8 *p=state,*v=vertices,*ix=indices;
+ remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;
+ if(!p||!v||!ix||state_bytes!=44||vertex_bytes!=48||index_bytes!=6||
+    (remesa_ta_ref_uptr)p>limit-44||(remesa_ta_ref_uptr)v>limit-48||
+    (remesa_ta_ref_uptr)ix>limit-6)return EINVAL;
+ if(!width||width>2048||!height||height>2048)return EOPNOTSUPP;
+ if(remesa_ta_ref_word(p)!=0x54c5U||remesa_ta_ref_word(p+4)!=0x01e00100U||
+    remesa_ta_ref_word(p+8)!=0x0e000000U||remesa_ta_ref_word(p+24)||remesa_ta_ref_word(p+28)||
+    remesa_ta_ref_word(p+32)!=0x04001000U||remesa_ta_ref_word(p+36)!=0x10000U||
+    remesa_ta_ref_word(p+40))return EOPNOTSUPP;
+ return remesa_matrix_prefix_geometry_values(vertices,vertex_bytes,indices,index_bytes,width,height);
 }
 #endif

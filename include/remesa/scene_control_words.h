@@ -2,6 +2,8 @@
 #ifndef REMESA_SCENE_CONTROL_WORDS_H
 #define REMESA_SCENE_CONTROL_WORDS_H
 #include "scene_layout.h"
+/* Existing Series5 DEFINED surface DATA contribution; not a LOAD certificate. */
+#define REMESA_SCENE_DEPTH_DEFINED_BITS 0x00200026u
 /* Serialization shared by the existing Mesa producer and the native consumer.
  * Inputs MUST already be validated by their owners. No address admission,
  * float operations, MMIO, buffer initialization or execution occurs here. */

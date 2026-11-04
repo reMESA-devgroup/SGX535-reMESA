@@ -24,7 +24,7 @@ int remesa_linux_memory_matrix_close(struct remesa_linux_memory *d)
     r.error||r.retained||r.response_reserved[0]||r.response_reserved[1]||r.stages!=8||
     r.operation||r.cookie||r.core||r.revision||r.pds_base||r.phase||r.ledger)
   return private_lab_uncertain(d);
- d->matrix_session_open=false;d->matrix_color=0;return 0;
+ d->matrix_session_open=false;d->matrix_color=d->matrix_depth=0;return 0;
 }
 int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
  const struct remesa_scene_packet *packet,uint32_t budget,struct remesa_matrix_submit_request *out)
@@ -40,6 +40,11 @@ int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
     !(d->matrix_continuous&&d->matrix_session_open&&d->scene_protocol==3)))return EALREADY;
  if(d->recorder.record)return EOPNOTSUPP;
  r.context=d->context;r.packet=*packet;r.flags=d->matrix_continuous?REMESA_MATRIX_KEEP_SESSION:0;
+ if(packet->controls.schema==3){
+  if(!d->matrix_continuous||!d->matrix_session_open||!d->matrix_depth||
+     packet->controls.color_id!=d->matrix_color||packet->controls.depth_id!=d->matrix_depth)return EACCES;
+  r.flags|=REMESA_MATRIX_PRESERVE_DEPTH;
+ }
  if(!remesa_matrix_submit_request_valid(&r))return EINVAL;
  for(unsigned i=0;i<32;i++)if(d->objects[i].cpu)return EBUSY;
  for(unsigned i=0;i<packet->binding_count;i++){
@@ -71,7 +76,8 @@ int remesa_linux_memory_matrix_submit(struct remesa_linux_memory *d,
     r.operation<=d->copy_operation||r.operation<=d->private_operation||r.cookie!=r.operation||
     r.core!=0x01130000U||r.revision!=0x10201U||r.pds_base!=0x20000000U||r.phase!=9||r.ledger!=7)
   return private_lab_uncertain(d);
- d->private_operation=r.operation;d->matrix_session_open=d->matrix_continuous;d->matrix_color=d->matrix_continuous?r.packet.controls.color_id:0;return 0;
+ d->private_operation=r.operation;d->matrix_session_open=d->matrix_continuous;d->matrix_color=d->matrix_continuous?r.packet.controls.color_id:0;
+ d->matrix_depth=d->matrix_continuous?r.packet.controls.depth_id:0;return 0;
 }
 enum remesa_dispatch remesa_linux_memory_matrix_dispatch(void *opaque,
  const struct remesa_gpu_scene_submit *submit,struct remesa_gpu_scene_receipt *out)

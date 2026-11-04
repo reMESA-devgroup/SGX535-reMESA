@@ -40,7 +40,7 @@ struct screen {
  struct pipe_screen base; struct remesa_device device; unsigned refs; bool closing;
  int (*release_device)(struct remesa_device *);int release_error;bool release_pending;
  uint64_t resource_cookie;bool cpu_depth24_lab,gears_runtime,linked_attachment_storage;
- bool homogeneous_frontend_lab,native_draws;
+ bool homogeneous_frontend_lab,native_draws,native_preserve_candidate;
  uint32_t homogeneous_frontend_dimension;
  size_t host_buffer_bytes;
  remesa_copy_region_fn native_copy;
@@ -116,6 +116,10 @@ struct context {
  bool homogeneous_draw_lab;
  enum remesa_homogeneous_api_lab_profile homogeneous_api_lab;
  struct pipe_resource *native_clear_color,*native_clear_depth;
+ /* Expected identities AFTER verified retirement, never completion proof.
+  * Cookies prevent ABA; epochs invalidate CPU/foreign writer interference. */
+ struct remesa_pass_snapshot native_color_expected,native_depth_expected;
+ bool native_content_expected;
  bool gears_pending,gears_poisoned,gears_bottom_left,gears_origin_valid;unsigned gears_clear_mask;
  struct pipe_resource *gears_target,*gears_depth;
  struct remesa_draw_rejection_status draw_rejections;
@@ -1871,7 +1875,10 @@ static int context_prepare_scene(struct pipe_context *p,
  }
  if(color->maps||depth->maps)return EBUSY;
  if(!normal&&(color->has_contents||depth->has_contents))return ENOTSUP;
- if(normal&&(!sc->native_draws||ctx->native_clear_color!=ctx->target||ctx->native_clear_depth!=ctx->depth_target))return ENOTSUP;
+ bool preserve_depth=normal&&!ctx->native_clear_color&&!ctx->native_clear_depth;
+ if(normal&&(!sc->native_draws||
+    (preserve_depth?(!sc->native_preserve_candidate||!ctx->native_content_expected):
+     (ctx->native_clear_color!=ctx->target||ctx->native_clear_depth!=ctx->depth_target))))return ENOTSUP;
  if(out->owner||out->serial||out->slot||out->reserved)return EBUSY;
  if(homogeneous){
   if(!gears)return EINVAL;
@@ -1896,6 +1903,15 @@ static int context_prepare_scene(struct pipe_context *p,
  }
  int error=homogeneous?resource_sync_writer(p->screen,color,UINT64_MAX):resource_sync(p->screen,color,UINT64_MAX);if(error)return error;
  error=homogeneous?resource_sync_writer(p->screen,depth,UINT64_MAX):resource_sync(p->screen,depth,UINT64_MAX);if(error)return error;
+ if(preserve_depth){
+  struct remesa_pass_snapshot current[2];
+  error=remesa_render_pass_snapshot(&color->pass,&current[0]);if(error)return error;
+  error=remesa_render_pass_snapshot(&depth->pass,&current[1]);if(error)return error;
+  const struct remesa_pass_snapshot *expected[2]={&ctx->native_color_expected,&ctx->native_depth_expected};
+  for(unsigned i=0;i<2;i++)if(current[i].content!=REMESA_PASS_PRESENT||
+    current[i].resource_cookie!=expected[i]->resource_cookie||
+    current[i].content_epoch!=expected[i]->content_epoch)return ESTALE;
+ }
  /* Publish only the driver-owned upload-manager writes. External map leases
   * remain live and retain the existing global pre-GPU mapping refusal. Caller
   * inputs/outputs were checked against all mapped/staging spans before this
@@ -1960,7 +1976,8 @@ static int context_prepare_scene(struct pipe_context *p,
   request.color=color->bo;request.depth=depth->bo;request.width=ctx->target->width0;
   request.height=ctx->target->height0;request.color_pitch=color->stride/4;request.linkage=&link;
   request.geometry=(struct remesa_linked_geometry_input){.vertices=packed,.vertex_bytes=(size_t)view.vertex_count*48,.vertex_count=view.vertex_count};
-  error=homogeneous?remesa_persistent_gears_homogeneous_scene_prepare(&sc->device,&request,parameters,out):
+  error=preserve_depth?remesa_persistent_gears_homogeneous_preserve_scene_prepare(&sc->device,&request,parameters,out):
+   homogeneous?remesa_persistent_gears_homogeneous_scene_prepare(&sc->device,&request,parameters,out):
    remesa_persistent_gears_attribute_scene_prepare(&sc->device,&request,parameters,out);
  gears_done:
   if(parameters)sc->device.ops->destroy_bo(sc->device.priv,parameters);
@@ -1997,14 +2014,15 @@ int remesa_context_prepare_gears_homogeneous_scene(struct pipe_context *p,
 {return context_prepare_scene(p,info,draw_info,options,true,true,false,out);}
 
 static int context_issue_capture(struct pipe_context *p,struct remesa_scene_capture capture,
- bool keep,bool homogeneous,struct pipe_fence_handle *f,struct pipe_fence_handle **out)
+ bool keep,bool homogeneous,bool preserve_depth,struct pipe_fence_handle *f,struct pipe_fence_handle **out)
 {
  struct context *ctx=c(p);struct screen *sc=s(p->screen);
  struct resource *color=r(ctx->target),*depth=r(ctx->depth_target);
  struct remesa_render_pass cp=color->pass,zp=depth->pass;
  struct remesa_pass_ticket ct=color->ticket,zt=depth->ticket;
- int error=remesa_render_pass_begin(&cp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&ct);
- if(!error)error=remesa_render_pass_begin(&zp,REMESA_PASS_DISCARD,REMESA_PASS_STORE,false,&zt);
+ enum remesa_pass_load load=preserve_depth?REMESA_PASS_PRESERVE:REMESA_PASS_DISCARD;
+ int error=remesa_render_pass_begin(&cp,load,REMESA_PASS_STORE,sc->native_preserve_candidate,&ct);
+ if(!error)error=remesa_render_pass_begin(&zp,load,REMESA_PASS_STORE,sc->native_preserve_candidate,&zt);
  if(!error)error=remesa_render_pass_submitted(&cp,&ct);
  if(!error)error=remesa_render_pass_submitted(&zp,&zt);
  void *backend=NULL;
@@ -2030,6 +2048,13 @@ static int context_issue_capture(struct pipe_context *p,struct remesa_scene_capt
  f->refs=1;f->screen=sc;f->backend=backend;screen_hold(sc);
  fence_ref(p->screen,&color->writer,f);fence_ref(p->screen,&depth->writer,f);
  fence_ref(p->screen,&ctx->last,f);
+ if(sc->native_draws&&homogeneous){
+  /* Begin rejected epoch saturation. The next wait must authenticate actual
+   * retirement before these expected content identities may be accepted. */
+  ctx->native_color_expected=(struct remesa_pass_snapshot){cp.resource_cookie,cp.content_epoch+1,REMESA_PASS_PRESENT};
+  ctx->native_depth_expected=(struct remesa_pass_snapshot){zp.resource_cookie,zp.content_epoch+1,REMESA_PASS_PRESENT};
+  ctx->native_content_expected=true;
+ }
  if(homogeneous)finish_native_clear(ctx,false);
  *out=f;return 0;
 }
@@ -2062,7 +2087,7 @@ int remesa_context_submit_captured_scene(struct pipe_context *p,
  error=resource_sync_writer(p->screen,color,UINT64_MAX);if(error)return captured_scene_error(ctx,error);
  error=resource_sync_writer(p->screen,depth,UINT64_MAX);if(error)return captured_scene_error(ctx,error);
  struct pipe_fence_handle *f=calloc(1,sizeof(*f));if(!f)return ENOMEM;
- return context_issue_capture(p,capture,true,false,f,out);
+ return context_issue_capture(p,capture,true,false,false,f,out);
 }
 
 int remesa_context_update_captured_parameters(struct pipe_context *p,
@@ -2151,7 +2176,7 @@ static int context_submit_scene(struct pipe_context *p,
  }
  /* Reserve on local copies: neither attachment may change if the second
   * reservation fails or the backend conclusively reports NOT_ISSUED. */
- return context_issue_capture(p,capture,false,homogeneous,f,out);
+ return context_issue_capture(p,capture,false,homogeneous,normal&&!ctx->native_clear_color&&!ctx->native_clear_depth,f,out);
 }
 
 int remesa_context_submit_linked_scene(struct pipe_context *p,
@@ -2935,6 +2960,16 @@ int remesa_screen_enable_native_draws(struct pipe_screen *p)
  (void)p;return ENOTSUP;
 #endif
 }
+int remesa_screen_enable_native_preserve_candidate(struct pipe_screen *p)
+{
+ if(!p||p->destroy!=destroy_screen)return EINVAL;
+ struct screen *sc=s(p);
+ if(sc->closing)return ESHUTDOWN;
+ if(!sc->native_draws)return ENOTSUP;
+ if(sc->native_preserve_candidate)return EALREADY;
+ if(__atomic_load_n(&sc->refs,__ATOMIC_ACQUIRE)!=1||sc->resource_cookie)return EBUSY;
+ sc->native_preserve_candidate=true;return 0;
+}
 int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *p)
 {
 #ifdef REMESA_WITH_NIR
@@ -3108,6 +3143,8 @@ int remesa_context_enable_homogeneous_api_lab(struct pipe_context *p,enum remesa
 int remesa_screen_enable_homogeneous_frontend_lab(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_screen_enable_native_draws(struct pipe_screen *p)
+{(void)p;return ENOTSUP;}
+int remesa_screen_enable_native_preserve_candidate(struct pipe_screen *p)
 {(void)p;return ENOTSUP;}
 int remesa_screen_enable_gears_runtime(struct pipe_screen *p){(void)p;return ENOTSUP;}
 int remesa_context_gears_bottom_left(struct pipe_context *p,bool *b){(void)p;(void)b;return ENOTSUP;}

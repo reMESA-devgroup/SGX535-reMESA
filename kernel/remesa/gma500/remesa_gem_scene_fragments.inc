@@ -19,13 +19,15 @@ static int fragment_read_view(struct remesa_gem_private *loan,const struct remes
 static __attribute__((__noinline__)) int scene_fragments_build_checked(struct remesa_gem_private *loan,
  const struct remesa_memory_view *views,unsigned count,const struct remesa_gem_scene_use *use,
  struct remesa_gem_scene_ta *ta,struct remesa_gem_scene_states *states,struct remesa_gem_scene_vertices *vertices,
- struct remesa_gem_scene_fragments *out)
+ bool preserve_depth,struct remesa_gem_scene_fragments *out)
 {
- struct remesa_gem_scene_fragments value={0};struct retained_job *j;unsigned draw,s,p,q,e,u;int error;
+ struct remesa_gem_scene_fragments value={0};struct retained_job *j;unsigned draw,slot,s,p,q,e,u;int error;
  if(!out)return -EINVAL;
  j=ticket_job(loan->memory,loan->ticket);value.expected_pds_window=0x20000000u;
- for(draw=0;draw<vertices->count;draw++){
+ for(slot=0;slot<vertices->count-(preserve_depth?1:0);slot++){
   unsigned upload=states->count,ref;
+  struct remesa_fragment_binding binding;struct remesa_fragment_task task;u32 po,qo,use_id=0,use_offset=0;
+  draw=slot+(preserve_depth?1:0);
   /* PARAM entries are uploads too, but are never ISP fragment state. Locate
    * the actual checked draw/prefix state, independently of upload ordinals. */
   for(ref=0;ref<ta->reference_count;ref++)if(ta->references[ref].draw==draw&&
@@ -36,7 +38,7 @@ static __attribute__((__noinline__)) int scene_fragments_build_checked(struct re
    break;
   }
   if(upload==states->count)return -EPROTO;
-  struct remesa_fragment_binding binding;struct remesa_fragment_task task;u32 po,qo,use_id=0,use_offset=0;
+
   for(s=0;s<count&&views[s].binding.id!=states->uploads[upload].source_id;s++);
   if(s==count||!views[s].cpu)return -EACCES;
   error=remesa_fragment_binding_read((const u8 *)views[s].cpu+states->uploads[upload].source_offset+(draw?8:12),12,
@@ -57,9 +59,9 @@ static __attribute__((__noinline__)) int scene_fragments_build_checked(struct re
    use_id=entry.id;use_offset=entry.byte_offset;break;
   }
   if(!use_id)return -ENOENT;
-  value.draws[draw].primary_id=views[p].binding.id;value.draws[draw].primary_offset=po;value.draws[draw].primary_bytes=binding.primary_bytes;
-  value.draws[draw].secondary_id=views[q].binding.id;value.draws[draw].secondary_offset=qo;
-  value.draws[draw].use_id=use_id;value.draws[draw].use_offset=use_offset;value.count++;
+  value.draws[slot].primary_id=views[p].binding.id;value.draws[slot].primary_offset=po;value.draws[slot].primary_bytes=binding.primary_bytes;
+  value.draws[slot].secondary_id=views[q].binding.id;value.draws[slot].secondary_offset=qo;
+  value.draws[slot].use_id=use_id;value.draws[slot].use_offset=use_offset;value.count++;
  }
  value.ticket=loan->ticket;*out=value;return 0;
 }
@@ -73,5 +75,5 @@ int remesa_gem_scene_fragments_check_locked(struct remesa_gem_private *loan,
  int error;
  if(!out)return -EINVAL;
  error=remesa_gem_scene_vertices_check_locked(loan,views,count,actions,controls,use,vertex_offset,ta,states,vertices);if(error)return error;
- return scene_fragments_build_checked(loan,views,count,use,ta,states,vertices,out);
+ return scene_fragments_build_checked(loan,views,count,use,ta,states,vertices,controls->command.schema==3,out);
 }

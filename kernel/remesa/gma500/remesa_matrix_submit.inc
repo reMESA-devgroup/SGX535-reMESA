@@ -42,7 +42,19 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
   mutex_lock(&endpoint_lock);
   if(endpoint!=s||s->dev!=dev||s->file!=file||s->context!=r->context||s->private_device_lost||
      s->private_session!=p||!s->private_source_held||s->private_source_poisoned||!p->source_claimed){error=-EACCES;mutex_unlock(&endpoint_lock);goto done;}
-  if(m->retirement.ticket.operation<=m->last_draw_operation){error=-ESTALE;mutex_unlock(&endpoint_lock);goto done;}
+  if(r->flags&REMESA_MATRIX_PRESERVE_DEPTH){
+   /* Content authority is kernel-owned retirement history, not DEFINED DATA
+    * or a userspace flag. CPU writes/remaps to this Z have stayed excluded. */
+   if(!m->continuous||!m->last_draw_operation||!s->private_matrix_depth||
+      s->private_matrix_depth!=r->packet.controls.depth_id||
+      m->last_depth_pitch!=r->packet.controls.depth_pitch||
+      r->packet.controls.color_pitch!=m->stride/4||
+      m->retirement.ticket.operation>=m->last_draw_operation){error=-ESTALE;mutex_unlock(&endpoint_lock);goto done;}
+   mutex_lock(&s->lock);error=private_session_owner(s,p);
+   if(!error)error=private_session_idle(s);
+   mutex_unlock(&s->lock);
+   if(error){mutex_unlock(&endpoint_lock);goto done;}
+  }else if(m->retirement.ticket.operation<=m->last_draw_operation){error=-ESTALE;mutex_unlock(&endpoint_lock);goto done;}
   if(m->active||m->failed||!m->retirement.gem_retired||m->color!=r->packet.controls.color_id||
      m->width!=r->packet.controls.width||m->height!=r->packet.controls.height){error=-EBUSY;mutex_unlock(&endpoint_lock);goto done;}
   mutex_lock(&s->lock);s->private_matrix_constructing=false;mutex_unlock(&s->lock);
@@ -120,6 +132,7 @@ int remesa_matrix_submit_ioctl(struct drm_device *dev,void *data,struct drm_file
    memset(&p->job,0,sizeof(p->job));memset(&p->backend,0,sizeof(p->backend));
    memset(&p->observation,0,sizeof(p->observation));p->execution_consumed=false;
    m->last_draw_operation=r->operation;m->continuous=true;
+   s->private_matrix_depth=p->packet.controls.depth_id;m->last_depth_pitch=p->packet.controls.depth_pitch;
    s->private_matrix_constructing=true;r->stages|=REMESA_MATRIX_SESSION_READY;
   }
   mutex_unlock(&s->lock);

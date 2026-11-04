@@ -131,6 +131,9 @@ int remesa_screen_enable_linked_attachment_storage(struct pipe_screen *);
  * stay explicit. No Linux endpoint, physical qualification or GL version is
  * inferred from enabling this frontend. */
 int remesa_screen_enable_native_draws(struct pipe_screen *);
+/* Qualification-only normal no-clear path, default off and before resources.
+ * Does not advertise general PRESERVE, GL conformance or GPU validation. */
+int remesa_screen_enable_native_preserve_candidate(struct pipe_screen *);
 struct remesa_isp_opaque_triangle_request;
 /* Snapshot the bound opaque blend/depth state for typed GEM COLOR/Z. Uses the
  * existing full-RGBA/disabled-or-LESS-write state contract. No default state is

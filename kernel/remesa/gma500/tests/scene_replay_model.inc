@@ -27,6 +27,7 @@ static void replay_pds_images(struct remesa_gem_scene_job *c)
 {
  struct {u8 *bytes;unsigned length,kind;} spans[REMESA_GEM_SCENE_STATE_MAX+2*REMESA_GEM_SCENE_VERTEX_MAX+2];
  unsigned count=0,n,r,mutations=0,maps=vmap_calls,clears=test_zeroed_pages,flush=flushes;
+ unsigned first=c->controls.command.schema==3?1:0;
  CHECK(!remesa_gem_scene_job_pds_images_check_locked(c));
 #define ADD_PDS(id,offset,length_,kind_) do { \
   CHECK(count<sizeof spans/sizeof spans[0]); \
@@ -41,7 +42,7 @@ static void replay_pds_images(struct remesa_gem_scene_job *c)
   CHECK(r<c->ta.reference_count);ADD_PDS(c->ta.references[r].id,c->ta.references[r].byte_offset,64,n?3u:2u);
  }
  for(n=0;n<c->fragments.count;n++)ADD_PDS(c->fragments.draws[n].primary_id,c->fragments.draws[n].primary_offset,
-  c->fragments.draws[n].primary_bytes,n?5u:4u);
+  c->fragments.draws[n].primary_bytes,n+first?5u:4u);
  ADD_PDS(c->background.primary_id,c->background.primary_offset,64,6u);
  ADD_PDS(c->event.event_id,c->event.event_offset,148,7u);
 #undef ADD_PDS
@@ -65,6 +66,7 @@ static void replay_pds_images(struct remesa_gem_scene_job *c)
 }
 static void replay_matrix_values(struct remesa_gem_scene_job *c)
 {
+ unsigned slot=1;
  unsigned n,parameter,maps=vmap_calls,clears=test_zeroed_pages,flush=flushes,payload_cases=0;
  CHECK(!remesa_gem_scene_job_matrix_values_check_locked(c));
  parameter=c->states.count;
@@ -72,8 +74,8 @@ static void replay_matrix_values(struct remesa_gem_scene_job *c)
  CHECK(parameter<c->states.count);
  u8 *coefficients=(u8 *)scene_pds_image_view(c,c->states.uploads[parameter].source_id,
   c->states.uploads[parameter].source_offset,160);CHECK(coefficients);coefficients+=4;
- u8 *vertices=(u8 *)scene_pds_image_view(c,c->vertices.draws[1].vertex_id,c->vertices.draws[1].vertex_offset,
-  c->vertices.draws[1].vertex_bytes);CHECK(vertices);
+ u8 *vertices=(u8 *)scene_pds_image_view(c,c->vertices.draws[slot].vertex_id,c->vertices.draws[slot].vertex_offset,
+  c->vertices.draws[slot].vertex_bytes);CHECK(vertices);
  struct {u8 *at;u32 bits;int expected;} cases[]={
   {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+17*4,1,-EOPNOTSUPP},
   {coefficients+28*4,0x40000000U,-EOPNOTSUPP},{coefficients+31*4,0x3f800000U,-EOPNOTSUPP},
@@ -100,11 +102,13 @@ static void replay_matrix_values(struct remesa_gem_scene_job *c)
    state[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);state[byte]^=1;payload_cases++;
   }
  }
+ {
  u8 *prefix=(u8 *)scene_pds_image_view(c,c->vertices.draws[0].vertex_id,c->vertices.draws[0].vertex_offset,48);
  u8 *index=(u8 *)scene_pds_image_view(c,c->vertices.draws[0].index_id,c->vertices.draws[0].index_offset,6);
  CHECK(prefix&&index);
  for(unsigned byte=0;byte<48;byte++){prefix[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);prefix[byte]^=1;payload_cases++;}
  for(unsigned byte=0;byte<6;byte++){index[byte]^=1;CHECK(remesa_gem_scene_job_matrix_values_check_locked(c)<0);index[byte]^=1;payload_cases++;}
+ }
  CHECK(!remesa_gem_scene_job_matrix_values_check_locked(c));
  CHECK(!c->service.session&&!c->service.started&&!c->loan.execution_started&&!c->loan.host_published);
  CHECK(vmap_calls==maps&&test_zeroed_pages==clears&&flushes==flush);

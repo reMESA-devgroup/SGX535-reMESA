@@ -45,7 +45,7 @@ static inline int remesa_scene_packet_valid(const struct remesa_scene_packet *p)
     !p->use_count||p->use_count>55||!p->window_count||p->window_count>17||
     p->actions.schema!=1||p->actions.bytes!=32||p->actions.reserved||
     !((p->controls.schema==1&&p->controls.depth_finalize==0)||
-      (p->controls.schema==2&&p->controls.depth_finalize==1))||p->controls.bytes!=80||
+      ((p->controls.schema==2||p->controls.schema==3)&&p->controls.depth_finalize==1))||p->controls.bytes!=80||
     p->actions.width!=p->controls.width||p->actions.height!=p->controls.height)return 0;
  for(i=0;i<32;i++){
   if(i>=p->binding_count){if(p->bindings[i].id||p->bindings[i].access)return 0;continue;}

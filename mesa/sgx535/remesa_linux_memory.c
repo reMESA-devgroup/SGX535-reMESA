@@ -16,7 +16,7 @@ struct remesa_linux_memory {int fd;uint64_t context,copy_operation;bool owned_se
  unsigned scene_protocol;uint32_t gears_access[18];
  struct remesa_gears_scene_probe_request gears_response;
  struct remesa_matrix_submit_request matrix_response;
- bool matrix_recorded,matrix_continuous,matrix_session_open;uint32_t matrix_color;
+ bool matrix_recorded,matrix_continuous,matrix_session_open;uint32_t matrix_color,matrix_depth;
  struct remesa_scene_packet general_packet;
  uint64_t general_host_operation;
  uint64_t general_update_sequence;
@@ -81,7 +81,7 @@ static int gpu_unmap(void *d,uint32_t id,uint64_t va,size_t bytes)
 {struct held *b=find(d,id);int e;if(!b || bytes!=b->bytes || !va || va!=b->gpu_va)return EINVAL;
  if(b->cpu)return EBUSY;
  if(((struct remesa_linux_memory *)d)->matrix_session_open&&
-    id==((struct remesa_linux_memory *)d)->matrix_color){e=remesa_linux_memory_matrix_close(d);if(e)return e;}
+    (id==((struct remesa_linux_memory *)d)->matrix_color||id==((struct remesa_linux_memory *)d)->matrix_depth)){e=remesa_linux_memory_matrix_close(d);if(e)return e;}
  e=simple(d,id,REMESA_MEM_UNMAP);if(!e)b->gpu_va=0;return e;}
 static int transfer(struct remesa_linux_memory *d,struct held *b,bool write)
 {

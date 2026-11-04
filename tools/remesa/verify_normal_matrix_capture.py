@@ -74,6 +74,17 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
     need((session_ready and final_ownership is not None and 1 <= frame_serial <= 100)
          or (not session_ready and frame_serial == 1 and final_ownership is None), 'archive lifetime mode')
     expected, bindings, expectation = preflight(fixture, oracle, size, manifest, manifest_sha)
+    return _verify_frame(capture, fixture, oracle, size, expected, bindings, expectation,
+                         session_ready=session_ready, frame_serial=frame_serial, final_ownership=final_ownership)
+
+
+def _verify_frame(capture, fixture, oracle, size, expected, bindings, expectation, *,
+                  session_ready=False, frame_serial=1, final_ownership=None,
+                  preserve_depth=False, expected_color=None, expected_depth=None, packet_matcher=None):
+    # Shared archive mechanics only. Callers must preflight their own sealed
+    # inputs/oracles. No source authority, device identity or GPU proof here.
+    need(not preserve_depth or (session_ready and final_ownership is not None), 'preserve lifetime mode')
+    need((expected_color is None) == (expected_depth is None), 'complete pixel expectation pair')
     if session_ready:
         expected = bytearray(expected)
         struct.pack_into('<Q', expected, 8, frame_serial)
@@ -82,11 +93,11 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
     raw = (capture/'MATRIX-RESPONSE.bin').read_bytes()
     need(len(raw) == 2344, 'matrix envelope size')
     version, budget, flags, reserved, context = struct.unpack_from('<4IQ', raw)
-    need((version, budget, flags, reserved) == (1, 1000, 1 if session_ready else 0, 0) and context, 'matrix request prefix')
+    need((version, budget, flags, reserved) == (1, 1000, 5 if preserve_depth else 1 if session_ready else 0, 0) and context, 'matrix request prefix')
     packet = (capture/'packet.bin').read_bytes()
     need(raw[24:2288] == packet, 'submitted packet identity')
     ids = [struct.unpack_from('<I', packet, 32+8*i)[0] for i in range(18)]
-    packet_matches(packet, expected, context, ids)
+    (packet_matches if packet_matcher is None else packet_matcher)(packet, expected, context, ids)
     op, cookie, core, rev, pds, phase, ledger, error, retained, stages, r0, r1 = struct.unpack_from('<QQ5Ii4I', raw, 2288)
     need(op and op <= 0xffffffff and cookie == op and
          (core, rev, pds, phase, ledger, error, retained, stages, r0, r1) ==
@@ -98,20 +109,24 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
     need(len(host) == 20 and struct.unpack_from('<Q', host)[0] == context and
          len(ticket) == 16 and host[:16] == ticket and
          struct.unpack_from('<Q', host, 8)[0] and host[16:] == b'\1\1\1\0', 'i486 host retirement receipt')
-    fill_request = (capture/'FILL-REQUEST.bin').read_bytes()
-    fill = (capture/'FILL-RESPONSE.bin').read_bytes()
-    need(len(fill) == len(fill_request) == 104 and fill_request[:16] == bytes(16)
-         and not any(fill_request[64:]), 'fill request/size')
-    need(fill[:8] == struct.pack('<II', 1, 0) and struct.unpack_from('<Q', fill, 8)[0] == context
-         and fill[16:64] == fill_request[16:64], 'native fill echo')
-    fop, fcook, fstages, fret, fcore, frev, ferr, fres = struct.unpack_from('<QQ4IiI', fill, 64)
     width, height = map(int, size.split('x'))
     color_id, depth_id = struct.unpack_from('<II', packet, 352)
-    need(struct.unpack_from('<12I', fill, 16) ==
-         (color_id, width, height, width*4, 0, 0, width, height, 0, 1000, 0, 0), 'actual full COLOR clear')
-    need(0 < fop < op and fcook and (fstages, fret, fcore, frev, ferr, fres) ==
-         (31, 0, 0x01130000, 0x10201, 0, 0) and
-         (capture/'FILL-RESULT.bin').read_bytes() == bytes(4), 'fill completion/retirement')
+    fop = None
+    if preserve_depth:
+        need(not list(capture.glob('FILL-*')), 'no-clear draw unexpectedly cleared')
+    else:
+        fill_request = (capture/'FILL-REQUEST.bin').read_bytes()
+        fill = (capture/'FILL-RESPONSE.bin').read_bytes()
+        need(len(fill) == len(fill_request) == 104 and fill_request[:16] == bytes(16)
+             and not any(fill_request[64:]), 'fill request/size')
+        need(fill[:8] == struct.pack('<II', 1, 0) and struct.unpack_from('<Q', fill, 8)[0] == context
+             and fill[16:64] == fill_request[16:64], 'native fill echo')
+        fop, fcook, fstages, fret, fcore, frev, ferr, fres = struct.unpack_from('<QQ4IiI', fill, 64)
+        need(struct.unpack_from('<12I', fill, 16) ==
+             (color_id, width, height, width*4, 0, 0, width, height, 0, 1000, 0, 0), 'actual full COLOR clear')
+        need(0 < fop < op and fcook and (fstages, fret, fcore, frev, ferr, fres) ==
+             (31, 0, 0x01130000, 0x10201, 0, 0) and
+             (capture/'FILL-RESULT.bin').read_bytes() == bytes(4), 'fill completion/retirement')
     guards = struct.unpack('<4I', (capture/'GUARD_IDS.bin').read_bytes())
     owner_snapshot = inventory((capture/'INVENTORY-OWNERS.bin').read_bytes(), context,
                                24 if session_ready and frame_serial > 1 else 20)
@@ -149,8 +164,10 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
             need(a == (fixture/f'bo-{ids.index(ident)}.bin').read_bytes(), 'READ source identity')
     color = (capture/f'after-id-{color_id}.bin').read_bytes()
     depth = (capture/f'after-id-{depth_id}.bin').read_bytes()
-    need(color == (oracle/'COLOR.bin').read_bytes(), 'COLOR mismatch')
-    expected_z = (oracle/'Z24.bin').read_bytes()
+    color_reference = (oracle/'COLOR.bin').read_bytes() if expected_color is None else expected_color
+    expected_z = (oracle/'Z24.bin').read_bytes() if expected_depth is None else expected_depth
+    need(len(color_reference) == len(expected_z) == width*height*4, 'pixel expectation extent')
+    need(color == color_reference, 'COLOR mismatch')
     need(len(depth) == len(expected_z) and all((a[0]^b[0]) & 0xffffff == 0 for a, b in
          zip(struct.iter_unpack('<I', depth), struct.iter_unpack('<I', expected_z))), 'Z24 mismatch')
     gl = (capture/'GL-READPIXELS-BGRA.bin').read_bytes()
@@ -168,8 +185,9 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
                   sum(e[1]//4096 for e in remaining), 0, 0, 0, 0, 0, 0, 0),
          'returned endpoint not idle or inconsistent global inventory')
     t = struct.unpack('<5Q', (capture/'TIMES.bin').read_bytes())
-    ft = struct.unpack('<2Q', (capture/'FILL-TIMES.bin').read_bytes())
-    need(all(b >= a for a, b in zip(t, t[1:])) and t[0] <= ft[0] <= ft[1] <= t[1], 'phase timing order')
+    ft = None if preserve_depth else struct.unpack('<2Q', (capture/'FILL-TIMES.bin').read_bytes())
+    need(all(b >= a for a, b in zip(t, t[1:])) and
+         (ft is None or t[0] <= ft[0] <= ft[1] <= t[1]), 'phase timing order')
     result = dict(status='ORDINARY_MATRIX_ARCHIVE_MATCHES_PRESEALED_EXPECTATIONS',
                 physical_qualification=False, GPU_operations_proven_by_this_tool=0,
                 context=context, operation=op, fill_operation=fop,
@@ -177,7 +195,7 @@ def verify(capture, fixture, oracle, size, manifest, manifest_sha, *,
                 COLOR_mismatches=0, Z24_mismatches=0, guards_intact=4,
                 remaining=remaining, timings_ns=dict(zip(
                     ('frontend_prepare_including_fill', 'diagnostic_pre_reads', 'native_submit_wall', 'diagnostic_retired_reads'),
-                    [b-a for a, b in zip(t, t[1:])])), fill_wall_ns=ft[1]-ft[0],
+                    [b-a for a, b in zip(t, t[1:])])), fill_wall_ns=None if ft is None else ft[1]-ft[0],
                 scope='Archive checks only; outer physical provenance, source identity and stock recovery remain mandatory')
     if session_ready:
         result.update(status='ORDINARY_CONTINUOUS_FRAME_MATCHES_PRESEALED_EXPECTATIONS',

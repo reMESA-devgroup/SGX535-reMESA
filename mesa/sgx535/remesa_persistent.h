@@ -1045,6 +1045,12 @@ int remesa_persistent_gears_attribute_scene_prepare(struct remesa_device *,
  */
 int remesa_persistent_gears_homogeneous_scene_prepare(struct remesa_device *,
  const struct remesa_linked_scene_request *,void *parameters,struct remesa_scene_capture *);
+/* No-clear candidate constructor only; no hardware preservation admission.
+ * Retains initialization DATA/state copy, omits both prefix INDEX tasks,
+ * uses existing DEFINED depth DATA, and exposes only consumed fetch windows.
+ * Caller must establish retired attachment content/ownership independently. */
+int remesa_persistent_gears_homogeneous_preserve_scene_prepare(struct remesa_device *,
+ const struct remesa_linked_scene_request *,void *parameters,struct remesa_scene_capture *);
 
 
 /* Explicit CPU-profile PDS ownership, derived solely from the same token's

@@ -19,7 +19,7 @@ int __wrap_ioctl(int fd,unsigned long command,...)
  }
  if(mode==3||mode==4){r->error=-ENOMEM;r->stages=mode==3?8:9;r->operation=mode==3?0:100;raw=*r;return 0;}
  r->operation=r->cookie=100;r->core=0x01130000;r->revision=0x10201;r->pds_base=0x20000000;
- r->phase=9;r->ledger=7;r->stages=r->flags==REMESA_MATRIX_KEEP_SESSION?23:15;
+ r->phase=9;r->ledger=7;r->stages=(r->flags&REMESA_MATRIX_KEEP_SESSION)?23:15;
  if(mode>=7)r->operation=r->cookie=mode==10?101:100+matrix_calls;
  if(mode==8)r->stages=15; /* Must not accept CLOSED for a KEEP request. */
  if(mode==1)((unsigned char *)r)[changed_byte]^=1;
@@ -113,8 +113,29 @@ int main(void)
   matrix_cleanup(d);
  }
  mode=7;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
+ struct remesa_scene_packet preserve=p;preserve.controls.schema=3;preserve.controls.ta_bytes=76;
+ preserve.use_count=10;memset(&preserve.uses[10],0,sizeof(preserve.uses[0]));
+ preserve.window_count=2;
+ assert(remesa_linux_memory_matrix_submit(d,&preserve,1000,&r)==EACCES&&!matrix_calls);
+ assert(!remesa_linux_memory_matrix_submit(d,&p,1000,&r));
+ preserve.controls.depth_id++;
+ assert(remesa_linux_memory_matrix_submit(d,&preserve,1000,&r)==EACCES&&matrix_calls==1);
+ preserve.controls.depth_id--;
+ assert(!remesa_linux_memory_matrix_submit(d,&preserve,1000,&r)&&r.flags==5&&r.stages==23&&matrix_calls==2);
+ assert(!remesa_linux_memory_matrix_close(d));matrix_cleanup(d);
+ mode=7;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
  assert(!remesa_linux_memory_matrix_submit(d,&p,1000,&r));
  matrix_cleanup(d);assert(matrix_calls==2); /* COLOR unmap closes before freeing. */
+ mode=7;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
+ assert(!remesa_linux_memory_matrix_submit(d,&p,1000,&r));
+ /* Destroying DEPTH first must close the held source before its GPU unmap. */
+ assert(!ops->gpu_unmap(d,ids[13],0x40000000u+13*4096,4096)&&matrix_calls==2);
+ assert(!ops->unpin(d,ids[13])&&!ops->destroy(d,ids[13]));
+ for(unsigned i=0;i<18;i++)if(i!=13){
+  assert(!ops->gpu_unmap(d,ids[i],0x40000000u+i*4096,4096));
+  assert(!ops->unpin(d,ids[i])&&!ops->destroy(d,ids[i]));
+ }
+ assert(!remesa_linux_memory_detach(d));
  for(unsigned failure=8;failure<=10;failure++){
   mode=failure;d=matrix_setup();p=matrix_packet();assert(!remesa_linux_memory_matrix_continuous(d,true));
   int e=remesa_linux_memory_matrix_submit(d,&p,1000,&r);

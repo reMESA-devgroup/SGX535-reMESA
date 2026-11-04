@@ -16,11 +16,14 @@ static int scene_control_build(struct remesa_gem_memory *s,struct retained_job *
  if(offset<=action_offset?action_offset-offset<sizeof(*c):offset-action_offset<sizeof(action.command))return -EINVAL;
  memcpy(c,(const u8 *)j->commands+offset,sizeof(*c));
  if(!((c->schema==REMESA_GEM_SCENE_CONTROL_SCHEMA&&c->depth_finalize==0)||
-      (c->schema==REMESA_GEM_SCENE_CONTROL_FINALIZED_SCHEMA&&c->depth_finalize==1))||c->bytes!=sizeof(*c)||
+      ((c->schema==REMESA_GEM_SCENE_CONTROL_FINALIZED_SCHEMA||c->schema==3)&&c->depth_finalize==1))||c->bytes!=sizeof(*c)||
     c->width!=action.command.width||c->height!=action.command.height)return -EINVAL;
  if(!c->color_pitch||!c->depth_pitch||c->width>c->color_pitch||c->width>c->depth_pitch||
     (c->color_pitch&31)||(c->depth_pitch&31)||c->color_pitch>2048||c->depth_pitch>2048||
     (c->depth_cpp!=2&&c->depth_cpp!=4))return -EINVAL;
+ /* Schema3 is the candidate normal one-draw/no-clear closure only.
+  * Backing/content authority is a separate matrix-session obligation. */
+ if(c->schema==3&&(c->ta_bytes!=76||c->depth_cpp!=4||c->clear_depth_bits!=0x3f800000U))return -EINVAL;
  /* IEEE positive finite0..1 plus negative zero, accepted by the old producer.
   * Preserve exact bits; no floating-point instruction is used in the kernel. */
  if(c->clear_depth_bits>0x3f800000U&&c->clear_depth_bits!=0x80000000U)return -EINVAL;
@@ -55,6 +58,7 @@ static int scene_control_build(struct remesa_gem_memory *s,struct retained_job *
  }
  depth[0]=(((c->depth_pitch>>4)-1)<<8)|(c->depth_cpp==4?0x50000:0xa0000);
  /* All backing, role, permission and extent checks precede finalization. */
+ if(c->schema==3)depth[0]|=REMESA_SCENE_DEPTH_DEFINED_BITS;
  depth[0]=remesa_scene_depth_finalize_word(depth[0],c->depth_finalize,1);
  depth[1]=bo[1]->va.start&0xf0000000U;
  for(i=2;i<6;i++)depth[i]=bo[1]->va.start&0x0ffffff0U;

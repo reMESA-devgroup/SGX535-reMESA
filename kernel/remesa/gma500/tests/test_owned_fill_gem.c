@@ -19,7 +19,7 @@ struct remesa_gem_memory {
  struct mutex lock;struct drm_device *dev;struct drm_file *file;struct psb_mmu_pd *pd;
  const void *private_session,*executor;void *executor_context;
  bool private_source_held,private_source_poisoned,private_device_lost,private_matrix_constructing;
- u32 private_matrix_color;struct backing bo[32];
+ u32 private_matrix_color,private_matrix_depth;struct backing bo[32];
 };
 static unsigned mode,flushes,barriers,starts;
 static struct retained_job job;

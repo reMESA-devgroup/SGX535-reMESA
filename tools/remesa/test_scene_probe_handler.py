@@ -31,7 +31,7 @@ struct remesa_stream_source_event {u32 kind,sequence,status1,status2,ledger,phas
 struct remesa_stream_observation {unsigned state,event_count,zero_samples;struct remesa_stream_source_event events[64];u64 event_ns[64];};
 struct backing {bool live,pinned,reserved,quarantine,lease,initialized,zero_pristine;unsigned holds,color_vmas;u32 generation;void *cached_job_view;struct resource va;struct drm_gem_object gem;};
 struct retained_job {bool live;u64 cookie;};
-struct remesa_gem_memory {struct drm_device *dev;struct drm_file *file;u64 context;struct resource root;struct mutex lock;const void *private_session;struct psb_mmu_pd *pd;void *executor;bool stream_bound,ta_cache_domains,private_device_lost,private_source_held,private_source_poisoned,private_matrix_constructing;u32 private_matrix_color;struct retained_job jobs[8];struct backing bo[32];};
+struct remesa_gem_memory {struct drm_device *dev;struct drm_file *file;u64 context;struct resource root;struct mutex lock;const void *private_session;struct psb_mmu_pd *pd;void *executor;bool stream_bound,ta_cache_domains,private_device_lost,private_source_held,private_source_poisoned,private_matrix_constructing;u32 private_matrix_color,private_matrix_depth;struct retained_job jobs[8];struct backing bo[32];};
 '''
 (o/'scene_probe_types.h').write_text(prefix+backend+suffix)
 fixture_inputs=[]
@@ -43,7 +43,7 @@ if a.matrix_submit:
  names=re.search(r'enum \{(.*?)\};',(w/'kernel/remesa/gma500/tests/test_scene_probe_handler.c').read_text(),re.S)[1].replace('\n','').split(',')
  excluded={'DUPALLOC','VA','SIZE','HASH','OK_INIT','OK640_INIT','OK_FINAL','OK640_FINAL','OK_GALLIUM','OK640_GALLIUM','VA_GALLIUM','HASH_GALLIUM','WRONG_LEGACY','OK_MATRIX','OK640_MATRIX','VA_MATRIX','HASH_MATRIX','WRONG_WINDOW'}
  matrix_cases=[i for i,name in enumerate(names) if name.strip() not in excluded]
- if a.matrix_fill:matrix_cases=list(range(9 if a.matrix_fill_endpoint else 38))
+ if a.matrix_fill:matrix_cases=list(range(9 if a.matrix_fill_endpoint else 45))
 
 if a.extended_captures:
  lines=[]

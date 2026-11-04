@@ -5,7 +5,8 @@
 static bool matrix_color_protected_write(const struct remesa_gem_memory *s,
  const struct remesa_memory_request *r)
 {
- if(!s->private_session||!s->private_matrix_color||r->id!=s->private_matrix_color)return false;
+ if(!s->private_session||!s->private_matrix_color||
+    (r->id!=s->private_matrix_color&&(!s->private_matrix_depth||r->id!=s->private_matrix_depth)))return false;
  return r->action!=REMESA_MEM_READ&&r->action!=REMESA_MEM_UNLEASE&&r->action!=REMESA_MEM_SYNC&&
   !(r->action==REMESA_MEM_LEASE&&!r->flags);
 }
@@ -17,8 +18,9 @@ static bool matrix_cpu_construct(const struct remesa_gem_memory *s,
     s->private_device_lost||!s->file||s->private_source_poisoned||s->stream_bound||
     s->executor||s->ta_cache_domains)return false;
  for(i=0;i<8;i++)if(s->jobs[i].live)return false;
- if(r->id==s->private_matrix_color){
-  /* Keep the completed clear's exact backing and contents until draw.
+ if(r->id==s->private_matrix_color||(s->private_matrix_depth&&r->id==s->private_matrix_depth)){
+  /* Keep COLOR and the retired Z backing/content until source closure.
+   * Z becomes protected only after a successfully retired matrix draw.
    * Read leases remain ordinary serialized leases, not writable mappings. */
   return (r->action==REMESA_MEM_LEASE&&!r->flags)||r->action==REMESA_MEM_READ||
    r->action==REMESA_MEM_UNLEASE||r->action==REMESA_MEM_SYNC;

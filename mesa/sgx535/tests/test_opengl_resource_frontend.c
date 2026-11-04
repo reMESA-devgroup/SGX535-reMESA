@@ -42,8 +42,16 @@ static enum remesa_dispatch api_native(void *priv,const struct remesa_gpu_scene_
  struct remesa_gpu_scene_receipt *out)
 {
  const struct remesa_scene_packet *p=submit->packet;
+#ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
+ unsigned ordinal=dispatch_calls++;
+ CHECK(ordinal<2&&remesa_scene_packet_valid(p)&&p->binding_count==18&&
+  p->controls.schema==(ordinal?3:2)&&p->use_count==(ordinal?10:11)&&
+  p->window_count==2&&p->controls.ta_bytes==(ordinal?76:104));
+#else
  CHECK(remesa_scene_packet_valid(p)&&p->binding_count==18&&p->use_count==11);
- CHECK(!dispatch_calls++);struct fixture *f=priv;
+ CHECK(!dispatch_calls++);
+#endif
+ struct fixture *f=priv;
  struct remesa_persistent_scene_footprint footprint={.owner=p->owner,.width=p->controls.width,
   .height=p->controls.height,.allocation_count=18};
  for(unsigned i=0;i<18;i++){
@@ -54,7 +62,18 @@ static enum remesa_dispatch api_native(void *priv,const struct remesa_gpu_scene_
   if(p->bindings[i].access!=REMESA_ACCESS_READ)
    for(size_t j=0;j<b->length;j++)CHECK(b->bytes[j]==0xa5);
  }
+#ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
+ const char *root=getenv("REMESA_CAPTURE_EXPORT_DIR");char original[4096],variant[4096];
+ if(root){
+  int n=snprintf(original,sizeof original,"%s",root);CHECK(n>0&&(size_t)n<sizeof original);
+  n=snprintf(variant,sizeof variant,"%s/%s",original,ordinal?"preserve":"clear");CHECK(n>0&&(size_t)n<sizeof variant);
+  CHECK(!setenv("REMESA_CAPTURE_EXPORT_DIR",variant,1));
+ }
  scene_capture_export(f,&footprint,p);
+ if(root)CHECK(!setenv("REMESA_CAPTURE_EXPORT_DIR",original,1));
+#else
+ scene_capture_export(f,&footprint,p);
+#endif
  *out=(struct remesa_gpu_scene_receipt){.context=submit->context,.operation=submit->operation,
   .retired=true,.published=true,.acknowledged=true};return REMESA_ISSUED;
 }
@@ -250,6 +269,9 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  /* Optional qualification input: avoid sample-on-edge ties at both sizes.
   * Changes only supplied GL matrix data, never the encoder or driver gate. */
  if(getenv("REMESA_TEST_NORMAL_Y_SHIFT"))coefficients[29]=1.0f/256.0f;
+#ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
+ if(getenv("REMESA_TEST_PRESERVE_BASELINE_B")){coefficients[28]=.5f;coefficients[30]=.5f;}
+#endif
  const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
  memcpy(vertices,dynamic,sizeof vertices);
 #else
@@ -291,8 +313,10 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  CHECK(!remesa_context_error(st->pipe)&&!remesa_context_cpu_clear_count(st->pipe));
 #ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
  CHECK(normal_fill_calls==1&&remesa_context_native_fill_count(st->pipe)==1);
+#ifndef REMESA_TEST_OPENGL_PRESERVE_DRAW
  glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT);
  CHECK(!remesa_context_error(st->pipe)&&normal_fill_calls==2&&remesa_context_native_fill_count(st->pipe)==2);
+#endif
 #endif
  CHECK(remesa_resource_wait_writer(st->pipe,color,0)==EBUSY);
  printf("FIXED_CLEAR_MASK case=%u observed=%x expected=%x depth_wait=%d\n",frontend_case,observed_clear_mask,PIPE_CLEAR_COLOR0|PIPE_CLEAR_DEPTH,remesa_resource_wait_writer(st->pipe,depth,0));
@@ -318,10 +342,20 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  CHECK(!remesa_resource_wait_writer(st->pipe,color,0)&&!remesa_resource_wait_writer(st->pipe,depth,0));
  struct pipe_fence_handle *fence=NULL;st->pipe->flush(st->pipe,&fence,0);
  CHECK(fence&&screen->fence_finish(screen,st->pipe,fence,0));screen->fence_reference(screen,&fence,NULL);
+#ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
+ /* New matrix DATA, unchanged selected shader/encoders; no second clear. */
+ coefficients[28]=.5f;coefficients[30]=.5f;
+ glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+ glDrawArrays(GL_TRIANGLES,0,3);glFlush();
+ CHECK(!remesa_context_error(st->pipe)&&dispatch_calls==2&&normal_fill_calls==1);
+ CHECK(!remesa_resource_wait_writer(st->pipe,color,0)&&!remesa_resource_wait_writer(st->pipe,depth,0));
+ printf("NORMAL_API_PRESERVE case=%u clear=1 draws=2 retired=2 CPU_clears=0 GPU_operations=0\n",frontend_case);
+#else
  /* A second draw cannot silently discard the first or reenter the backend. */
  glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  CHECK(remesa_context_error(st->pipe)==ENOTSUP&&dispatch_calls==1);
  printf("FIXED_API_NATIVE case=%u first_draw_retired=1 second_draw_refused=1 GPU_operations=0\n",frontend_case);
+#endif
  }
 #else
  inspect_fixed_inputs(st->pipe,device,fixture);
@@ -375,6 +409,9 @@ int main(void)
 #ifdef REMESA_TEST_OPENGL_NORMAL_DRAW
    CHECK(!remesa_screen_enable_native_fill(screen,remesa_persistent_fill_region));
    CHECK(!remesa_screen_enable_native_draws(screen));
+#ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
+   CHECK(!remesa_screen_enable_native_preserve_candidate(screen));
+#endif
    CHECK(remesa_screen_enable_homogeneous_frontend_lab(screen)==ENOTSUP);
 #else
    CHECK(!remesa_screen_enable_homogeneous_frontend_lab(screen));

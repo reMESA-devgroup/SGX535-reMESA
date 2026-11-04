@@ -28,7 +28,7 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
 {
  struct remesa_gem_scene_vertices value={0};struct remesa_gem_scene_vertex_command command;
  struct remesa_gem_scene_use_command use_command;struct retained_job *j;
- unsigned draw,p,i,v,e,u,r;bool parameters=false;int error;
+ unsigned draw,slot,p,i,v,e,u,r;bool parameters=false;int error;
  if(!out||!states)return -EINVAL;
  for(r=0;r<ta->reference_count;r++)
   if(ta->references[r].kind==REMESA_TA_REF_DRAW_PARAMETERS)parameters=true;
@@ -42,10 +42,12 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
  if(vertex_section_overlap(offset,command.bytes,actions->command_offset,sizeof(actions->command))||
     vertex_section_overlap(offset,command.bytes,controls->command_offset,sizeof(controls->command))||
     vertex_section_overlap(offset,command.bytes,use->command_offset,use_command.bytes))return -EINVAL;
- for(draw=0;draw<command.count;draw++){
+ for(slot=0;slot<command.count;slot++){
   struct remesa_gem_scene_vertex_window w;struct remesa_vertex_fetch decoded;struct remesa_vertex_indices indices;
   unsigned ir=ta->reference_count,pr=ir;
-  u32 use_id=0,use_offset=0,use_bytes=draw?(parameters?320:64):16;
+  u32 use_id=0,use_offset=0,use_bytes;
+  draw=slot;
+  use_bytes=draw?(parameters?320:64):16;
   /* Resolve by authenticated kind/draw, never positional triples. The PARAM
    * stream has an additional reference between state and indexed draw. */
   for(r=0;r<ta->reference_count;r++)if(ta->references[r].draw==draw){
@@ -53,7 +55,7 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
    if(ta->references[r].kind==(draw?REMESA_TA_REF_DRAW_VERTEX:REMESA_TA_REF_PREFIX_VERTEX))pr=r;
   }
   if(ir==ta->reference_count||pr==ta->reference_count||ta->references[pr].minimum_bytes<64)return -EPROTO;
-  memcpy(&w,(const u8 *)j->commands+offset+sizeof(command)+draw*sizeof(w),sizeof(w));
+  memcpy(&w,(const u8 *)j->commands+offset+sizeof(command)+slot*sizeof(w),sizeof(w));
   if(w.reserved||!w.vertex_count||w.vertex_count>65536||(!draw&&w.vertex_count!=3)||w.index_id!=ta->references[ir].id||
      w.index_offset!=ta->references[ir].byte_offset||w.index_bytes!=ta->references[ir].minimum_bytes)return -EINVAL;
   for(p=0;p<count&&views[p].binding.id!=ta->references[pr].id;p++);
@@ -88,10 +90,10 @@ static __attribute__((__noinline__)) int scene_vertices_build_checked(struct rem
    use_id=entry.id;use_offset=entry.byte_offset;use_bytes=entry.program_bytes;break;
   }
   if(!use_id)return -ENOENT;
-  value.draws[draw].index_id=w.index_id;value.draws[draw].index_offset=w.index_offset;value.draws[draw].index_bytes=w.index_bytes;
-  value.draws[draw].vertex_id=w.vertex_id;value.draws[draw].vertex_offset=w.vertex_offset;value.draws[draw].vertex_bytes=w.vertex_bytes;
-  value.draws[draw].stride_bytes=decoded.stride_bytes;value.draws[draw].minimum_index=indices.minimum;value.draws[draw].maximum_index=indices.maximum;
-  value.draws[draw].use_id=use_id;value.draws[draw].use_offset=use_offset;value.draws[draw].use_bytes=use_bytes;
+  value.draws[slot].index_id=w.index_id;value.draws[slot].index_offset=w.index_offset;value.draws[slot].index_bytes=w.index_bytes;
+  value.draws[slot].vertex_id=w.vertex_id;value.draws[slot].vertex_offset=w.vertex_offset;value.draws[slot].vertex_bytes=w.vertex_bytes;
+  value.draws[slot].stride_bytes=decoded.stride_bytes;value.draws[slot].minimum_index=indices.minimum;value.draws[slot].maximum_index=indices.maximum;
+  value.draws[slot].use_id=use_id;value.draws[slot].use_offset=use_offset;value.draws[slot].use_bytes=use_bytes;
  }
  value.ticket=loan->ticket;value.count=command.count;*out=value;return 0;
 }

@@ -149,7 +149,7 @@ int remesa_depth_surface_encode(const struct remesa_depth_surface_request *reque
   * independently named by4b76f. Do not call this a pending-clear flag. */
  result.control_480=(((r.pitch_pixels>>4)-1)<<8)|
   (r.cpp==4?UINT32_C(0x00050000):UINT32_C(0x000a0000));
- if(r.status==REMESA_DEPTH_SURFACE_DEFINED)result.control_480|=UINT32_C(0x00200026);
+ if(r.status==REMESA_DEPTH_SURFACE_DEFINED)result.control_480|=REMESA_SCENE_DEPTH_DEFINED_BITS;
  result.address_count=5;
  for(unsigned i=0;i<5;i++) {
   result.addresses[i].reg=i?UINT32_C(0x480)+i*4:UINT32_C(0xcb0);

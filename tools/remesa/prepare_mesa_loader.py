@@ -69,6 +69,8 @@ def prepare(mesa,repo,output,egl_mesa=None):
     sources += ['remesa_texture_state.c', 'remesa_texture_state.h',
                 'remesa_usse_sample.c', 'remesa_usse_sample.h',
                 'remesa_pds_prefetch.c', 'remesa_pds_prefetch.h']
+    sources += ['remesa_linux_matrix_submit.inc', 'remesa_gears_runtime.h',
+                'remesa_depth_cpu.h']
     for n in sources:shutil.copyfile(repo/'mesa/sgx535'/n,dst/n)
     shutil.copyfile(repo/'common/remesa/draw_packet.c',dst/'draw_packet.c')
     shutil.copyfile(repo/'common/remesa/shader_request.c',dst/'shader_request.c')
@@ -77,6 +79,12 @@ def prepare(mesa,repo,output,egl_mesa=None):
         shutil.copyfile(repo/'kernel/remesa'/n,dst/n)
     inc=dst/'include/remesa';inc.mkdir(parents=True)
     for n in ['scene_dpm.h','scene_layout.h','native_uapi.h','draw_packet.h','shader_uapi.h','shader_request.h','memory_uapi.h','private_session_lab_uapi.h','general_session_uapi.h','twod_copy_uapi.h','twod_fill_uapi.h','retained_uapi.h','retained_evidence.h','provider.h','registry.h','resource.h']:shutil.copyfile(repo/'include/remesa'/n,inc/n)
+    for n in ['scene_initial.h', 'scene_use_limits.h', 'ta_references.h',
+              'scene_packet.h', 'parameter_window.h', 'scene_probe_uapi.h',
+              'gears_scene_probe_uapi.h', 'general_parameter_uapi.h',
+              'matrix_submit_uapi.h', 'matrix_preserve_ta.h',
+              'matrix_draw_domain.h', 'scene_control_words.h']:
+        shutil.copyfile(repo/'include/remesa'/n,inc/n)
     shim=dst/'include/drm';shim.mkdir();(shim/'drm.h').write_text('/* SPDX-License-Identifier: MIT */\n#include <drm.h>\n')
     (dst/'meson.build').write_text("""# SPDX-License-Identifier: MIT
 # Isolated experimental integration; DRI constructor currently rejects GL.

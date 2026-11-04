@@ -81,7 +81,7 @@ static __attribute__((__noinline__)) int scene_states_build_checked(struct remes
  }
  if(draw_dwords==15&&!prefix_window)return -EINVAL;
  if(parameters&&parameters!=ta->draw_count)return -EPROTO;
- if(value.count!=ta->draw_count+parameters+2+(ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE))return -EPROTO;
+ if(value.count!=ta->draw_count+parameters+2+(ta->references[0].kind==REMESA_TA_REF_INITIAL_STATE)-(controls->command.schema==3))return -EPROTO;
  value.ticket=loan->ticket;*out=value;return 0;
 }
 

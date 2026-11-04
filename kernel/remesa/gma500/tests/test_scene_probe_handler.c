@@ -61,7 +61,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *who)
  CHECK(!endpoint_lock.held&&s==endpoint&&s->private_session==who&&!s->jobs[0].live&&!s->executor&&!s->private_source_held);
  CHECK(!current_guard||!current_guard->held);backing_ends++;
  if(fault==BACKING_END)return -EIO;
- s->private_matrix_constructing=false;s->private_matrix_color=0;s->private_session=NULL;return 0;
+ s->private_matrix_constructing=false;s->private_matrix_color=0;s->private_matrix_depth=0;s->private_session=NULL;return 0;
 }
 int remesa_private_session_source_begin(struct remesa_gem_memory *s,const void *who)
 {

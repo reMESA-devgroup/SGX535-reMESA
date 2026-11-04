@@ -10,7 +10,8 @@ int main(void)
  struct drm_device dev={&priv};struct remesa_gem_memory *s=NULL;unsigned owner=0;
  CHECK(!remesa_gem_memory_open(&dev,&file,77,&s));
  u32 color=create(s,32,32,0x40001000);
- s->private_session=&owner;s->private_matrix_color=color;s->private_matrix_constructing=true;
+ u32 depth=create(s,32,32,0x40002000);
+ s->private_session=&owner;s->private_matrix_color=color;s->private_matrix_constructing=true;s->private_matrix_depth=depth;
  struct remesa_memory_request r={.version=1,.action=REMESA_MEM_CREATE,.context=77,.bytes=4096};
  CHECK(!remesa_gem_memory_request(s,&file,&r));u32 buffer=r.id;
  r=(struct remesa_memory_request){.version=1,.context=77,.id=buffer,.action=REMESA_MEM_PIN};
@@ -30,6 +31,20 @@ int main(void)
   r=(struct remesa_memory_request){.version=1,.context=77,.id=color,.action=action};
   CHECK(remesa_gem_memory_request(s,&file,&r)==-EPERM);
  }
+ /* Retired Z has the same CPU write/remap/destruction exclusion as COLOR,
+  * while real read leases remain available for synchronized readback. */
+ r=(struct remesa_memory_request){.version=1,.context=77,.id=depth,.action=REMESA_MEM_LEASE,.flags=1};
+ CHECK(remesa_gem_memory_request(s,&file,&r)==-EPERM);
+ for(unsigned action=REMESA_MEM_UNMAP;action<=REMESA_MEM_DESTROY;action++){
+  r=(struct remesa_memory_request){.version=1,.context=77,.id=depth,.action=action};
+  CHECK(remesa_gem_memory_request(s,&file,&r)==-EPERM);
+ }
+ r=(struct remesa_memory_request){.version=1,.context=77,.id=depth,.action=REMESA_MEM_LEASE};
+ CHECK(!remesa_gem_memory_request(s,&file,&r));
+ r.action=REMESA_MEM_READ;r.length=16;CHECK(!remesa_gem_memory_request(s,&file,&r));
+ r.action=REMESA_MEM_WRITE;CHECK(remesa_gem_memory_request(s,&file,&r)==-EPERM);
+ r=(struct remesa_memory_request){.version=1,.context=77,.id=depth,.action=REMESA_MEM_UNLEASE};
+ CHECK(!remesa_gem_memory_request(s,&file,&r));
  struct backing *b=&s->bo[buffer&31];struct remesa_memory_binding use={buffer,b->va.start,b->gem.size};
  struct remesa_memory_ticket ticket;unsigned command=0;
  CHECK(!remesa_gem_job_prepare(s,&use,1,&command,sizeof command,&ticket));
@@ -46,7 +61,7 @@ int main(void)
  CHECK(remesa_gem_memory_request(s,&file,&r)==-EBUSY);
  CHECK(remesa_gem_memory_close(s)==-EBUSY);
  /* Fixture metadata teardown only; real owner release is tested separately. */
- s->private_session=NULL;s->private_matrix_color=0;
+ s->private_session=NULL;s->private_matrix_color=s->private_matrix_depth=0;
  CHECK(!remesa_gem_memory_close(s));CHECK(!gems&&!pins&&!ptes&&!claimed&&!power&&!device_refs&&!module_refs);
  puts("PASS actual normal CPU construction: allocate/pin/map/write/read, COLOR protection, generation/bounds/holds/freeze; GPU0");
  return 0;

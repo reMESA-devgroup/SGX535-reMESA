@@ -95,7 +95,7 @@ int remesa_private_session_release(struct remesa_gem_memory *s,const void *owner
 #endif
  memset(s->private_dpm_ids,0,sizeof(s->private_dpm_ids));
  s->private_dpm_ready=false;s->private_dpm_retired_operation=0;
- s->private_matrix_constructing=false;s->private_matrix_color=0;
+ s->private_matrix_constructing=false;s->private_matrix_color=0;s->private_matrix_depth=0;
  s->private_session=NULL;error=0;
  unlock:mutex_unlock(&s->lock);
  done:mutex_unlock(&endpoint_lock);return error;

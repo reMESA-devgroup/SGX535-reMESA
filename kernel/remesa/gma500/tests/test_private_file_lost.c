@@ -32,7 +32,7 @@ struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;struct mutex lock;
  const void *private_session;
  struct retained_job jobs[8];struct backing bo[OBJECTS];bool private_device_lost,stream_bound,excluded,private_matrix_constructing,private_source_held,private_source_poisoned;
- uint32_t private_matrix_color;
+ uint32_t private_matrix_color,private_matrix_depth;
  struct resource exclude;unsigned device_refs,module_refs,power_refs;
 };
 struct trusted_stream {

@@ -16,6 +16,8 @@
  * has an empty packet/budget and cannot issue a GPU command. */
 #define REMESA_MATRIX_KEEP_SESSION 1u
 #define REMESA_MATRIX_CLOSE_SESSION 2u
+/* Candidate no-clear normal draw: requires KEEP and authenticated retired Z. */
+#define REMESA_MATRIX_PRESERVE_DEPTH 4u
 #define REMESA_MATRIX_SESSION_READY 16u
 #define REMESA_MATRIX_SUBMIT_MAX_VERTICES 4095u /* existing frontend construction bound, not a hardware limit */
 struct remesa_matrix_submit_request {
@@ -31,7 +33,7 @@ struct remesa_matrix_submit_request {
 #define DRM_IOCTL_REMESA_MATRIX_SUBMIT DRM_IOWR(DRM_COMMAND_BASE+DRM_REMESA_MATRIX_SUBMIT,struct remesa_matrix_submit_request)
 static inline int remesa_matrix_submit_request_valid(const struct remesa_matrix_submit_request *r)
 {
- unsigned i;const struct remesa_scene_packet *p;
+ unsigned i,draw;int preserve;const struct remesa_scene_packet *p;
  if(!r||r->version!=1||!r->context||r->reserved||
     r->operation||r->cookie||r->core||r->revision||r->pds_base||r->phase||r->ledger||r->error||
     r->retained||r->stages||r->response_reserved[0]||r->response_reserved[1])return 0;
@@ -41,15 +43,17 @@ static inline int remesa_matrix_submit_request_valid(const struct remesa_matrix_
   for(i=0;i<sizeof(r->packet);i++)if(bytes[i])return 0;
   return 1;
  }
- if((r->flags&~REMESA_MATRIX_KEEP_SESSION)||!r->budget_ms||r->budget_ms>10000)return 0;
+ if((r->flags&~(REMESA_MATRIX_KEEP_SESSION|REMESA_MATRIX_PRESERVE_DEPTH))||!r->budget_ms||r->budget_ms>10000)return 0;
+ preserve=!!(r->flags&REMESA_MATRIX_PRESERVE_DEPTH);draw=1;
+ if(preserve&&!(r->flags&REMESA_MATRIX_KEEP_SESSION))return 0;
  p=&r->packet;
- if(!remesa_scene_packet_valid(p)||p->owner!=r->context||p->binding_count!=18||p->use_count!=11||p->window_count!=2||
+ if(!remesa_scene_packet_valid(p)||p->owner!=r->context||p->binding_count!=18||p->use_count!=(preserve?10:11)||p->window_count!=2||
     !p->controls.width||p->controls.width>=2048||!p->controls.height||p->controls.height>=2048||
-    p->controls.schema!=2||p->controls.depth_finalize!=1||p->controls.ta_bytes!=104||
-    p->windows[0].vertex_count!=3||p->windows[0].vertex_bytes!=48||p->windows[0].index_bytes!=6||
-    p->windows[1].vertex_count<3||p->windows[1].vertex_count>REMESA_MATRIX_SUBMIT_MAX_VERTICES||
-    p->windows[1].vertex_count%3||p->windows[1].vertex_bytes!=p->windows[1].vertex_count*48||
-    p->windows[1].index_bytes!=p->windows[1].vertex_count*2)return 0;
+    p->controls.schema!=(preserve?3:2)||p->controls.depth_finalize!=1||p->controls.ta_bytes!=(preserve?76:104)||
+    (p->windows[0].vertex_count!=3||p->windows[0].vertex_bytes!=48||p->windows[0].index_bytes!=6)||
+    p->windows[draw].vertex_count<3||p->windows[draw].vertex_count>REMESA_MATRIX_SUBMIT_MAX_VERTICES||
+    p->windows[draw].vertex_count%3||p->windows[draw].vertex_bytes!=p->windows[draw].vertex_count*48||
+    p->windows[draw].index_bytes!=p->windows[draw].vertex_count*2)return 0;
  for(i=0;i<p->use_count;i++){
   if(p->uses[i].data_master!=0&&p->uses[i].data_master!=1)return 0;
   if(p->uses[i].bank!=(p->uses[i].data_master?3U:4U))return 0;

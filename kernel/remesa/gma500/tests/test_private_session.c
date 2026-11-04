@@ -42,7 +42,7 @@ struct remesa_gem_memory {
  struct drm_device *dev;struct drm_file *file;u64 context;struct mutex lock;
  const void *private_session;bool stream_bound,private_device_lost,excluded;
  bool private_source_held,private_source_poisoned;
- bool private_matrix_constructing,ta_cache_domains;u32 private_matrix_color;
+ bool private_matrix_constructing,ta_cache_domains;u32 private_matrix_color,private_matrix_depth;
  unsigned private_input_ids[5];int (*pds_write_guard)(u64,const void *,unsigned);
  unsigned private_scene_input_ids[32],private_scene_input_mask,private_scene_binding_count;
  unsigned private_work_ids[6];bool private_work_owned;

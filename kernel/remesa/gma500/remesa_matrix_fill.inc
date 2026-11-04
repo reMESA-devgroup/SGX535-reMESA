@@ -9,7 +9,7 @@
 struct remesa_matrix_fill_owner {
  struct remesa_scene_probe base; /* stable common owner, offset zero */
  struct remesa_twod_retirement retirement;
- u32 color,width,height,stride;
+ u32 color,width,height,stride,last_depth_pitch;
  bool active,failed,continuous;
  u64 last_draw_operation;
 };

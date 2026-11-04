@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only. After scene USE/loan helpers. */
 #include "remesa_gem_scene_ta.h"
+#include "remesa_matrix_preserve_ta.h"
 struct scene_ta_resolver {
  struct remesa_gem_private *loan;const struct remesa_memory_view *views;
  unsigned count;struct remesa_gem_scene_ta *result;
@@ -37,6 +38,10 @@ static __attribute__((__noinline__)) int scene_ta_build_checked(struct remesa_ge
  resolver=(struct scene_ta_resolver){loan,views,count,&value};
  /* Select only after a side-effect-free complete syntax check. Never retry
   * another grammar after a resolver permission/address failure. */
+ if(c->schema==3){
+  error=remesa_matrix_preserve_ta_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
+   scene_ta_resolve,&resolver,&counts);
+ }else{
  error=remesa_ta_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,NULL,NULL,&counts);
  if(!error)error=remesa_ta_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
   scene_ta_resolve,&resolver,&counts);
@@ -46,6 +51,7 @@ static __attribute__((__noinline__)) int scene_ta_build_checked(struct remesa_ge
   if(error)return -legacy_error;
   error=remesa_ta_gears_references_walk((const u8 *)views[i].cpu+c->ta_offset,c->ta_bytes,
    scene_ta_resolve,&resolver,&counts);
+ }
  }
  if(error)return -error;
  if(counts.references!=value.reference_count)return -EPROTO;
