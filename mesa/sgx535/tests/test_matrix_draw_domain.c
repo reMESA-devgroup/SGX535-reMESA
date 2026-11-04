@@ -9,8 +9,8 @@
 struct remesa_gears_geometry_view {
  const void *vertices;size_t bytes;uint32_t vertex_count,stride_dwords,normal_from_attribute;
 };
-/* Frozen pre-change frontend predicate, retained as an independent float
- * reference for IEEE special values and boundary acceptance. */
+/* Historical W2 float predicate plus an independent long-double W1 bound.
+ * The W2 behavior remains exact; outward W1 rounding is exercised separately. */
 static int prior_float_domain(const struct remesa_gears_geometry_view *view,
  const unsigned char source[160])
 {
@@ -29,7 +29,7 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
   else if(v!=0)return ENOTSUP;
  }
  for(unsigned i=28;i<31;i++)if(fabsf(constants[i])>.5f)return ENOTSUP;
- if(constants[31]!=2)return ENOTSUP;
+ if(constants[31]!=2&&constants[31]!=1)return ENOTSUP;
  bool light=false;
  for(unsigned i=32;i<35;i++){
   if(fabsf(constants[i])>1)return ENOTSUP;
@@ -45,6 +45,9 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
    * retain W=0. The selected attribute-normal shader consumes XYZ only.
    * Keep both canonical forms without changing the existing fetch bits. */
   if(value[3]!=1||(value[7]!=0&&value[7]!=1)||!normal)return ENOTSUP;
+  if(constants[31]==1)for(unsigned k=0;k<3;k++)
+   if(fabsl((long double)constants[16+5*k])*fabsl((long double)value[k])+
+      fabsl((long double)constants[28+k])>.875L)return ENOTSUP;
  }
  return 0;
 }

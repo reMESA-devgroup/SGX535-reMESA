@@ -32,7 +32,7 @@ def _packet_matches(raw, expected, context, ids):
     common.need(normalized == raw, 'normal packet differs from sealed producer')
 
 
-def preflight(root, size, manifest_sha):
+def preflight(root, size, manifest_sha, affine_w1=False):
     manifest = root/'MANIFEST.json'
     common.need(not manifest.is_symlink() and sha(manifest.read_bytes()) == manifest_sha, 'preserve manifest pin')
     seal = json.loads(manifest.read_text())
@@ -40,6 +40,7 @@ def preflight(root, size, manifest_sha):
                 seal['GPU_operations'] == 0 and seal['physical_qualification'] is False and
                 seal['native_calls'] == {'draws':3, 'fills':2} and
                 seal['reference_framebuffers_uploaded'] is False, 'preserve manifest scope')
+    common.need(seal.get('affine_w1', False) is affine_w1, 'affine qualification mode')
     common.need(size in ('640x640', '1280x800'), 'preserve dimensions')
     actual = {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() and p != manifest}
     common.need(actual == set(seal['files']), 'sealed input inventory')
@@ -50,9 +51,13 @@ def preflight(root, size, manifest_sha):
         common.need(not p.is_symlink() and sha(p.read_bytes()) == digest, 'sealed input changed')
     width, height = map(int, size.split('x'))
     vertices, coefficients_a = inputs()
+    if affine_w1:
+        values = list(struct.unpack('<36f', coefficients_a))
+        values[16:32] = [v*.5 for v in values[16:32]]
+        coefficients_a = struct.pack('<36f', *values)
     b = bytearray(coefficients_a)
     for i in (28, 30):
-        struct.pack_into('<I', b, i*4, 0x3f000000)
+        struct.pack_into('<I', b, i*4, 0x3e800000 if affine_w1 else 0x3f000000)
     prepared = []
     for step in (1, 2, 3):
         fixture = root/f'step-{step}'
@@ -103,8 +108,8 @@ def preflight(root, size, manifest_sha):
     return prepared, colors, z_a, regions
 
 
-def verify(capture, root, size, manifest_sha):
-    prepared, colors, z_a, regions = preflight(root,size,manifest_sha)
+def verify(capture, root, size, manifest_sha, affine_w1=False):
+    prepared, colors, z_a, regions = preflight(root,size,manifest_sha,affine_w1)
     common.need(sorted(p.name for p in capture.glob('frame-*')) ==
                 [f'frame-{i:06d}' for i in (1,2,3)], 'exact three-draw inventory')
     first_packet = (capture/'frame-000001/packet.bin').read_bytes()

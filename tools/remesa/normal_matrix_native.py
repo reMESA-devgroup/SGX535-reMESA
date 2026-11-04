@@ -17,11 +17,12 @@ import verify_normal_matrix_capture as archive
 import verify_normal_preserve_capture as preserve_archive
 
 
-def collect(device, output, fixture, oracle, size, manifest, manifest_sha, client, client_sha, draws=1, preserve=False):
+def collect(device, output, fixture, oracle, size, manifest, manifest_sha, client, client_sha, draws=1, preserve=False, affine_w1=False):
+    archive.need(not affine_w1 or preserve, 'affine requires bounded preserve qualification')
     archive.need(draws == 3 if preserve else draws in (1, 2, 10, 100), 'bounded ordinary draw count')
     if preserve:
         archive.need(manifest == fixture/'MANIFEST.json' and oracle == fixture/'oracle', 'preserve input paths')
-        preserve_archive.preflight(fixture, size, manifest_sha)
+        preserve_archive.preflight(fixture, size, manifest_sha, affine_w1)
     else:
         archive.preflight(fixture, oracle, size, manifest, manifest_sha)
     archive.need(archive.sha(client.read_bytes()) == client_sha, 'native client prelaunch pin')
@@ -30,6 +31,7 @@ def collect(device, output, fixture, oracle, size, manifest, manifest_sha, clien
                   requires_outer_boot_source_recovery_audit=True,
                   requested_API_draws=draws, requested_3D_jobs=draws, requested_2D_fills=2 if preserve else draws,
                   preserve_candidate=preserve,
+                  affine_w1=affine_w1,
                   reference_framebuffers_uploaded_to_GPU=False)
 
     def save():
@@ -51,7 +53,7 @@ def collect(device, output, fixture, oracle, size, manifest, manifest_sha, clien
         report['native_client_exit'] = result.returncode
         report['wall_seconds_including_diagnostics'] = time.monotonic()-start
         archive.need(result.returncode == 0, 'native client failed; no retry/manual cleanup')
-        checked = (preserve_archive.verify(output, fixture, size, manifest_sha) if preserve else
+        checked = (preserve_archive.verify(output, fixture, size, manifest_sha, affine_w1) if preserve else
                    archive.verify_continuous(output, fixture, oracle, size, manifest, manifest_sha, draws)
                    if draws != 1 else archive.verify(output, fixture, oracle, size, manifest, manifest_sha))
         report['archive'] = checked
@@ -105,11 +107,13 @@ def main():
     p.add_argument('--execute', action='store_true')
     p.add_argument('--draws', type=int, choices=(1, 2, 3, 10, 100), default=1)
     p.add_argument('--preserve-three-step', action='store_true')
+    p.add_argument('--affine-w1', action='store_true', help='Explicit bounded affine qualification; requires --preserve-three-step')
     a = p.parse_args()
+    archive.need(not a.affine_w1 or a.preserve_three_step, 'affine requires bounded preserve qualification')
     if a.preserve_three_step:
         archive.need(a.draws == 3 and a.manifest == a.fixture/'MANIFEST.json' and
                      a.oracle == a.fixture/'oracle', 'bounded preserve inputs')
-        preserve_archive.preflight(a.fixture, a.size, a.manifest_sha256)
+        preserve_archive.preflight(a.fixture, a.size, a.manifest_sha256, a.affine_w1)
     else:
         archive.need(a.draws in (1, 2, 10, 100), 'bounded ordinary draw count')
         archive.preflight(a.fixture, a.oracle, a.size, a.manifest, a.manifest_sha256)
@@ -123,7 +127,7 @@ def main():
         print('PLAN_ONLY_NO_DEVICE_OPEN')
         return
     print(collect(a.device, a.output, a.fixture, a.oracle, a.size, a.manifest,
-                  a.manifest_sha256, a.client, a.client_sha256, a.draws, a.preserve_three_step)['status'])
+                  a.manifest_sha256, a.client, a.client_sha256, a.draws, a.preserve_three_step, a.affine_w1)['status'])
 
 
 if __name__ == '__main__':

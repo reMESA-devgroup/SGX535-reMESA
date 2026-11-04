@@ -33,3 +33,26 @@ Raw failed and passing captures, offline fault tests, source pins and audits:
 
 This is not OpenGL 2.1, desktop/app, sustained-FPS or installable-beta approval.
 The existing closed LAB catalogues and their admission remain unchanged.
+
+## Bounded affine W=1
+
+Normal `glLoadMatrixf`/`glDrawArrays` also accepts positive constant W=1.
+The existing diagonal-scale and translation bounds remain; every vertex/axis
+additionally requires `abs(scale)*abs(position)+abs(translation) <= 7/8`.
+Outward Q15 integer bounds enforce this in both frontend and kernel, without
+floating-point operations or constructing transformed vertices in the kernel.
+The multiplication and sum fit in 32 bits. Historical W=2 behavior is retained;
+rotation, shear and general clipping remain explicit unsupported cases.
+
+The W=1 projection obtained by halving all 16 cells of the qualified W=2
+projection has exactly the same normalized coordinates. That input relationship
+was checked rationally before reusing the existing pixel oracle. Real W=1 draws,
+depth and no-clear preservation passed at 640×640 and 1280×800 on rev121.
+All fences, MMU/ownership checks, guards and cleanup passed; the successful
+experimental boot was kept idle. A Wi-Fi-ready notification captured before
+GPU execution is classified separately in the 1280 audit; its initial strict
+refusal is preserved. No GPU gate was changed for that notification.
+
+Evidence: `/home/gama/sgx535-offline/normal-affine-w1-20261104/v1/` contains
+`PHYSICAL_640_AFFINE_RESULT.json`, `PHYSICAL_1280_AFFINE_RESULT.json`, numeric
+boundary/corruption tests and the unchanged W=2 archive regression.

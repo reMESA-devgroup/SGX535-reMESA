@@ -269,8 +269,19 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  /* Optional qualification input: avoid sample-on-edge ties at both sizes.
   * Changes only supplied GL matrix data, never the encoder or driver gate. */
  if(getenv("REMESA_TEST_NORMAL_Y_SHIFT"))coefficients[29]=1.0f/256.0f;
+#ifdef REMESA_TEST_OPENGL_AFFINE_W1_DRAW
+ if(getenv("REMESA_TEST_AFFINE_EQUIVALENT")){
+  /* Homogeneous scaling keeps the independently qualified NDC oracle. */
+  for(unsigned i=16;i<32;i++)coefficients[i]*=.5f;
+ }else coefficients[31]=1;
+#endif
 #ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
- if(getenv("REMESA_TEST_PRESERVE_BASELINE_B")){coefficients[28]=.5f;coefficients[30]=.5f;}
+ if(getenv("REMESA_TEST_PRESERVE_BASELINE_B")){
+  coefficients[28]=.5f;coefficients[30]=.5f;
+#ifdef REMESA_TEST_OPENGL_AFFINE_W1_DRAW
+  if(getenv("REMESA_TEST_AFFINE_EQUIVALENT"))coefficients[28]=coefficients[30]=.25f;
+#endif
+ }
 #endif
  const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
  memcpy(vertices,dynamic,sizeof vertices);
@@ -345,6 +356,9 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #ifdef REMESA_TEST_OPENGL_PRESERVE_DRAW
  /* New matrix DATA, unchanged selected shader/encoders; no second clear. */
  coefficients[28]=.5f;coefficients[30]=.5f;
+#ifdef REMESA_TEST_OPENGL_AFFINE_W1_DRAW
+ if(getenv("REMESA_TEST_AFFINE_EQUIVALENT"))coefficients[28]=coefficients[30]=.25f;
+#endif
  glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
  glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  CHECK(!remesa_context_error(st->pipe)&&dispatch_calls==2&&normal_fill_calls==1);

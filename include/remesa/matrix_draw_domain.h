@@ -2,6 +2,17 @@
 #ifndef REMESA_MATRIX_DRAW_DOMAIN_H
 #define REMESA_MATRIX_DRAW_DOMAIN_H
 #include "ta_references.h"
+/* Upper bound in Q15 for an already checked finite magnitude <=1. Rounding
+ * outwards also covers subnormals. Products and sums below fit in u32:
+ * scale*position<=2^30, translation<=2^29 in the same Q30 units. */
+static inline remesa_scene_u32 remesa_matrix_unit_upper_q15(remesa_scene_u32 bits)
+{
+ remesa_scene_u32 magnitude=bits&0x7fffffffU,shift,mantissa;
+ if(!magnitude)return 0;
+ shift=135U-(magnitude>>23);mantissa=0x800000U|(magnitude&0x7fffffU);
+ if(shift>=24)return 1;
+ return (mantissa+((1U<<shift)-1))>>shift;
+}
 /* Existing ordinary draw's finite in-clip domain, expressed in IEEE754 bits.
  * No floating point, transformed vertices, normalization or rendering. Counts
  * describe committed records, not allocation capacity. Packed GPU records add
@@ -27,7 +38,7 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
   else if(magnitude)return EOPNOTSUPP;
  }
  for(i=28;i<31;i++)if((c[i]&0x7fffffffU)>0x3f000000U)return EOPNOTSUPP;
- if(c[31]!=0x40000000U)return EOPNOTSUPP;
+ if(c[31]!=0x40000000U&&c[31]!=0x3f800000U)return EOPNOTSUPP;
  for(i=32;i<35;i++){
   remesa_scene_u32 magnitude=c[i]&0x7fffffffU;
   if(magnitude>0x3f800000U)return EOPNOTSUPP;
@@ -42,6 +53,15 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
    if(k>=4&&k<7&&magnitude>=0x3d800000U)normal=1;
   }
   if(remesa_ta_ref_word(at+12)!=0x3f800000U||!normal)return EOPNOTSUPP;
+  if(c[31]==0x3f800000U)for(k=0;k<3;k++){
+   remesa_scene_u32 bound=remesa_matrix_unit_upper_q15(c[16+5*k])*
+    remesa_matrix_unit_upper_q15(remesa_ta_ref_word(at+4*k))+
+    (remesa_matrix_unit_upper_q15(c[28+k])<<15);
+   /* Diagonal affine W1 remains strictly inside all six clip planes.
+    * This bounds magnitudes, never computes or uploads a transformed vertex.
+    * The old W2 domain and its execution recipe remain unchanged. */
+   if(bound>0x38000000U)return EOPNOTSUPP; /* 7/8 in Q30. */
+  }
   {
    remesa_scene_u32 w=remesa_ta_ref_word(at+28);
    if((w&0x7fffffffU)&&w!=0x3f800000U)return EOPNOTSUPP;

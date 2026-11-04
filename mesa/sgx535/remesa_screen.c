@@ -1817,8 +1817,9 @@ done:
 /* Conservative execution domain for the first ordinary matrix draw. These
  * are bounds checks only: no transformed vertex is produced or uploaded.
  * Diagonal scale<=1, translation<=0.5, POSITION.xyz<=1 and W=2 give a strict
- * clip margin, independently of GPU rounding. Rotation/shear, other W and
- * general clipping remain explicit unsupported cases. This is not the old
+ * clip margin, independently of GPU rounding. W=1 additionally requires the
+ * shared per-vertex outward bound <=7/8. Rotation/shear, other W and general
+ * clipping remain explicit unsupported cases. This is not the old
  * byte-exact LAB witness or its admission recipe. */
 #ifdef REMESA_WITH_NIR
 static int native_draw_input_domain(const struct remesa_gears_geometry_view *view,
