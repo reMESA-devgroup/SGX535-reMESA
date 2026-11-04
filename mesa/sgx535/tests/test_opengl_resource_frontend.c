@@ -283,7 +283,14 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #endif
  }
 #endif
-#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+#ifdef REMESA_TEST_OPENGL_VARYING_W_DRAW
+ /* Raw authored input positions give W=5/16,3/8,7/16 on the GPU. */
+ memset(coefficients+16,0,16*sizeof(*coefficients));
+ coefficients[16]=coefficients[21]=.25f;coefficients[27]=-1;
+ if(getenv("REMESA_TEST_PRESERVE_BASELINE_B")){coefficients[24]=-.125f;coefficients[26]=-.25f;}
+ const GLfloat dynamic[3][8]={{-.15625f,-.31005859375f,-.3125f,1,0,0,1,0},
+  {.5625f,-.3720703125f,-.375f,1,0,0,1,0},{-.21875f,.44091796875f,-.4375f,1,0,0,1,0}};
+#elif defined(REMESA_TEST_OPENGL_PERSPECTIVE_DRAW)
  /* Authored raw geometry below; both projections are emitted by glFrustum. */
  memset(coefficients+16,0,16*sizeof(*coefficients));
  coefficients[16]=coefficients[21]=.25f;coefficients[26]=-2;coefficients[27]=-1;
@@ -320,7 +327,7 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #endif
  }
  if(api_fault==2){
-#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+#if defined(REMESA_TEST_OPENGL_PERSPECTIVE_DRAW) || defined(REMESA_TEST_OPENGL_VARYING_W_DRAW)
   coefficients[27]=1; /* Negative homogeneous W. */
 #elif defined(REMESA_TEST_OPENGL_ROTATION_DRAW)
   coefficients[17]=2;
@@ -403,7 +410,10 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #ifdef REMESA_TEST_OPENGL_AFFINE_W1_DRAW
  if(getenv("REMESA_TEST_AFFINE_EQUIVALENT"))coefficients[28]=coefficients[30]=.25f;
 #endif
-#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+#ifdef REMESA_TEST_OPENGL_VARYING_W_DRAW
+ coefficients[28]=coefficients[30]=0;coefficients[24]=-.125f;coefficients[26]=-.25f;
+ glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#elif defined(REMESA_TEST_OPENGL_PERSPECTIVE_DRAW)
  coefficients[28]=0;coefficients[24]=-.125f;coefficients[30]=-.65625f;
  glMatrixMode(GL_PROJECTION);glLoadIdentity();frustum(-.984375,.765625,-.875,.875,.21875,.65625);
 #else

@@ -79,8 +79,24 @@ def preflight(root, size, manifest_sha, affine_w1=False):
         vertices = struct.pack('<24f', -.1875,-.3720703125,-.375,1,0,0,1,0,
                                .5625,-.3720703125,-.375,1,0,0,1,0,
                                -.1875,.3779296875,-.375,1,0,0,1,0)
+    varying_w = seal.get('projective_varying_W', False)
+    common.need(isinstance(varying_w, bool) and
+                (not varying_w or not (affine_w1 or rotation or projective)),
+                'varying-W qualification mode')
+    if varying_w:
+        values = list(struct.unpack('<36f', coefficients_a))
+        values[16:32] = [0.]*16
+        values[16] = values[21] = .25
+        values[27] = -1.
+        coefficients_a = struct.pack('<36f', *values)
+        vertices = struct.pack('<24f', -.15625,-.31005859375,-.3125,1,0,0,1,0,
+                               .5625,-.3720703125,-.375,1,0,0,1,0,
+                               -.21875,.44091796875,-.4375,1,0,0,1,0)
     b = bytearray(coefficients_a)
-    if projective:
+    if varying_w:
+        struct.pack_into('<f', b, 24*4, -.125)
+        struct.pack_into('<f', b, 26*4, -.25)
+    elif projective:
         struct.pack_into('<f', b, 24*4, -.125)
         struct.pack_into('<f', b, 30*4, -.65625)
     else:

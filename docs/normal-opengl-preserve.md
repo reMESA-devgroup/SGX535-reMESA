@@ -120,3 +120,27 @@ Evidence: `/home/gama/sgx535-offline/normal-perspective-20261104/v1/`, especiall
 `PHYSICAL_640_PROJECTIVE_RESULT.json`, `PHYSICAL_1280_PROJECTIVE_RESULT.json`,
 `EXACT_NDC_EQUIVALENCE.json` and `OFFLINE_INDEX.json`. This is no claim of
 complete OpenGL 2.1, arbitrary clipping, sustained FPS or desktop/app approval.
+
+
+## Different W at each vertex
+
+The same runtime and module subsequently passed ordinary
+`glLoadMatrixf`/`glDrawArrays` with W=5/16, 3/8 and 7/16 at the three vertices,
+at **640×640 and 1280×800**. Only qualification inputs and verifier cases
+changed; no driver code, shader, encoder, kernel UAPI or LAB admission changed.
+Authored raw vertices project to the same exact NDC as the prior independent
+COLOR/Z oracle. Both three-draw sequences, including no-clear preservation,
+passed pixels, retirement, guards, immutable inputs and complete cleanup.
+Neither run added kernel messages. The successful 1280 boot was retained idle,
+all eight controls N, with the original stock recovery configuration preserved.
+
+This isolates geometric perspective division. NDC Z is constant within each
+triangle and other attributes are constant; varying-attribute interpolation,
+a depth gradient and texture sampling are not qualified by this case.
+Offline real-Mesa models, held GEM/MMU lifetime faults and capture faults passed;
+eight earlier physical archives still produce their exact previous reports.
+
+Evidence: `/home/gama/sgx535-offline/normal-varying-w-20261104/v1/`, especially
+`PHYSICAL_640_VARYING_W_RESULT.json`, `PHYSICAL_1280_VARYING_W_RESULT.json`
+and `OFFLINE_INDEX.json`. The next normal texture API boundary remains refused;
+this is not OpenGL 2.1 conformance, desktop/app or sustained-FPS approval.
