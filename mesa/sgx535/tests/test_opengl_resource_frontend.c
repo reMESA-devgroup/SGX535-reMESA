@@ -283,7 +283,17 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #endif
  }
 #endif
+#ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
+ if(!getenv("REMESA_TEST_GL_ROTATE_CALL")){
+  coefficients[17]=coefficients[21];coefficients[20]=-coefficients[16];
+  coefficients[16]=coefficients[21]=0;
+ }
+ /* Authored input geometry for an exact90-degree projection. The driver
+  * uploads these raw attributes; it never transforms vertices on the CPU. */
+ const GLfloat dynamic[3][8]={{-.5f,.5f,0,1,0,0,1,0},{-.5f,-.5f,0,1,0,0,1,0},{.5f,.5f,0,1,0,0,1,0}};
+#else
  const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
+#endif
  memcpy(vertices,dynamic,sizeof vertices);
 #else
  CHECK(snprintf(path,sizeof path,"%s/coefficients-source.bin",witness)>0);
@@ -299,11 +309,24 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
   vertices[0][0]+=.25f;
 #endif
  }
- if(api_fault==2)coefficients[16]*=2;
+ if(api_fault==2){
+#ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
+  coefficients[17]=2;
+#else
+  coefficients[16]*=2;
+#endif
+ }
 #endif
  const GLfloat one[4]={1,1,1,1},zero[4]={0,0,0,0};
  const GLfloat light[4]={coefficients[32],coefficients[33],coefficients[34],0};
  glMatrixMode(GL_MODELVIEW);glLoadIdentity();glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
+ if(getenv("REMESA_TEST_GL_ROTATE_CALL")){
+  typedef void (GLAPIENTRY *rotate_fn)(GLfloat,GLfloat,GLfloat,GLfloat);
+  rotate_fn rotate=(rotate_fn)_mesa_glapi_get_proc_address("glRotatef");CHECK(rotate);
+  rotate(90,0,0,1);
+ }
+#endif
  glLightModelfv(GL_LIGHT_MODEL_AMBIENT,coefficients);
  glMaterialfv(GL_FRONT_AND_BACK,GL_AMBIENT,one);glMaterialfv(GL_FRONT_AND_BACK,GL_DIFFUSE,one);
  glMaterialfv(GL_FRONT_AND_BACK,GL_SPECULAR,one);glMaterialfv(GL_FRONT_AND_BACK,GL_EMISSION,zero);

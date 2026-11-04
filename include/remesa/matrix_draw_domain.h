@@ -4,7 +4,7 @@
 #include "ta_references.h"
 /* Upper bound in Q15 for an already checked finite magnitude <=1. Rounding
  * outwards also covers subnormals. Products and sums below fit in u32:
- * scale*position<=2^30, translation<=2^29 in the same Q30 units. */
+ * Each product<=2^30; three products plus translation<=3.5*2^30<2^32. */
 static inline remesa_scene_u32 remesa_matrix_unit_upper_q15(remesa_scene_u32 bits)
 {
  remesa_scene_u32 magnitude=bits&0x7fffffffU,shift,mantissa;
@@ -23,7 +23,7 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
  remesa_scene_u32 count,remesa_scene_u32 stride,const void *coefficients,size_t coefficient_bytes)
 {
  const remesa_ta_ref_u8 *v=vertices,*p=coefficients;
- remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;remesa_scene_u32 c[36];unsigned i,col,row,light=0;
+ remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;remesa_scene_u32 c[36],q[12],clip_limit;unsigned i,col,row,light=0;
  if(!count||count>65535||(stride!=32&&stride!=48))return EOPNOTSUPP;
  if(!vertices||!coefficients||vertex_bytes!=(size_t)count*stride||coefficient_bytes!=144||
     (remesa_ta_ref_uptr)vertices>limit-vertex_bytes||(remesa_ta_ref_uptr)coefficients>limit-144)return EINVAL;
@@ -34,11 +34,16 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
  }
  for(col=0;col<3;col++)for(row=0;row<4;row++){
   remesa_scene_u32 magnitude=c[16+4*col+row]&0x7fffffffU;
-  if(row==col){if(magnitude>0x3f800000U)return EOPNOTSUPP;}
-  else if(magnitude)return EOPNOTSUPP;
+  if(row<3){if(magnitude>0x3f800000U)return EOPNOTSUPP;}
+  else if(magnitude)return EOPNOTSUPP; /* Keep W constant. */
  }
  for(i=28;i<31;i++)if((c[i]&0x7fffffffU)>0x3f000000U)return EOPNOTSUPP;
  if(c[31]!=0x40000000U&&c[31]!=0x3f800000U)return EOPNOTSUPP;
+ clip_limit=c[31]==0x3f800000U?0x38000000U:0x70000000U; /* (7/8)*W in Q30. */
+ for(row=0;row<3;row++){
+  for(col=0;col<3;col++)q[row*3+col]=remesa_matrix_unit_upper_q15(c[16+4*col+row]);
+  q[9+row]=remesa_matrix_unit_upper_q15(c[28+row])<<15;
+ }
  for(i=32;i<35;i++){
   remesa_scene_u32 magnitude=c[i]&0x7fffffffU;
   if(magnitude>0x3f800000U)return EOPNOTSUPP;
@@ -46,21 +51,20 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
  }
  if(!light||(c[35]&0x7fffffffU))return EOPNOTSUPP;
  for(i=0;i<count;i++){
-  const remesa_ta_ref_u8 *at=v+(size_t)i*stride;unsigned k,normal=0;
+  const remesa_ta_ref_u8 *at=v+(size_t)i*stride;remesa_scene_u32 position[3];unsigned k,normal=0;
   for(k=0;k<8;k++){
    remesa_scene_u32 magnitude=remesa_ta_ref_word(at+4*k)&0x7fffffffU;
    if(magnitude>0x3f800000U)return EOPNOTSUPP;
    if(k>=4&&k<7&&magnitude>=0x3d800000U)normal=1;
   }
   if(remesa_ta_ref_word(at+12)!=0x3f800000U||!normal)return EOPNOTSUPP;
-  if(c[31]==0x3f800000U)for(k=0;k<3;k++){
-   remesa_scene_u32 bound=remesa_matrix_unit_upper_q15(c[16+5*k])*
-    remesa_matrix_unit_upper_q15(remesa_ta_ref_word(at+4*k))+
-    (remesa_matrix_unit_upper_q15(c[28+k])<<15);
-   /* Diagonal affine W1 remains strictly inside all six clip planes.
-    * This bounds magnitudes, never computes or uploads a transformed vertex.
-    * The old W2 domain and its execution recipe remain unchanged. */
-   if(bound>0x38000000U)return EOPNOTSUPP; /* 7/8 in Q30. */
+  for(k=0;k<3;k++)position[k]=remesa_matrix_unit_upper_q15(remesa_ta_ref_word(at+4*k));
+  for(row=0;row<3;row++){
+   remesa_scene_u32 bound=q[9+row];
+   for(col=0;col<3;col++)bound+=q[row*3+col]*position[col];
+   /* Outward row magnitudes keep the complete affine transform in clip.
+    * No transformed vertex is constructed or uploaded by this predicate. */
+   if(bound>clip_limit)return EOPNOTSUPP;
   }
   {
    remesa_scene_u32 w=remesa_ta_ref_word(at+28);

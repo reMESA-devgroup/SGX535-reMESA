@@ -77,7 +77,7 @@ static void replay_matrix_values(struct remesa_gem_scene_job *c)
  u8 *vertices=(u8 *)scene_pds_image_view(c,c->vertices.draws[slot].vertex_id,c->vertices.draws[slot].vertex_offset,
   c->vertices.draws[slot].vertex_bytes);CHECK(vertices);
  struct {u8 *at;u32 bits;int expected;} cases[]={
-  {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+17*4,1,-EOPNOTSUPP},
+  {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+19*4,1,-EOPNOTSUPP},
   {coefficients+28*4,0x40000000U,-EOPNOTSUPP},{coefficients+31*4,0,-EOPNOTSUPP},
   {coefficients+35*4,1,-EOPNOTSUPP},{coefficients+35*4,0x80000000U,0},
   {vertices,0x7fc00000U,-EOPNOTSUPP},{vertices+12,0,-EOPNOTSUPP},

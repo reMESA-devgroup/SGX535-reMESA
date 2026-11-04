@@ -42,7 +42,8 @@ additionally requires `abs(scale)*abs(position)+abs(translation) <= 7/8`.
 Outward Q15 integer bounds enforce this in both frontend and kernel, without
 floating-point operations or constructing transformed vertices in the kernel.
 The multiplication and sum fit in 32 bits. Historical W=2 behavior is retained;
-rotation, shear and general clipping remain explicit unsupported cases.
+general perspective and clipping remain explicit unsupported cases. Bounded
+rotation and shear were added subsequently as described below.
 
 The W=1 projection obtained by halving all 16 cells of the qualified W=2
 projection has exactly the same normalized coordinates. That input relationship
@@ -56,3 +57,33 @@ refusal is preserved. No GPU gate was changed for that notification.
 Evidence: `/home/gama/sgx535-offline/normal-affine-w1-20261104/v1/` contains
 `PHYSICAL_640_AFFINE_RESULT.json`, `PHYSICAL_1280_AFFINE_RESULT.json`, numeric
 boundary/corruption tests and the unchanged W=2 archive regression.
+
+
+## Bounded affine rotation
+
+The shared frontend/kernel predicate now accepts all nine affine 3×3 cells
+within magnitude one. For each input vertex, outward integer bounds require
+`sum(abs(M[row,col])*abs(position[col])) + abs(translation[row]) <= 7*W/8`.
+W remains positive constant 1 or 2; translation and input bounds are retained.
+The maximum Q30 sum fits unsigned 32 bits. No transformed vertices are created
+by this predicate. Shaders, PDS/ISP encoders, UAPI and resource ownership are
+unchanged; unsafe or unsupported inputs still refuse before submission.
+
+An exact 90-degree projection supplied through ordinary `glLoadMatrixf` and
+`glDrawArrays` passed physically on rev121 at **640×640 and 1280×800**. Authored
+raw geometry gives the same exact clip coordinates as the prior fixture, so the
+existing pixel/depth oracle was reused. All three draws, including final
+no-clear preservation, matched COLOR/Z with retirement, immutable inputs,
+guards and complete cleanup. Neither run added kernel messages. The successful
+1280 boot was retained idle with all eight controls N and stock recovery intact.
+
+Native, UBSan and i486 tests cover 100,000 dense affine cases, both strides,
+45/90-degree cases, overflow and W-row refusals; previous W1/W2 tests also pass.
+The actual `glRotatef` entry point passed the Mesa CPU model only: hardware
+qualification used the exact matrix, and does not claim arbitrary-angle proof.
+
+Evidence: `/home/gama/sgx535-offline/normal-affine-rotation-20261104/v1/`
+contains both `PHYSICAL_*_ROTATION_RESULT.json` reports and `OFFLINE_INDEX.json`.
+This does not establish sustained FPS, general perspective or OpenGL 2.1.
+A separate ordinary `glFrustum` CPU probe confirms the next matrix-contract
+refusal before native publication; it does not modify the physical test scope.

@@ -9,8 +9,8 @@
 struct remesa_gears_geometry_view {
  const void *vertices;size_t bytes;uint32_t vertex_count,stride_dwords,normal_from_attribute;
 };
-/* Historical W2 float predicate plus an independent long-double W1 bound.
- * The W2 behavior remains exact; outward W1 rounding is exercised separately. */
+/* Independent affine float predicate. Outward rounding near the clip boundary
+ * is exercised separately; historical diagonal inputs remain covered here. */
 static int prior_float_domain(const struct remesa_gears_geometry_view *view,
  const unsigned char source[160])
 {
@@ -25,7 +25,7 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
  }
  for(unsigned col=0;col<3;col++)for(unsigned row=0;row<4;row++){
   float v=constants[16+4*col+row];
-  if(row==col){if(fabsf(v)>1)return ENOTSUP;}
+  if(row<3){if(fabsf(v)>1)return ENOTSUP;}
   else if(v!=0)return ENOTSUP;
  }
  for(unsigned i=28;i<31;i++)if(fabsf(constants[i])>.5f)return ENOTSUP;
@@ -45,9 +45,12 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
    * retain W=0. The selected attribute-normal shader consumes XYZ only.
    * Keep both canonical forms without changing the existing fetch bits. */
   if(value[3]!=1||(value[7]!=0&&value[7]!=1)||!normal)return ENOTSUP;
-  if(constants[31]==1)for(unsigned k=0;k<3;k++)
-   if(fabsl((long double)constants[16+5*k])*fabsl((long double)value[k])+
-      fabsl((long double)constants[28+k])>.875L)return ENOTSUP;
+  for(unsigned row=0;row<3;row++){
+   long double bound=fabsl((long double)constants[28+row]);
+   for(unsigned col=0;col<3;col++)
+    bound+=fabsl((long double)constants[16+4*col+row])*fabsl((long double)value[col]);
+   if(bound>.875L*constants[31])return ENOTSUP;
+  }
  }
  return 0;
 }

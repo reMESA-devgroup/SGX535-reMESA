@@ -55,6 +55,17 @@ def preflight(root, size, manifest_sha, affine_w1=False):
         values = list(struct.unpack('<36f', coefficients_a))
         values[16:32] = [v*.5 for v in values[16:32]]
         coefficients_a = struct.pack('<36f', *values)
+    rotation = seal.get('rotation_90', False)
+    common.need(isinstance(rotation, bool) and (not rotation or affine_w1), 'rotation qualification mode')
+    if rotation:
+        values = list(struct.unpack('<36f', coefficients_a))
+        values[17], values[20] = values[21], -values[16]
+        values[16] = values[21] = 0
+        coefficients_a = struct.pack('<36f', *values)
+        points = list(struct.unpack('<24f', vertices))
+        for i in range(3):
+            points[8*i], points[8*i+1] = points[8*i+1], -points[8*i]
+        vertices = struct.pack('<24f', *points)
     b = bytearray(coefficients_a)
     for i in (28, 30):
         struct.pack_into('<I', b, i*4, 0x3e800000 if affine_w1 else 0x3f000000)
