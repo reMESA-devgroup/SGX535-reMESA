@@ -13,6 +13,54 @@ static inline remesa_scene_u32 remesa_matrix_unit_upper_q15(remesa_scene_u32 bit
  if(shift>=24)return 1;
  return (mantissa+((1U<<shift)-1))>>shift;
 }
+/* Magnitude interval in Q20 for finite |input|<=4. Signed products below
+ * use these outward endpoints; subnormals enclose zero and one Q20 unit. */
+struct remesa_matrix_q20 {remesa_scene_u32 lower,upper;};
+static inline struct remesa_matrix_q20 remesa_matrix_magnitude_q20(remesa_scene_u32 bits)
+{
+ remesa_scene_u32 magnitude=bits&0x7fffffffU,shift,mantissa;
+ struct remesa_matrix_q20 q={0,0};
+ if(!magnitude)return q;
+ shift=130U-(magnitude>>23);mantissa=0x800000U|(magnitude&0x7fffffU);
+ if(shift>=24){q.upper=1;return q;}
+ q.lower=mantissa>>shift;q.upper=(mantissa+((1U<<shift)-1))>>shift;
+ return q;
+}
+struct remesa_matrix_interval {long long lower,upper;};
+static inline struct remesa_matrix_interval remesa_matrix_projective_row(
+ const remesa_scene_u32 c[36],const struct remesa_matrix_q20 matrix[16],
+ const struct remesa_matrix_q20 position[3],const remesa_ta_ref_u8 *v,unsigned row)
+{
+ struct remesa_matrix_interval bound={0,0};unsigned col;
+ for(col=0;col<4;col++){
+  unsigned cell=4*col+row;
+  struct remesa_matrix_q20 p=col<3?position[col]:(struct remesa_matrix_q20){1048576,1048576};
+  long long low=(long long)matrix[cell].lower*p.lower;
+  long long high=(long long)matrix[cell].upper*p.upper;
+  remesa_scene_u32 sign=c[16+cell]^(col<3?remesa_ta_ref_word(v+4*col):0);
+  if(sign&0x80000000U){bound.lower-=high;bound.upper-=low;}
+  else {bound.lower+=low;bound.upper+=high;}
+ }
+ return bound;
+}
+/* Prove all six homogeneous clip inequalities without dividing or producing
+ * transformed vertex data. W is bounded away from zero, and the 1/8 clip
+ * margin dominates binary32 rounding at the existing finite input bounds.
+ * Each product<=2^42, each row<=2^44; factors8 and7 remain below2^48.
+ * Integer interval arithmetic never supplies geometry to the GPU. */
+static inline int remesa_matrix_projective_vertex(const remesa_scene_u32 c[36],
+ const struct remesa_matrix_q20 matrix[16],const remesa_ta_ref_u8 *v)
+{
+ struct remesa_matrix_q20 position[3];struct remesa_matrix_interval w;unsigned row;
+ for(row=0;row<3;row++)position[row]=remesa_matrix_magnitude_q20(remesa_ta_ref_word(v+4*row));
+ w=remesa_matrix_projective_row(c,matrix,position,v,3);
+ if(w.lower<(1LL<<37)||w.upper>(4LL<<40))return EOPNOTSUPP; /* 1/8<=W<=4. */
+ for(row=0;row<3;row++){
+  struct remesa_matrix_interval q=remesa_matrix_projective_row(c,matrix,position,v,row);
+  if(8*q.upper>7*w.lower||-8*q.lower>7*w.lower)return EOPNOTSUPP;
+ }
+ return 0;
+}
 /* Existing ordinary draw's finite in-clip domain, expressed in IEEE754 bits.
  * No floating point, transformed vertices, normalization or rendering. Counts
  * describe committed records, not allocation capacity. Packed GPU records add
@@ -23,7 +71,8 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
  remesa_scene_u32 count,remesa_scene_u32 stride,const void *coefficients,size_t coefficient_bytes)
 {
  const remesa_ta_ref_u8 *v=vertices,*p=coefficients;
- remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;remesa_scene_u32 c[36],q[12],clip_limit;unsigned i,col,row,light=0;
+ remesa_ta_ref_uptr limit=~(remesa_ta_ref_uptr)0;remesa_scene_u32 c[36],q[12],clip_limit=0;
+ struct remesa_matrix_q20 projective_matrix[16];unsigned i,col,row,light=0,projective;
  if(!count||count>65535||(stride!=32&&stride!=48))return EOPNOTSUPP;
  if(!vertices||!coefficients||vertex_bytes!=(size_t)count*stride||coefficient_bytes!=144||
     (remesa_ta_ref_uptr)vertices>limit-vertex_bytes||(remesa_ta_ref_uptr)coefficients>limit-144)return EINVAL;
@@ -32,6 +81,10 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
   /* Magnitudes above4 include every infinity and NaN representation. */
   if((c[i]&0x7fffffffU)>0x40800000U)return EOPNOTSUPP;
  }
+ projective=((c[19]|c[23]|c[27])&0x7fffffffU)!=0;
+ if(projective){
+  for(i=0;i<16;i++)projective_matrix[i]=remesa_matrix_magnitude_q20(c[16+i]);
+ }else{
  for(col=0;col<3;col++)for(row=0;row<4;row++){
   remesa_scene_u32 magnitude=c[16+4*col+row]&0x7fffffffU;
   if(row<3){if(magnitude>0x3f800000U)return EOPNOTSUPP;}
@@ -43,6 +96,7 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
  for(row=0;row<3;row++){
   for(col=0;col<3;col++)q[row*3+col]=remesa_matrix_unit_upper_q15(c[16+4*col+row]);
   q[9+row]=remesa_matrix_unit_upper_q15(c[28+row])<<15;
+ }
  }
  for(i=32;i<35;i++){
   remesa_scene_u32 magnitude=c[i]&0x7fffffffU;
@@ -58,6 +112,9 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
    if(k>=4&&k<7&&magnitude>=0x3d800000U)normal=1;
   }
   if(remesa_ta_ref_word(at+12)!=0x3f800000U||!normal)return EOPNOTSUPP;
+  if(projective){
+   if(remesa_matrix_projective_vertex(c,projective_matrix,at))return EOPNOTSUPP;
+  }else{
   for(k=0;k<3;k++)position[k]=remesa_matrix_unit_upper_q15(remesa_ta_ref_word(at+4*k));
   for(row=0;row<3;row++){
    remesa_scene_u32 bound=q[9+row];
@@ -65,6 +122,7 @@ static inline int remesa_matrix_draw_values(const void *vertices,size_t vertex_b
    /* Outward row magnitudes keep the complete affine transform in clip.
     * No transformed vertex is constructed or uploaded by this predicate. */
    if(bound>clip_limit)return EOPNOTSUPP;
+  }
   }
   {
    remesa_scene_u32 w=remesa_ta_ref_word(at+28);

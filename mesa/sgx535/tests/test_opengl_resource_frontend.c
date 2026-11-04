@@ -283,6 +283,15 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #endif
  }
 #endif
+#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+ /* Authored raw geometry below; both projections are emitted by glFrustum. */
+ memset(coefficients+16,0,16*sizeof(*coefficients));
+ coefficients[16]=coefficients[21]=.25f;coefficients[26]=-2;coefficients[27]=-1;
+ coefficients[30]=-.75f;
+ if(getenv("REMESA_TEST_PRESERVE_BASELINE_B")){coefficients[24]=-.125f;coefficients[30]=-.65625f;}
+ const GLfloat dynamic[3][8]={{-.1875f,-.3720703125f,-.375f,1,0,0,1,0},
+  {.5625f,-.3720703125f,-.375f,1,0,0,1,0},{-.1875f,.3779296875f,-.375f,1,0,0,1,0}};
+#else
 #ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
  if(!getenv("REMESA_TEST_GL_ROTATE_CALL")){
   coefficients[17]=coefficients[21];coefficients[20]=-coefficients[16];
@@ -293,6 +302,7 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  const GLfloat dynamic[3][8]={{-.5f,.5f,0,1,0,0,1,0},{-.5f,-.5f,0,1,0,0,1,0},{.5f,.5f,0,1,0,0,1,0}};
 #else
  const GLfloat dynamic[3][8]={{-.5f,-.5f,0,1,0,0,1,0},{.5f,-.5f,0,1,0,0,1,0},{-.5f,.5f,0,1,0,0,1,0}};
+#endif
 #endif
  memcpy(vertices,dynamic,sizeof vertices);
 #else
@@ -310,7 +320,9 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #endif
  }
  if(api_fault==2){
-#ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
+#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+  coefficients[27]=1; /* Negative homogeneous W. */
+#elif defined(REMESA_TEST_OPENGL_ROTATION_DRAW)
   coefficients[17]=2;
 #else
   coefficients[16]*=2;
@@ -320,6 +332,15 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
  const GLfloat one[4]={1,1,1,1},zero[4]={0,0,0,0};
  const GLfloat light[4]={coefficients[32],coefficients[33],coefficients[34],0};
  glMatrixMode(GL_MODELVIEW);glLoadIdentity();glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+ typedef void (GLAPIENTRY *frustum_fn)(GLdouble,GLdouble,GLdouble,GLdouble,GLdouble,GLdouble);
+ frustum_fn frustum=(frustum_fn)_mesa_glapi_get_proc_address("glFrustum");CHECK(frustum);
+ if(api_fault!=2){
+  glLoadIdentity();
+  if(getenv("REMESA_TEST_PRESERVE_BASELINE_B"))frustum(-.984375,.765625,-.875,.875,.21875,.65625);
+  else frustum(-1,1,-1,1,.25,.75);
+ }
+#endif
 #ifdef REMESA_TEST_OPENGL_ROTATION_DRAW
  if(getenv("REMESA_TEST_GL_ROTATE_CALL")){
   typedef void (GLAPIENTRY *rotate_fn)(GLfloat,GLfloat,GLfloat,GLfloat);
@@ -382,7 +403,12 @@ static void fixed_function_scene(struct pipe_screen *screen,struct pipe_resource
 #ifdef REMESA_TEST_OPENGL_AFFINE_W1_DRAW
  if(getenv("REMESA_TEST_AFFINE_EQUIVALENT"))coefficients[28]=coefficients[30]=.25f;
 #endif
+#ifdef REMESA_TEST_OPENGL_PERSPECTIVE_DRAW
+ coefficients[28]=0;coefficients[24]=-.125f;coefficients[30]=-.65625f;
+ glMatrixMode(GL_PROJECTION);glLoadIdentity();frustum(-.984375,.765625,-.875,.875,.21875,.65625);
+#else
  glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#endif
  glDrawArrays(GL_TRIANGLES,0,3);glFlush();
  CHECK(!remesa_context_error(st->pipe)&&dispatch_calls==2&&normal_fill_calls==1);
  CHECK(!remesa_resource_wait_writer(st->pipe,color,0)&&!remesa_resource_wait_writer(st->pipe,depth,0));

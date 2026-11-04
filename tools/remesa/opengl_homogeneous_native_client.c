@@ -159,6 +159,9 @@ int main(int argc,char **argv)
   .glsl_version=st->ctx->Const.GLSLVersion};
 #define PROC(ret,name,args) typedef ret (GLAPIENTRY *name##_fn) args;name##_fn name=(name##_fn)_mesa_glapi_get_proc_address(#name);CHECK(name)
  PROC(void,glMatrixMode,(GLenum));PROC(void,glLoadIdentity,(void));PROC(void,glLoadMatrixf,(const GLfloat *));
+#ifdef REMESA_OPENGL_PERSPECTIVE_NATIVE
+ PROC(void,glFrustum,(GLdouble,GLdouble,GLdouble,GLdouble,GLdouble,GLdouble));
+#endif
  PROC(void,glEnable,(GLenum));PROC(void,glDisable,(GLenum));PROC(void,glViewport,(GLint,GLint,GLsizei,GLsizei));
  PROC(void,glLightModelfv,(GLenum,const GLfloat *));PROC(void,glLightfv,(GLenum,GLenum,const GLfloat *));
  PROC(void,glMaterialfv,(GLenum,GLenum,const GLfloat *));PROC(void,glMaterialf,(GLenum,GLenum,GLfloat));
@@ -189,6 +192,12 @@ int main(int argc,char **argv)
   char step_fixture[4096];CHECK(snprintf(step_fixture,sizeof step_fixture,"%s/step-%u",fixture_root,continuous_frame)>0);
   fixture_dir=step_fixture;input_file("coefficients-source.bin",coefficients,sizeof coefficients);
   glMatrixMode(GL_PROJECTION);glLoadMatrixf(coefficients+16);
+#ifdef REMESA_OPENGL_PERSPECTIVE_NATIVE
+  CHECK(coefficients[16]==.25f&&coefficients[21]==.25f&&coefficients[26]==-2&&coefficients[27]==-1&&coefficients[31]==0);
+  glLoadIdentity();
+  if(continuous_frame==2){CHECK(coefficients[24]==0&&coefficients[30]==-.75f);glFrustum(-1,1,-1,1,.25,.75);}
+  else {CHECK(coefficients[24]==-.125f&&coefficients[30]==-.65625f);glFrustum(-.984375,.765625,-.875,.875,.21875,.65625);}
+#endif
 #endif
   memset(timings,0,sizeof timings);timings[0]=ns();
   report=(struct api_report){.version=1,.context_created=1,.computed_version=st->ctx->Version,.glsl_version=st->ctx->Const.GLSLVersion};

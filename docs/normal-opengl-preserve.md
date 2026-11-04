@@ -42,8 +42,8 @@ additionally requires `abs(scale)*abs(position)+abs(translation) <= 7/8`.
 Outward Q15 integer bounds enforce this in both frontend and kernel, without
 floating-point operations or constructing transformed vertices in the kernel.
 The multiplication and sum fit in 32 bits. Historical W=2 behavior is retained;
-general perspective and clipping remain explicit unsupported cases. Bounded
-rotation and shear were added subsequently as described below.
+bounded rotation, shear and projective input checks were added subsequently
+as described below. Geometry requiring clipping still refuses.
 
 The W=1 projection obtained by halving all 16 cells of the qualified W=2
 projection has exactly the same normalized coordinates. That input relationship
@@ -84,6 +84,39 @@ qualification used the exact matrix, and does not claim arbitrary-angle proof.
 
 Evidence: `/home/gama/sgx535-offline/normal-affine-rotation-20261104/v1/`
 contains both `PHYSICAL_*_ROTATION_RESULT.json` reports and `OFFLINE_INDEX.json`.
-This does not establish sustained FPS, general perspective or OpenGL 2.1.
-A separate ordinary `glFrustum` CPU probe confirms the next matrix-contract
-refusal before native publication; it does not modify the physical test scope.
+That result does not establish sustained FPS or OpenGL 2.1. The subsequent
+`glFrustum` component is described below; its initial refusal probe remains
+preserved with the rotation evidence.
+
+
+## Bounded projective matrices
+
+Ordinary `glFrustum`/`glDrawArrays` now reaches the same native executor.
+Matrices with a nonzero W row use signed outward Q20 intervals: every vertex
+must prove `1/8 <= W <= 4` and `abs(X/Y/Z) <= 7*W/8`. Finite coefficients
+remain bounded by four, and raw position/normal/padding checks are retained.
+The proof performs no division, FPU operation or GPU vertex construction.
+Products and clip comparisons fit signed 64 bits. The previous constant-W
+branch remains intact. No shader, PDS/ISP encoder, UAPI, ownership or fence
+contract changed; geometry requiring clipping continues to refuse.
+
+Actual `glFrustum` calls passed physically at **640×640 and 1280×800**:
+three draws, two clears, final no-clear preservation, exact COLOR/Z,
+individual retirement, four guards, immutable inputs and complete cleanup.
+The two authored frusta have the same exact NDC as the previous independent
+oracle. Their raw vertices all have z=-3/8 and resulting W=3/8: this hardware
+case does not qualify interpolation between vertices with different W.
+Both runs added no kernel messages; the successful 1280 boot was kept idle,
+all eight controls N, with stock recovery configuration preserved.
+
+Offline coverage includes 200,000 IEEE interval cases and 100,000 dense signed
+projective/cancellation cases per native/UBSan/i486 variant, both record
+strides, prior affine tests, real Mesa positive/refusal cases, held GEM/MMU
+lifecycle faults and capture-verifier faults. Previous physical archives still
+produce identical verifier reports. Invalid W tests now use negative W;
+a zero constant matrix cell is legitimate in a projective transform.
+
+Evidence: `/home/gama/sgx535-offline/normal-perspective-20261104/v1/`, especially
+`PHYSICAL_640_PROJECTIVE_RESULT.json`, `PHYSICAL_1280_PROJECTIVE_RESULT.json`,
+`EXACT_NDC_EQUIVALENCE.json` and `OFFLINE_INDEX.json`. This is no claim of
+complete OpenGL 2.1, arbitrary clipping, sustained FPS or desktop/app approval.

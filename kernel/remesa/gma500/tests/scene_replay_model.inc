@@ -77,8 +77,8 @@ static void replay_matrix_values(struct remesa_gem_scene_job *c)
  u8 *vertices=(u8 *)scene_pds_image_view(c,c->vertices.draws[slot].vertex_id,c->vertices.draws[slot].vertex_offset,
   c->vertices.draws[slot].vertex_bytes);CHECK(vertices);
  struct {u8 *at;u32 bits;int expected;} cases[]={
-  {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+19*4,1,-EOPNOTSUPP},
-  {coefficients+28*4,0x40000000U,-EOPNOTSUPP},{coefficients+31*4,0,-EOPNOTSUPP},
+  {coefficients,0x7f800000U,-EOPNOTSUPP},{coefficients+19*4,0xc0800000U,-EOPNOTSUPP},
+  {coefficients+28*4,0x40000000U,-EOPNOTSUPP},{coefficients+31*4,0xc0800000U,-EOPNOTSUPP},
   {coefficients+35*4,1,-EOPNOTSUPP},{coefficients+35*4,0x80000000U,0},
   {vertices,0x7fc00000U,-EOPNOTSUPP},{vertices+12,0,-EOPNOTSUPP},
   {vertices+28,0,0},{vertices+28,0x80000000U,0},{vertices+28,0xbf800000U,-EOPNOTSUPP},
@@ -187,7 +187,7 @@ static void scene_replay(const char *root,unsigned checks)
   for(unsigned n=0;n<c->states.count;n++)if(c->states.uploads[n].source_bytes==160)parameter=n;
   CHECK(parameter<c->states.count);
   u8 *source=(u8 *)scene_pds_image_view(c,c->states.uploads[parameter].source_id,c->states.uploads[parameter].source_offset,160);
-  CHECK(source);state_word(source+4+31*4,0);mutex_unlock(&s->lock);
+  CHECK(source);state_word(source+4+31*4,0xc0800000U);mutex_unlock(&s->lock);
   error=remesa_gem_scene_job_execute_matrix(c,&backend,&observation,s,10,20);
   CHECK(error==-EOPNOTSUPP&&c->state==REMESA_SCENE_JOB_HELD&&c->loan.execution_attempted&&
    !c->loan.execution_started&&!c->loan.host_published&&!c->service.started&&!c->service.session);

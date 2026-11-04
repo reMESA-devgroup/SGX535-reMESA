@@ -66,9 +66,26 @@ def preflight(root, size, manifest_sha, affine_w1=False):
         for i in range(3):
             points[8*i], points[8*i+1] = points[8*i+1], -points[8*i]
         vertices = struct.pack('<24f', *points)
+    projective = seal.get('projective_frustum', False)
+    common.need(isinstance(projective, bool) and (not projective or not (affine_w1 or rotation)),
+                'projective qualification mode')
+    if projective:
+        values = list(struct.unpack('<36f', coefficients_a))
+        values[16:32] = [0.]*16
+        values[16] = values[21] = .25
+        values[26], values[27], values[30] = -2., -1., -.75
+        coefficients_a = struct.pack('<36f', *values)
+        # Authored inputs for the two explicit frusta, never driver geometry.
+        vertices = struct.pack('<24f', -.1875,-.3720703125,-.375,1,0,0,1,0,
+                               .5625,-.3720703125,-.375,1,0,0,1,0,
+                               -.1875,.3779296875,-.375,1,0,0,1,0)
     b = bytearray(coefficients_a)
-    for i in (28, 30):
-        struct.pack_into('<I', b, i*4, 0x3e800000 if affine_w1 else 0x3f000000)
+    if projective:
+        struct.pack_into('<f', b, 24*4, -.125)
+        struct.pack_into('<f', b, 30*4, -.65625)
+    else:
+        for i in (28, 30):
+            struct.pack_into('<I', b, i*4, 0x3e800000 if affine_w1 else 0x3f000000)
     prepared = []
     for step in (1, 2, 3):
         fixture = root/f'step-{step}'

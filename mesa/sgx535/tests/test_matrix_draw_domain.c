@@ -23,6 +23,8 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
   memcpy(&constants[i],&bits,4);
   if(!isfinite(constants[i])||fabsf(constants[i])>4)return ENOTSUP;
  }
+ bool projective=constants[19]!=0||constants[23]!=0||constants[27]!=0;
+ if(!projective){
  for(unsigned col=0;col<3;col++)for(unsigned row=0;row<4;row++){
   float v=constants[16+4*col+row];
   if(row<3){if(fabsf(v)>1)return ENOTSUP;}
@@ -30,6 +32,7 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
  }
  for(unsigned i=28;i<31;i++)if(fabsf(constants[i])>.5f)return ENOTSUP;
  if(constants[31]!=2&&constants[31]!=1)return ENOTSUP;
+ }
  bool light=false;
  for(unsigned i=32;i<35;i++){
   if(fabsf(constants[i])>1)return ENOTSUP;
@@ -45,11 +48,21 @@ static int prior_float_domain(const struct remesa_gears_geometry_view *view,
    * retain W=0. The selected attribute-normal shader consumes XYZ only.
    * Keep both canonical forms without changing the existing fetch bits. */
   if(value[3]!=1||(value[7]!=0&&value[7]!=1)||!normal)return ENOTSUP;
+  if(projective){
+   long double clip[4];
+   for(unsigned row=0;row<4;row++){
+    clip[row]=constants[28+row];
+    for(unsigned col=0;col<3;col++)clip[row]+=(long double)constants[16+4*col+row]*value[col];
+   }
+   if(clip[3]<.125L||clip[3]>4)return ENOTSUP;
+   for(unsigned row=0;row<3;row++)if(fabsl(clip[row])>.875L*clip[3])return ENOTSUP;
+  }else{
   for(unsigned row=0;row<3;row++){
    long double bound=fabsl((long double)constants[28+row]);
    for(unsigned col=0;col<3;col++)
     bound+=fabsl((long double)constants[16+4*col+row])*fabsl((long double)value[col]);
    if(bound>.875L*constants[31])return ENOTSUP;
+  }
   }
  }
  return 0;
