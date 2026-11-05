@@ -59,7 +59,7 @@ Mesa 25.2.0 accepts four color attachments in its GL 3.0 gate with an explicit n
 | Reusable fences/resource ownership | implementation prerequisite | CONFIRMED single retained operation retirement; repeated physical reuse UNVERIFIED | Lifecycle tests OFFLINE QUALIFIED; mocked completion is not GPU proof | PARTIAL | Fresh bounded admission, two-operation physical verification |
 | DRI/OpenGL contexts and presentation | implementation prerequisite | CONFIRMED CPU/Xorg publication of prior SGX output; direct scanout UNKNOWN | Actual target DRI artifact loading PASS; a narrow truthful Gallium screen-capability contract now passes native/UBSan/i386 tests, but state tracker GL admission remains closed | PARTIAL | Vertex shaders, textures, framebuffer preservation, truthful GL caps and real GL context; synchronized presentation |
 
-Machine-readable inventory and exact pinned Mesa gate expressions: [opengl-capabilities.json](opengl-capabilities.json).
+Machine-readable inventory and exact pinned Mesa gate expressions: [opengl-capabilities.json](opengl-capabilities.json). This historical reference is missing from the repository; no corresponding generator or tracked copy was found during the reMESA integration audit. The table above remains available, but the JSON cannot currently be reproduced from this checkout.
 
 Normative references: [OpenGL 2.0](https://registry.khronos.org/OpenGL/specs/gl/glspec20.pdf), [OpenGL 2.1](https://registry.khronos.org/OpenGL/specs/gl/glspec21.pdf), [OpenGL 3.0](https://registry.khronos.org/OpenGL/specs/gl/glspec30.pdf). Public specifications are requirements references; no disputed SGX implementation is used.
 
